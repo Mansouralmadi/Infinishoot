@@ -1,0 +1,415 @@
+import type { Input } from '../core/input';
+import { ACHIEVEMENTS, WORKSHOP, workshopCost } from '../data/meta';
+import { WEAPONS } from '../data/weapons';
+import type { ScoreEntry } from '../game/highscores';
+import { buyWorkshop, exportCode, importCode, refundWorkshop, resetSave, save } from '../game/save';
+import { settings, saveSettings } from '../game/settings';
+import { sfx } from '../audio/sfx';
+import { fmtScore, type LoadoutItem } from './hud';
+import { MenuNav } from './menu';
+
+/** Full-screen menus. Plain DOM; every navigable element has `data-nav`. */
+export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'gameover' | 'workshop' | 'savedata';
+
+export interface ScreenActions {
+  start(): void;
+  resume(): void;
+  quit(): void;
+  retry(): void;
+  title(): void;
+  pick(index: number): void;
+  reroll(): void;
+}
+
+export interface Offer {
+  kind: 'weapon' | 'passive' | 'bolts' | 'heal';
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  tag: string; // "NEW!" / "LV 3" / "BONUS"
+  text: string;
+}
+
+export interface RunSummary {
+  score: number;
+  stage: number;
+  kills: number;
+  time: number;
+  level: number;
+  maxCombo: number;
+  bolts: number;
+  loadout: LoadoutItem[];
+  damage: { name: string; color: string; dmg: number }[];
+  achievements: string[];
+}
+
+const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function badge(i: LoadoutItem): string {
+  return `<span class="badge" style="--c:${i.color}" title="${i.name}">${i.icon}<i>${i.max ? 'M' : i.level}</i></span>`;
+}
+
+type Named = Exclude<ScreenName, 'none'>;
+
+export class Screens {
+  current: ScreenName = 'none';
+  private els = {} as Record<Named, HTMLElement>;
+  private navs = {} as Record<Named, MenuNav>;
+  private settingsReturn: ScreenName = 'title';
+  private wipeArmed = false;
+
+  constructor(root: HTMLElement, actions: ScreenActions) {
+    root.insertAdjacentHTML(
+      'beforeend',
+      `
+<div id="scr-title" class="screen" hidden>
+  <div class="logo"><span>INFINI</span><span>SHOOT</span></div>
+  <div class="tagline">TWIN-STICK ARCADE ROGUELIKE</div>
+  <div class="menu">
+    <button data-nav data-act="start">START</button>
+    <button data-nav data-act="workshop">WORKSHOP</button>
+    <button data-nav data-act="settings">SETTINGS</button>
+  </div>
+  <div class="wallet"></div>
+  <div class="hiscores"></div>
+  <div class="controls">WASD / L-stick move &middot; Mouse / R-stick aim &amp; shoot &middot; Space / LB dash &middot; Q / RB bomb &middot; Esc / Start pause</div>
+</div>
+<div id="scr-pause" class="screen dim" hidden>
+  <h1>PAUSED</h1>
+  <div class="menu">
+    <button data-nav data-act="resume">RESUME</button>
+    <button data-nav data-act="settings">SETTINGS</button>
+    <button data-nav data-act="quit">QUIT RUN</button>
+  </div>
+  <div class="build"></div>
+</div>
+<div id="scr-settings" class="screen dim" hidden>
+  <h1>SETTINGS</h1>
+  <div class="menu settings">
+    <label>VOLUME <input data-nav type="range" min="0" max="1" step="0.1" data-set="volume"></label>
+    <label>RETRO LOOK <input data-nav type="range" min="0" max="1" step="0.1" data-set="retro"></label>
+    <label>SCREEN SHAKE <input data-nav type="range" min="0" max="1.5" step="0.25" data-set="shake"></label>
+    <button data-nav data-toggle="autoFire">AUTO-FIRE <b></b></button>
+    <button data-nav data-toggle="showFps">SHOW FPS <b></b></button>
+    <button data-nav data-act="back">BACK</button>
+  </div>
+</div>
+<div id="scr-levelup" class="screen dim" hidden>
+  <h1></h1>
+  <div class="cards"></div>
+  <div class="reroll-row"></div>
+  <div class="build"></div>
+</div>
+<div id="scr-workshop" class="screen dim" hidden>
+  <h1>WORKSHOP</h1>
+  <div class="wallet"></div>
+  <div class="scroll">
+    <div class="ws-grid"></div>
+    <div class="section">ACHIEVEMENTS</div>
+    <div class="ach-list"></div>
+  </div>
+  <div class="menu row">
+    <button data-nav data-act="savedata">SAVE DATA</button>
+    <button data-nav data-act="ws-back">BACK</button>
+  </div>
+</div>
+<div id="scr-savedata" class="screen dim" hidden>
+  <h1>SAVE DATA</h1>
+  <p class="note">Progress saves automatically in this browser. Use a save code to back it up, or to move it to another browser or device.</p>
+  <textarea id="save-code" spellcheck="false" placeholder="Paste a save code here, then press IMPORT."></textarea>
+  <div class="msg"></div>
+  <div class="menu row wrap">
+    <button data-nav data-act="export">EXPORT</button>
+    <button data-nav data-act="import">IMPORT</button>
+    <button data-nav data-act="refund">REFUND UPGRADES</button>
+    <button data-nav data-act="wipe">RESET SAVE</button>
+    <button data-nav data-act="sd-back">BACK</button>
+  </div>
+</div>
+<div id="scr-gameover" class="screen dim" hidden>
+  <h1 class="ko">K.O.!</h1>
+  <div class="newbest" hidden>NEW HIGH SCORE!</div>
+  <div class="go-cols">
+    <div class="summary"></div>
+    <div class="dmg-table"></div>
+  </div>
+  <div class="build"></div>
+  <div class="unlocked"></div>
+  <div class="menu row">
+    <button data-nav data-act="retry">RETRY</button>
+    <button data-nav data-act="workshop">WORKSHOP</button>
+    <button data-nav data-act="title">TITLE</button>
+  </div>
+  <div class="hiscores"></div>
+</div>`,
+    );
+    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'workshop', 'savedata', 'gameover'];
+    for (const n of names) this.els[n] = root.querySelector<HTMLElement>(`#scr-${n}`)!;
+    this.navs = {
+      title: new MenuNav(this.els.title),
+      pause: new MenuNav(this.els.pause, { onBack: () => actions.resume() }),
+      settings: new MenuNav(this.els.settings, { onBack: () => this.show(this.settingsReturn) }),
+      levelup: new MenuNav(this.els.levelup, { horizontal: true }),
+      workshop: new MenuNav(this.els.workshop, { columns: 3, onBack: () => actions.title() }),
+      savedata: new MenuNav(this.els.savedata, { horizontal: true, onBack: () => this.show('workshop') }),
+      gameover: new MenuNav(this.els.gameover, { horizontal: true }),
+    };
+
+    // Keep buttons from taking DOM focus on click, so Enter/Space don't fire twice.
+    root.addEventListener('mousedown', (e) => {
+      if ((e.target as HTMLElement).closest('button')) e.preventDefault();
+    });
+
+    root.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-act], [data-buy]');
+      if (!btn) return;
+      if (btn.dataset.buy) {
+        this.buy(btn.dataset.buy);
+        return;
+      }
+      switch (btn.dataset.act) {
+        case 'start':
+          return actions.start();
+        case 'resume':
+          return actions.resume();
+        case 'quit':
+          return actions.quit();
+        case 'retry':
+          return actions.retry();
+        case 'title':
+        case 'ws-back':
+          return actions.title();
+        case 'pick':
+          return actions.pick(Number(btn.dataset.index));
+        case 'reroll':
+          return actions.reroll();
+        case 'settings':
+          this.settingsReturn = this.current;
+          return this.show('settings');
+        case 'back':
+          return this.show(this.settingsReturn);
+        case 'workshop':
+          return this.show('workshop');
+        case 'savedata':
+          return this.show('savedata');
+        case 'sd-back':
+          return this.show('workshop');
+        case 'export':
+          return this.doExport();
+        case 'import':
+          return this.doImport();
+        case 'refund':
+          return this.doRefund();
+        case 'wipe':
+          return this.doWipe(btn);
+      }
+    });
+
+    // Settings controls
+    const setEl = this.els.settings;
+    setEl.querySelectorAll<HTMLInputElement>('input[data-set]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        (settings as unknown as Record<string, number>)[inp.dataset.set!] = Number(inp.value);
+        saveSettings();
+      });
+    });
+    setEl.querySelectorAll<HTMLElement>('[data-toggle]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const key = b.dataset.toggle as 'autoFire' | 'showFps';
+        settings[key] = !settings[key];
+        saveSettings();
+        this.syncSettings();
+      });
+    });
+  }
+
+  show(name: ScreenName): void {
+    this.current = name;
+    for (const [k, el] of Object.entries(this.els)) el.hidden = k !== name;
+    if (name === 'settings') this.syncSettings();
+    if (name === 'title') this.renderWallet();
+    if (name === 'workshop') this.renderWorkshop();
+    if (name === 'savedata') {
+      this.wipeArmed = false;
+      this.msg('');
+      this.els.savedata.querySelector<HTMLElement>('[data-act=wipe]')!.textContent = 'RESET SAVE';
+    }
+    if (name !== 'none') this.navs[name].refresh(name === 'levelup' ? 1 : 0);
+  }
+
+  update(input: Input, dt: number): void {
+    if (this.current !== 'none') this.navs[this.current].update(input, dt);
+  }
+
+  // ---------------------------------------------------------------- settings
+
+  private syncSettings(): void {
+    const el = this.els.settings;
+    el.querySelectorAll<HTMLInputElement>('input[data-set]').forEach((inp) => {
+      inp.value = String((settings as unknown as Record<string, number>)[inp.dataset.set!]);
+    });
+    el.querySelectorAll<HTMLElement>('[data-toggle]').forEach((b) => {
+      const on = settings[b.dataset.toggle as 'autoFire' | 'showFps'];
+      b.querySelector('b')!.textContent = on ? 'ON' : 'OFF';
+    });
+  }
+
+  // ---------------------------------------------------------------- title / scores
+
+  private renderWallet(): void {
+    const html = `<span class="coin">¢</span> ${save.bolts.toLocaleString('en-US')} BOLTS`;
+    this.els.title.querySelector('.wallet')!.innerHTML = html;
+    this.els.workshop.querySelector('.wallet')!.innerHTML = html;
+  }
+
+  setHighScores(list: ScoreEntry[], highlight = -1): void {
+    const rows = list.length
+      ? list
+          .slice(0, 5)
+          .map((e, i) => `<tr class="${i === highlight ? 'me' : ''}"><td>${i + 1}</td><td>${fmtScore(e.score)}</td><td>STAGE ${e.stage}</td></tr>`)
+          .join('')
+      : '<tr><td colspan="3">No scores yet. Go set one!</td></tr>';
+    const html = `<div class="hs-title">HIGH SCORES</div><table>${rows}</table>`;
+    for (const el of [this.els.title, this.els.gameover]) el.querySelector('.hiscores')!.innerHTML = html;
+  }
+
+  // ---------------------------------------------------------------- level-up
+
+  showLevelUp(offers: Offer[], title: string, rerolls: number, loadout: LoadoutItem[]): void {
+    const el = this.els.levelup;
+    el.querySelector('h1')!.textContent = title;
+    el.querySelector('.cards')!.innerHTML = offers
+      .map(
+        (o, i) => `<button class="card ${o.kind}" data-nav data-act="pick" data-index="${i}">
+          <div class="tag ${o.tag === 'NEW!' ? 'new' : ''}">${o.tag}</div>
+          <div class="icon" style="--c:${o.color}">${o.icon}</div>
+          <div class="name">${o.name}</div>
+          <div class="desc">${o.text}</div>
+          <div class="kind">${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : 'BONUS'}</div>
+          <div class="key">${i + 1}</div>
+        </button>`,
+      )
+      .join('');
+    el.querySelector('.reroll-row')!.innerHTML = rerolls > 0 ? `<button data-nav data-act="reroll">REROLL (${rerolls}) [R]</button>` : '';
+    el.querySelector('.build')!.innerHTML = loadout.map(badge).join('');
+    this.show('levelup');
+  }
+
+  /** The pause screen shows the current build. */
+  setPauseBuild(loadout: LoadoutItem[]): void {
+    this.els.pause.querySelector('.build')!.innerHTML = loadout.map(badge).join('');
+  }
+
+  // ---------------------------------------------------------------- workshop
+
+  private renderWorkshop(): void {
+    this.renderWallet();
+    this.els.workshop.querySelector('.ws-grid')!.innerHTML = WORKSHOP.map((it) => {
+      const lv = save.workshop[it.id] ?? 0;
+      const maxed = lv >= it.maxLevel;
+      const cost = workshopCost(it, lv);
+      const can = !maxed && save.bolts >= cost;
+      const pips = Array.from({ length: it.maxLevel }, (_, i) => `<b class="${i < lv ? 'on' : ''}"></b>`).join('');
+      return `<button class="ws-item ${maxed ? 'maxed' : can ? 'can' : 'cant'}" data-nav data-buy="${it.id}">
+        <span class="icon" style="--c:${it.color}">${it.icon}</span>
+        <span class="info"><span class="name">${it.name}</span><span class="desc">${it.desc}</span><span class="pips">${pips}</span></span>
+        <span class="cost">${maxed ? 'MAX' : `¢${cost}`}</span>
+      </button>`;
+    }).join('');
+    this.els.workshop.querySelector('.ach-list')!.innerHTML = ACHIEVEMENTS.map((a) => {
+      const done = save.achievements.includes(a.id);
+      const reward = a.unlockWeapon ? `Unlocks ${WEAPONS[a.unlockWeapon].name}` : `+${a.bolts} Bolts`;
+      return `<div class="ach ${done ? 'done' : ''}"><span class="check">${done ? '★' : '☆'}</span><span class="name">${a.name}</span><span class="desc">${a.desc}</span><span class="reward">${reward}</span></div>`;
+    }).join('');
+  }
+
+  private buy(id: string): void {
+    const focus = this.navs.workshop.focus;
+    if (buyWorkshop(id)) sfx.powerUp();
+    else sfx.menuMove();
+    this.renderWorkshop();
+    this.navs.workshop.refresh(focus);
+  }
+
+  // ---------------------------------------------------------------- save data
+
+  private msg(text: string, ok = true): void {
+    const m = this.els.savedata.querySelector<HTMLElement>('.msg')!;
+    m.textContent = text;
+    m.classList.toggle('err', !ok);
+  }
+
+  private get codeBox(): HTMLTextAreaElement {
+    return this.els.savedata.querySelector<HTMLTextAreaElement>('#save-code')!;
+  }
+
+  private doExport(): void {
+    const code = exportCode();
+    this.codeBox.value = code;
+    this.codeBox.select();
+    const fallback = () => this.msg('Copy the code above and keep it somewhere safe.');
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(code).then(() => this.msg('Save code copied to the clipboard. Keep it somewhere safe.'), fallback);
+    } else fallback();
+  }
+
+  private doImport(): void {
+    try {
+      importCode(this.codeBox.value);
+      this.msg('Save loaded!');
+      sfx.powerUp();
+    } catch (err) {
+      this.msg((err as Error).message, false);
+    }
+  }
+
+  private doRefund(): void {
+    const n = refundWorkshop();
+    this.msg(n > 0 ? `Refunded ${n} Bolts. Spend them again in the Workshop.` : 'Nothing to refund.');
+  }
+
+  private doWipe(btn: HTMLElement): void {
+    if (!this.wipeArmed) {
+      this.wipeArmed = true;
+      btn.textContent = 'REALLY? PRESS AGAIN';
+      this.msg('This deletes all Bolts, upgrades and achievements in this browser.', false);
+      return;
+    }
+    resetSave();
+    this.wipeArmed = false;
+    btn.textContent = 'RESET SAVE';
+    this.msg('Save reset.');
+  }
+
+  // ---------------------------------------------------------------- game over
+
+  showGameOver(sum: RunSummary, rank: number, list: ScoreEntry[]): void {
+    const el = this.els.gameover;
+    el.querySelector<HTMLElement>('.newbest')!.hidden = rank !== 0;
+    el.querySelector('.summary')!.innerHTML = `
+      <div class="big">${fmtScore(sum.score)}</div>
+      <div class="earned"><span class="coin">¢</span> +${sum.bolts} BOLTS</div>
+      <div class="grid">
+        <span>STAGE</span><b>${sum.stage}</b>
+        <span>LEVEL</span><b>${sum.level}</b>
+        <span>KILLS</span><b>${sum.kills.toLocaleString('en-US')}</b>
+        <span>BEST COMBO</span><b>${sum.maxCombo}</b>
+        <span>TIME</span><b>${fmtTime(sum.time)}</b>
+      </div>`;
+    const top = sum.damage.slice(0, 6);
+    const max = top[0]?.dmg || 1;
+    el.querySelector('.dmg-table')!.innerHTML =
+      `<div class="hs-title">DAMAGE DEALT</div>` +
+      top
+        .map(
+          (d) =>
+            `<div class="dmg-row"><span>${d.name}</span><div class="bar"><div style="width:${(d.dmg / max) * 100}%;background:${d.color}"></div></div><b>${fmtScore(d.dmg)}</b></div>`,
+        )
+        .join('');
+    el.querySelector('.build')!.innerHTML = sum.loadout.map(badge).join('');
+    el.querySelector('.unlocked')!.innerHTML = sum.achievements.length ? `★ NEW: ${sum.achievements.join(' · ')}` : '';
+    this.setHighScores(list, rank);
+    this.show('gameover');
+  }
+}

@@ -1,0 +1,28 @@
+/**
+ * localStorage wrapper. Storage can be missing, full or blocked (private
+ * windows, previews), so every access is guarded and falls back to defaults.
+ */
+const PREFIX = 'infinishoot.';
+
+export function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(PREFIX + key);
+    if (raw == null) return fallback;
+    const parsed = JSON.parse(raw) as T;
+    // Merge plain objects so newly added fields get their defaults.
+    if (fallback && typeof fallback === 'object' && !Array.isArray(fallback)) {
+      return { ...fallback, ...parsed };
+    }
+    return parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(PREFIX + key, JSON.stringify(value));
+  } catch {
+    // Ignore: saving is best-effort.
+  }
+}
