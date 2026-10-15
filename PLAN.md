@@ -84,7 +84,8 @@ Goal: Balatro-style build decisions, where the best pick depends on what you alr
 Known limits: some strict networks block direct WebRTC connections (would need a TURN relay).
 
 ## Milestone 4b: Biomes, bosses and evolutions
-- [ ] 3-4 biomes cycling by stage (palette, fog, props, music)
+- [x] 4 biomes cycling by stage: Bright Meadow, Sunset Dunes (cacti, sandstone, rocks), Frosty Peaks (pines, ice ruins, frozen ponds), Magma Isle (obsidian, dead trees, lava pools and lava sea). Each sets ground, trail, walls, edge ring, sea, light and fog
+- [ ] Per-biome music (no music system yet; see M6)
 - [ ] 2 more bosses with distinct patterns, boss every stage rotates
 - [ ] Weapon evolutions: max weapon + matching passive becomes a stronger evolved form
 - [ ] Bullet-pattern system for shooter variants (spiral, burst, sniper)
@@ -175,3 +176,4 @@ public/assets/         # models (glb), textures (png), audio
 - 2026-10-15: Online co-op design (user): separate gold and own shop per player; XP shared as a team (assumed, Vampire Survivors style). Host-authoritative simulation with client-owned movement, chosen over lockstep because JS floating point isn't guaranteed identical across browsers and lockstep adds input delay. Refactored Game into team state plus per-player Hero (src/game/hero.ts); solo is simply one hero. Gameplay timing must never depend on render (the portal used to), because hosts may not render every frame.
 - 2026-10-15: Dropped the itch.io build (user: downloads should be plug and play, no command lines). The game now ships as a single portable Windows exe built with Electron + electron-builder (`npm run dist`, about 100 MB). Electron's `backgroundThrottling: false` also fixes the co-op host pausing when its window is in the background. Vite's `base: './'` stays because the app loads dist/index.html from disk. three, peerjs and lil-gui moved to devDependencies since Vite bundles them, so the exe ships no node_modules.
 - 2026-10-15: Right click moved from dash to the charge shot (dash keeps Space/Shift/LB/LT/A). Charging suppresses rapid fire, Mega Man style. Charged hits are credited to source 'charge' so Mods key off it. Stages went from 5:00 to 4:00; the director's 'pace minute' scales content so 4 minutes covers what 5 did. Barrels are no longer merged props: they live in Barrels (src/game/barrels.ts) with their own collider that is removed (and the wall grid rebuilt) when they blow; hosts broadcast `barrel` events to clients. Mods gained `addGold`, `freeSlots` and an `onStageClear` hook.
+- 2026-10-15: Biomes are data (src/data/biomes.ts) consumed by createFieldArena(seed, biome) and applyBiomeLook(), which sets the shared light and fog uniforms; the clear colour follows the fog every frame. Biome = (stage - 1) mod 4, so clients rebuild the same biome from the stage number without new network messages. Lava pools are decoration only for now (hazards are a separate task).

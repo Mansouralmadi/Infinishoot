@@ -6,11 +6,13 @@ import { textures } from '../render/textures';
 import { paint, tiledBox } from '../render/geometry';
 import { mergeStatic } from '../render/mergeStatic';
 import { aabbFromCenter, overlapsAny, type AABB } from './collision';
+import { BIOMES, type BiomeDef } from '../data/biomes';
 
 /**
- * Big, open island field for survival stages. Mostly open grass for kiting,
- * with sparse clusters of cover (ruins, crates, trees) and winding dirt
- * paths. Seeded, so the same run seed rebuilds the same stage.
+ * Big, open island field for survival stages. Mostly open ground for kiting,
+ * with sparse clusters of cover (ruins, crates, trees, rocks) and winding
+ * paths. The biome picks textures, props, sea and decorations. Seeded, so the
+ * same run seed rebuilds the same stage.
  */
 export interface Arena {
   group: THREE.Group;
@@ -24,19 +26,20 @@ const HALF = 55;
 const TILE = 2;
 const CLEAR_CENTER = 9;
 
-export function createFieldArena(seed: number): Arena {
+export function createFieldArena(seed: number, biome: BiomeDef = BIOMES[0]): Arena {
   const rng = new Rng(seed);
   const group = new THREE.Group();
   const colliders: AABB[] = [];
   const barrels: Arena['barrels'] = [];
   const tex = {
-    grass: textures.grass(),
-    path: textures.path(),
-    sand: textures.sand(),
-    brick: textures.brick(),
+    grass: textures[biome.ground](),
+    path: textures[biome.path](),
+    sand: textures[biome.rim](),
+    brick: textures[biome.wall](),
     crate: textures.crate(),
-    water: textures.water(),
-    leaves: textures.leaves(),
+    water: textures[biome.sea.tex](),
+    leaves: textures[biome.leaves](),
+    edge: textures[biome.edge.tex](),
   };
 
   // --- Winding dirt paths: a few random walks painted onto the tile grid ---
@@ -91,7 +94,7 @@ export function createFieldArena(seed: number): Arena {
   seaGeo.rotateX(-Math.PI / 2);
   const seaUv = seaGeo.getAttribute('uv') as THREE.BufferAttribute;
   for (let i = 0; i < seaUv.count; i++) seaUv.setXY(i, seaUv.getX(i) * 100, seaUv.getY(i) * 100);
-  const sea = new THREE.Mesh(seaGeo, createRetroMaterial({ map: tex.water, uvScroll: [0.05, 0.03], unlit: 0.35 }));
+  const sea = new THREE.Mesh(seaGeo, createRetroMaterial({ map: tex.water, uvScroll: biome.sea.scroll, unlit: biome.sea.unlit }));
   sea.position.y = -0.4;
   group.add(sea);
 
@@ -108,11 +111,11 @@ export function createFieldArena(seed: number): Arena {
   // --- Hedge ring (instanced) ---
   const hedge: [number, number][] = [];
   for (let t = -HALF; t <= HALF; t += 1.6) hedge.push([t, -HALF], [t, HALF], [-HALF, t], [HALF, t]);
-  const bushes = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.9, 0), createRetroMaterial({ map: tex.leaves }), hedge.length);
+  const bushes = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.9, 0), createRetroMaterial({ map: tex.edge }), hedge.length);
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
-  const greens = ['#4fd36a', '#3fbf5a', '#6ee07a', '#38b06a'].map((c) => new THREE.Color(c));
+  const greens = biome.edge.colors.map((c) => new THREE.Color(c));
   hedge.forEach(([x, z], i) => {
     const s = rng.range(0.8, 1.25);
     q.setFromEuler(e.set(0, rng.range(0, Math.PI), 0));
@@ -142,12 +145,15 @@ export function createFieldArena(seed: number): Arena {
     colliders.push(aabbFromCenter(x, z, w, d));
   };
 
-  const brickMat = createRetroMaterial({ map: tex.brick });
-  const capMat = createRetroMaterial({ color: '#fff4c9' });
-  const pillarMat = createRetroMaterial({ map: tex.brick, color: '#ffd6f0' });
+  const brickMat = createRetroMaterial({ map: tex.brick, color: biome.wallTint });
+  const capMat = createRetroMaterial({ color: biome.capColor });
+  const pillarMat = createRetroMaterial({ map: tex.brick, color: biome.pillarTint });
   const crateMat = createRetroMaterial({ map: tex.crate });
   const crateGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-  const trunkMat = createRetroMaterial({ color: '#a86a3c' });
+  const trunkMat = createRetroMaterial({ color: biome.trunk });
+  const snowMat = createRetroMaterial({ color: '#ffffff' });
+  const flowerMat = createRetroMaterial({ color: '#ff7eb6' });
+  const rockMats = biome.rockColors.map((c) => createRetroMaterial({ color: c }));
   const leafMat = createRetroMaterial({ map: tex.leaves });
   const barrel = (p: [number, number]) => {
     const box = aabbFromCenter(p[0], p[1], 0.9, 0.9);
@@ -205,36 +211,108 @@ export function createFieldArena(seed: number): Arena {
       if (p) barrel(p);
     }
   };
+  const tree = (x: number, z: number): THREE.Group => {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    const s = rng.range(1.0, 1.5);
+    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, px: number, py: number, pz: number, rz = 0, ry = 0) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(px, py, pz);
+      m.rotation.set(0, ry, rz);
+      g.add(m);
+    };
+    if (biome.tree === 'round') {
+      add(new THREE.CylinderGeometry(0.25, 0.35, 1.6, 6), trunkMat, 0, 0.8, 0);
+      add(new THREE.IcosahedronGeometry(1.3 * s, 0), leafMat, 0, 2.2 + 0.4 * s, 0, 0, rng.range(0, Math.PI));
+      add(new THREE.IcosahedronGeometry(0.85 * s, 0), leafMat, 0, 3.3 + 0.5 * s, 0);
+    } else if (biome.tree === 'cactus') {
+      const h = 1.8 + s;
+      add(new THREE.CylinderGeometry(0.38, 0.42, h, 8), leafMat, 0, h / 2, 0);
+      add(new THREE.SphereGeometry(0.38, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), leafMat, 0, h, 0);
+      const side = rng.chance(0.5) ? 1 : -1;
+      add(new THREE.CylinderGeometry(0.2, 0.2, 0.6, 6), leafMat, 0.45 * side, h * 0.5, 0, Math.PI / 2);
+      add(new THREE.CylinderGeometry(0.2, 0.2, 0.9, 6), leafMat, 0.72 * side, h * 0.5 + 0.4, 0);
+      if (rng.chance(0.6)) {
+        add(new THREE.CylinderGeometry(0.18, 0.18, 0.5, 6), leafMat, -0.42 * side, h * 0.35, 0, Math.PI / 2);
+        add(new THREE.CylinderGeometry(0.18, 0.18, 0.7, 6), leafMat, -0.62 * side, h * 0.35 + 0.3, 0);
+      }
+      add(new THREE.IcosahedronGeometry(0.18, 0), flowerMat, 0, h + 0.38, 0);
+    } else if (biome.tree === 'pine') {
+      add(new THREE.CylinderGeometry(0.2, 0.28, 1.0, 6), trunkMat, 0, 0.5, 0);
+      for (let k = 0; k < 3; k++) {
+        const r = (1.4 - k * 0.35) * s;
+        add(new THREE.ConeGeometry(r, 1.4 * s, 7), leafMat, 0, 1.3 + k * 0.95 * s, 0, 0, k * 0.4);
+      }
+      add(new THREE.ConeGeometry(0.35 * s, 0.5 * s, 7), snowMat, 0, 1.3 + 2.45 * s, 0);
+    } else {
+      // Dead tree: a crooked trunk and a few bare branches.
+      const h = 2 + s;
+      add(new THREE.CylinderGeometry(0.16, 0.32, h, 6), trunkMat, 0, h / 2, 0, rng.range(-0.1, 0.1));
+      for (let k = 0; k < 3; k++) {
+        const a = rng.range(0, Math.PI * 2);
+        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 1.1, 5), trunkMat);
+        b.position.set(Math.cos(a) * 0.35, h * (0.55 + k * 0.15), Math.sin(a) * 0.35);
+        b.rotation.set(Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9);
+        g.add(b);
+      }
+    }
+    return g;
+  };
   const grove = (cx: number, cz: number) => {
     for (let i = rng.int(2, 5); i > 0; i--) {
       const p = spot(0.8, 0.8, 1.6, cx, cz, 4);
       if (!p) continue;
-      const tree = new THREE.Group();
-      tree.position.set(p[0], 0, p[1]);
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 1.6, 6), trunkMat);
-      trunk.position.y = 0.8;
-      tree.add(trunk);
-      const s = rng.range(1.0, 1.5);
-      const canopy = new THREE.Mesh(new THREE.IcosahedronGeometry(1.3 * s, 0), leafMat);
-      canopy.position.y = 2.2 + 0.4 * s;
-      canopy.rotation.y = rng.range(0, Math.PI);
-      tree.add(canopy);
-      const canopy2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.85 * s, 0), leafMat);
-      canopy2.position.y = 3.3 + 0.5 * s;
-      tree.add(canopy2);
-      solid(tree, p[0], p[1], 0.8, 0.8);
+      solid(tree(p[0], p[1]), p[0], p[1], 0.8, 0.8);
     }
   };
+  const rocks = (cx: number, cz: number) => {
+    for (let i = rng.int(2, 4); i > 0; i--) {
+      const r = rng.range(0.7, 1.3);
+      const p = spot(r * 1.6, r * 1.6, 0.4, cx, cz, 3);
+      if (!p) continue;
+      const m = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), rng.pick(rockMats));
+      m.position.set(p[0], r * 0.6, p[1]);
+      m.rotation.set(rng.range(0, 1), rng.range(0, Math.PI), 0);
+      m.scale.y = rng.range(0.7, 1.2);
+      solid(m, p[0], p[1], r * 1.5, r * 1.5);
+    }
+  };
+
+  // Flat decoration pools (lava, frozen ponds): drawn under everything, never solid.
+  if (biome.pools) {
+    const poolMat = createRetroMaterial({ map: textures[biome.pools.tex](), unlit: biome.pools.unlit, uvScroll: biome.pools.scroll });
+    for (let i = 0; i < biome.pools.count; i++) {
+      const r = rng.range(2.2, 4.2);
+      const c = spot(r * 2, r * 2, 1);
+      if (!c) continue;
+      const geo = new THREE.CircleGeometry(r, 10);
+      geo.rotateX(-Math.PI / 2);
+      // Wobbly edge so pools don't look like perfect discs.
+      const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+      for (let k = 1; k < pos.count; k++) {
+        const f = rng.range(0.8, 1.1);
+        pos.setX(k, pos.getX(k) * f);
+        pos.setZ(k, pos.getZ(k) * f);
+      }
+      const uv = geo.getAttribute('uv') as THREE.BufferAttribute;
+      for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * r, uv.getY(k) * r);
+      const m = new THREE.Mesh(geo, poolMat);
+      m.position.set(c[0], 0.03, c[1]);
+      group.add(m);
+    }
+  }
 
   // Cluster centres spread out over the field.
   for (let i = 0; i < 26; i++) {
     const cx = rng.range(-lim, lim);
     const cz = rng.range(-lim, lim);
     if (Math.hypot(cx, cz) < CLEAR_CENTER + 3) continue;
-    const kind = rng.next();
-    if (kind < 0.35) ruin(cx, cz);
-    else if (kind < 0.65) crates(cx, cz);
-    else grove(cx, cz);
+    const [wr, wc, wt] = biome.clusters;
+    const kind = rng.next() * biome.clusters.reduce((a, b) => a + b, 0);
+    if (kind < wr) ruin(cx, cz);
+    else if (kind < wr + wc) crates(cx, cz);
+    else if (kind < wr + wc + wt) grove(cx, cz);
+    else rocks(cx, cz);
   }
 
   // Loose barrel groups out in the open, so there's always one worth shooting.

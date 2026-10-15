@@ -39,6 +39,7 @@ const loop = new GameLoop({
   render(alpha, frameDt) {
     if (!game.paused && game.mode !== 'levelup') retroGlobals.uTime.value += frameDt;
     game.render(alpha, frameDt);
+    renderer.gl.setClearColor(retroGlobals.uFogColor.value); // follows the biome
     renderer.render(game.scene, game.cam.camera);
 
     fpsAcc += frameDt;

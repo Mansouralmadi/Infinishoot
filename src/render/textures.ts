@@ -119,6 +119,133 @@ export const textures = {
       speckle(ctx, s, rng, ['#2e9e48', '#5ad66f', '#7fe88a'], 70);
     }, 16),
 
+  // ---------------------------------------------------------------- biome textures
+
+  /** Sun-baked sand with wind ripples. */
+  dunes: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#f7dca6', s, s);
+      speckle(ctx, s, rng, ['#efd096', '#fbe8bf', '#e8c486'], 150);
+      for (let i = 0; i < 4; i++) {
+        const y = rng.int(1, s - 2);
+        const x = rng.int(0, s - 12);
+        px(ctx, x, y, '#dcb070', rng.int(6, 12), 1);
+        px(ctx, x + 1, y - 1, '#fff3d6', rng.int(4, 8), 1);
+      }
+      if (rng.chance(0.6)) px(ctx, rng.int(2, s - 4), rng.int(2, s - 4), '#c98a3c', 2, 1);
+    }, 21),
+
+  /** Packed red-earth trail. */
+  clay: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#e2b088', s, s);
+      speckle(ctx, s, rng, ['#d6a078', '#ecc29e', '#c99468'], 170);
+      for (let i = 0; i < 5; i++) px(ctx, rng.int(0, s - 3), rng.int(0, s - 2), '#b8845a', 2, 2);
+    }, 22),
+
+  sandstone: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#d9894a', s, s);
+      for (let row = 0; row < 4; row++) {
+        const off = row % 2 ? 8 : 0;
+        for (let col = -1; col < 3; col++) {
+          px(ctx, col * 16 + off + 1, row * 8 + 1, rng.pick(['#ffbf7a', '#f5ad66', '#ffca8c']), 14, 6);
+          px(ctx, col * 16 + off + 1, row * 8 + 1, '#ffe0b0', 14, 1);
+        }
+      }
+    }, 23),
+
+  cactus: () =>
+    makeTexture(16, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#3fbf6a', s, s);
+      for (let x = 1; x < s; x += 4) px(ctx, x, 0, '#2e9e54', 1, s);
+      speckle(ctx, s, rng, ['#fff8d0'], 8);
+    }, 24),
+
+  /** Fresh snow with blue shadows and a few sparkles. */
+  snow: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#e3eefb', s, s);
+      speckle(ctx, s, rng, ['#d0e0f5', '#dae7f8', '#c4d6ef'], 170);
+      for (let i = 0; i < 5; i++) px(ctx, rng.int(0, s - 1), rng.int(0, s - 1), '#ffffff');
+      for (let i = 0; i < 3; i++) px(ctx, rng.int(0, s - 1), rng.int(0, s - 1), '#9fd8ff');
+    }, 31),
+
+  /** Frozen path: pale ice with cracks. */
+  ice: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#8fc6f0', s, s);
+      speckle(ctx, s, rng, ['#a2d2f5', '#84bbe8', '#b4dcf8'], 140);
+      let x = rng.int(0, s - 1);
+      let y = rng.int(0, s - 1);
+      for (let k = 0; k < 14; k++) {
+        px(ctx, x, y, '#dff2ff');
+        x = (x + rng.int(-1, 1) + s) % s;
+        y = (y + rng.int(0, 1)) % s;
+      }
+    }, 32),
+
+  iceBrick: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#6fa8e8', s, s);
+      for (let row = 0; row < 4; row++) {
+        const off = row % 2 ? 8 : 0;
+        for (let col = -1; col < 3; col++) {
+          px(ctx, col * 16 + off + 1, row * 8 + 1, rng.pick(['#bfe2ff', '#a8d4ff', '#d0ebff']), 14, 6);
+          px(ctx, col * 16 + off + 2, row * 8 + 2, '#ffffff', 4, 1);
+        }
+      }
+    }, 33),
+
+  pine: () =>
+    makeTexture(16, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#2fa86a', s, s);
+      speckle(ctx, s, rng, ['#238a55', '#3fc07a', '#ffffff', '#ffffff'], 60);
+    }, 34),
+
+  /** Cooled volcanic rock with glowing ember flecks. */
+  ash: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#6a4a7a', s, s);
+      speckle(ctx, s, rng, ['#5a3d6a', '#7d5a8c', '#4f3460'], 170);
+      for (let i = 0; i < 4; i++) px(ctx, rng.int(0, s - 1), rng.int(0, s - 1), rng.pick(['#ff9f3d', '#ffd23f']));
+    }, 41),
+
+  /** Crusted lava path with bright cracks. */
+  crust: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#3d2a4a', s, s);
+      speckle(ctx, s, rng, ['#4a3358', '#33223f'], 120);
+      for (let i = 0; i < 4; i++) {
+        let x = rng.int(0, s - 1);
+        let y = rng.int(0, s - 1);
+        for (let k = 0; k < 10; k++) {
+          px(ctx, x, y, k % 3 ? '#ff7a2f' : '#ffd23f');
+          x = (x + rng.int(-1, 1) + s) % s;
+          y = (y + rng.int(0, 1)) % s;
+        }
+      }
+    }, 42),
+
+  obsidian: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#2a1d3a', s, s);
+      for (let row = 0; row < 4; row++) {
+        const off = row % 2 ? 8 : 0;
+        for (let col = -1; col < 3; col++) {
+          px(ctx, col * 16 + off + 1, row * 8 + 1, rng.pick(['#4a3566', '#55407a', '#3f2d58']), 14, 6);
+          px(ctx, col * 16 + off + 1, row * 8 + 1, '#8a6ac8', 14, 1);
+        }
+      }
+    }, 43),
+
+  lava: () =>
+    makeTexture(32, (ctx, s, rng) => {
+      px(ctx, 0, 0, '#ff6a2a', s, s);
+      speckle(ctx, s, rng, ['#ff8a3d', '#ff5a1f', '#ffb84d'], 140);
+      for (let i = 0; i < 6; i++) px(ctx, rng.int(0, s - 6), rng.int(0, s - 2), '#ffe680', rng.int(2, 5), 1);
+    }, 44),
+
   /** Painted anime face: big eyes, small mouth, transparent background. */
   face: () =>
     makeTexture(32, (ctx) => {

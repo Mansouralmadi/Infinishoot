@@ -16,6 +16,8 @@ import { DamageNumbers } from '../ui/damageNumbers';
 import { Hud, type LoadoutItem } from '../ui/hud';
 import { Screens, type Offer, type RunSummary, type ShopView } from '../ui/screens';
 import { createFieldArena, type Arena } from '../world/fieldArena';
+import { biomeForStage } from '../data/biomes';
+import { applyBiomeLook } from '../render/biomeLook';
 import { Barrels, barrelTuning, type Barrel } from './barrels';
 import { BULLET_Y, Bullets, Team } from './bullets';
 import { CameraRig, cameraTuning } from './cameraRig';
@@ -424,10 +426,12 @@ export class Game implements HeroWorld {
     for (const h of this.heroes) h.bombT = -1;
   }
 
-  private loadArena(seed: number): void {
+  private loadArena(seed: number, stage = 1): void {
     this.scene.remove(this.arena.group);
     disposeObject(this.arena.group);
-    this.arena = createFieldArena(seed);
+    const biome = biomeForStage(stage);
+    this.arena = createFieldArena(seed, biome);
+    applyBiomeLook(biome);
     this.scene.add(this.arena.group);
     this.walls = new StaticBoxGrid(this.arena.colliders);
     this.enemyCtx.colliders = this.arena.colliders;
@@ -442,6 +446,7 @@ export class Game implements HeroWorld {
   goTitle(): void {
     this.paused = false;
     this.mode = 'title';
+    this.loadArena(TITLE_SEED, 1);
     this.clearWorld();
     const h = this.hero;
     h.disposeWeapons();
@@ -525,7 +530,7 @@ export class Game implements HeroWorld {
 
   private loadStage(stage: number): void {
     this.stage = stage;
-    this.loadArena((this.seed ^ Math.imul(stage, 0x9e3779b1)) >>> 0);
+    this.loadArena((this.seed ^ Math.imul(stage, 0x9e3779b1)) >>> 0, stage);
     this.clearWorld();
     this.heroes.forEach((h, i) => {
       const s = this.spawnSpot(i);
@@ -537,7 +542,7 @@ export class Game implements HeroWorld {
     this.mode = 'fight';
     this.modeT = 0;
     if (this.role === 'host') this.host!.broadcast({ t: 'stage', stage, seed: this.seed });
-    this.vfx.banner(`STAGE ${stage}`, `SURVIVE ${Math.round(this.director.duration / 60)} MINUTES`, 1.8);
+    this.vfx.banner(`STAGE ${stage}`, `${biomeForStage(stage).name.toUpperCase()}<br>SURVIVE ${Math.round(this.director.duration / 60)} MINUTES`, 2.2);
     this.vfx.sound('wave', NaN, NaN);
     this.checkAchievements();
   }
@@ -2051,7 +2056,7 @@ export class Game implements HeroWorld {
   private clientStage(stage: number, seed: number): void {
     this.stage = stage;
     this.seed = seed;
-    this.loadArena((seed ^ Math.imul(stage, 0x9e3779b1)) >>> 0);
+    this.loadArena((seed ^ Math.imul(stage, 0x9e3779b1)) >>> 0, stage);
     this.clearWorld();
     this.heroes.forEach((h, i) => {
       const s = this.spawnSpot(i);
