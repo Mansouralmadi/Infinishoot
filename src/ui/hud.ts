@@ -1,6 +1,6 @@
 /**
  * In-game arcade HUD: XP bar and level, life, stage timer, score and combo,
- * kills and Bolts, boss bar, weapon/item loadout, dash and bomb meters,
+ * kills and gold, boss bar, weapon/item loadout, dash and bomb meters,
  * banners, toasts, hurt vignette, screen flash and fade. Plain DOM.
  */
 export interface HudState {
@@ -55,7 +55,7 @@ export class Hud {
       `<div id="ingame">
          <div id="xpbar"><div class="fill"></div><div class="lv"></div></div>
          <div id="hp"><div class="bar"><div class="fill"></div></div><div class="num"></div></div>
-         <div id="runinfo"><span class="kills"></span><span class="bolts"></span></div>
+         <div id="runinfo"><span class="kills"></span><span class="gold"></span></div>
          <div id="timer"><div class="clock"></div><div class="stage"></div></div>
          <button id="pausebtn" title="Pause (Esc)" aria-label="Pause">II</button>
          <div id="bossbar" hidden><div class="name"></div><div class="bar"><div class="fill"></div></div></div>
@@ -241,10 +241,10 @@ export class Hud {
       this.lastHp = s.hp;
     }
     this.text('#runinfo .kills', `☠ ${s.kills}`);
-    this.text('#runinfo .bolts', `● ${s.gold}`);
+    this.text('#runinfo .gold', `● ${s.gold}`);
     if (s.gold !== this.lastGold) {
       if (s.gold > this.lastGold && this.lastGold >= 0) {
-        const g = this.el('#runinfo .bolts');
+        const g = this.el('#runinfo .gold');
         g.classList.remove('bump');
         void g.offsetWidth;
         g.classList.add('bump');

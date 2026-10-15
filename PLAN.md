@@ -54,7 +54,7 @@ Goal: hectic, movement-first runs where you get stronger both during and between
 - [x] 10 passives (stat boosts)
 - [x] 10 enemies: Swarmer, Bopper, Zippy, Blaster Bot (shoots), Rhino (charge line), Chonk, Ka-Boomer (fuse), Jelly (splits), Hive Pylon (spawns), King Bopper (boss: ring bursts, summons, jump slam); elites at 1.6x size and 10x HP drop chests
 - [x] Contact damage with armor and i-frames; enemy bullets; revive
-- [x] Meta progression: Bolts banked per run, Workshop (12 permanent upgrades), 8 achievements (4 unlock weapons)
+- [x] Meta progression: Bolts banked per run, Workshop (12 permanent upgrades), 8 achievements (4 unlock weapons). Bolts and the Workshop were later removed (see decision log)
 - [x] Saves: auto-save in localStorage, export/import save code with checksum, refund, reset
 - [x] New HUD (XP bar, timer, boss bar, loadout), Workshop and save-data screens, game over with damage breakdown
 - [x] ~~itch.io packaging~~ replaced by the desktop exe (see decision log)
@@ -102,7 +102,7 @@ Known limits: some strict networks block direct WebRTC connections (would need a
 - [x] Fixes: shop CONTINUE now closes the shop; Esc pause no longer closes itself on the same press
 
 ## Milestone 5: Heroes and content
-- [ ] 2-3 heroes with different starting weapons and stat quirks, unlocked in the Workshop; hero art with painted faces
+- [ ] 2-3 heroes with different starting weapons and stat quirks, unlocked through achievements; hero art with painted faces
 - [ ] More weapons (laser sweep, charge cannon) and passives
 - [ ] Elite modifiers (shielded, fast, splitting)
 - **Playable:** builds and heroes diverge noticeably.
@@ -178,3 +178,4 @@ public/assets/         # models (glb), textures (png), audio
 - 2026-10-15: Right click moved from dash to the charge shot (dash keeps Space/Shift/LB/LT/A). Charging suppresses rapid fire, Mega Man style. Charged hits are credited to source 'charge' so Mods key off it. Stages went from 5:00 to 4:00; the director's 'pace minute' scales content so 4 minutes covers what 5 did. Barrels are no longer merged props: they live in Barrels (src/game/barrels.ts) with their own collider that is removed (and the wall grid rebuilt) when they blow; hosts broadcast `barrel` events to clients. Mods gained `addGold`, `freeSlots` and an `onStageClear` hook.
 - 2026-10-15: Biomes are data (src/data/biomes.ts) consumed by createFieldArena(seed, biome) and applyBiomeLook(), which sets the shared light and fog uniforms; the clear colour follows the fog every frame. Biome = (stage - 1) mod 4, so clients rebuild the same biome from the stage number without new network messages. Lava pools are decoration only for now (hazards are a separate task).
 - 2026-10-15: v0.2.0. Bosses are flagged `boss: true` in their def (boss bar, bounty, no crowd separation) instead of checking behavior === 'boss'. Boss attack telegraphs reach clients as the action index packed into the enemy record's flag bits; strike zones travel on the effects bus ('z' events) and are drawn as filled red discs, since additive rings vanished on snow. The version is injected from package.json (`__APP_VERSION__`) and shown on the title screen.
+- 2026-10-15: Removed the Workshop and Bolts (user). Runs now start equal; the in-run shop and Mods carry the build decisions. Achievements stay and still unlock weapons; they now live on an UNLOCKS screen (title menu) with Save Data. Save format v2 drops `bolts`, `workshop` and `boltsEarned`; older saves keep their achievements and lifetime stats. Rerolls and the revive came only from the Workshop, so runs start with none (the level-up Reroll button hides at 0). The co-op `hello` no longer carries Workshop levels.

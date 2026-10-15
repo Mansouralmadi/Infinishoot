@@ -107,7 +107,7 @@ export interface ModDef {
   /** Copies the Mod in the slot to its right. */
   echo?: boolean;
   flags?: Partial<ModFlags>;
-  /** Permanent stat change while owned (runs after passives and Workshop). */
+  /** Permanent stat change while owned (runs after passives). */
   stat?(s: Stats): void;
   /** Per-step stat change (moving, timers...). */
   live?(s: Stats, api: ModApi, st: ModState): void;

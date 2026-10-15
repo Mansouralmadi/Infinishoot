@@ -157,7 +157,7 @@ export class Synergy implements ModApi {
 
   // ---------------------------------------------------------------- stats
 
-  /** Permanent stat changes (after passives and Workshop). */
+  /** Permanent stat changes (after passives). */
   applyStatic(s: Stats): void {
     for (const e of this.eff) e.def.stat?.(s);
   }

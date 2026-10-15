@@ -840,7 +840,7 @@ h1.ko {
   font-size: 18px;
 }
 
-#runinfo .bolts {
+#runinfo .gold {
   color: #ffb627;
 }
 
@@ -1014,7 +1014,7 @@ h1.ko {
   border-color: #4fd36a;
 }
 
-.screen button.card.bolts,
+.screen button.card.gold,
 .screen button.card.heal {
   border-color: #ffb627;
 }
@@ -1024,109 +1024,23 @@ h1.ko {
   background: #9b6bff;
 }
 
-/* ---------- Wallet, Workshop, save data ---------- */
+/* ---------- Title progress, unlocks, save data ---------- */
 .wallet {
-  font-size: 24px;
-  color: #ffb627;
+  font-size: 22px;
+  color: var(--yellow);
   letter-spacing: 1px;
 }
 
-.coin {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #ffb627;
-  color: #fff;
-  border: 3px solid #fff;
-  font-size: 16px;
-  vertical-align: middle;
-}
-
-#scr-workshop {
+#scr-unlocks {
   justify-content: flex-start;
   padding-top: 24px;
 }
 
-#scr-workshop .scroll {
-  width: min(980px, 100%);
+#scr-unlocks .scroll {
+  width: min(760px, 100%);
   overflow-y: auto;
   flex: 1;
   padding: 8px;
-}
-
-.ws-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.screen button.ws-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  text-align: left;
-  font-size: 18px;
-  background: var(--ink);
-  border-width: 3px;
-}
-
-.ws-item .icon {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  background: var(--c);
-  border: 3px solid #fff;
-}
-
-.ws-item .info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ws-item .desc {
-  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
-  font-weight: bold;
-  font-size: 13px;
-  letter-spacing: 0;
-  opacity: 0.85;
-}
-
-.ws-item .pips {
-  display: flex;
-  gap: 3px;
-}
-
-.ws-item .pips b {
-  width: 14px;
-  height: 6px;
-  border-radius: 3px;
-  background: #3a3f78;
-}
-
-.ws-item .pips b.on {
-  background: var(--yellow);
-}
-
-.ws-item .cost {
-  font-size: 18px;
-  color: #ffb627;
-}
-
-.ws-item.cant .cost {
-  color: #8a8fb8;
-}
-
-.ws-item.maxed .cost {
-  color: #7dffb0;
 }
 
 .section {
@@ -1220,12 +1134,6 @@ h1.ko {
   align-items: flex-start;
   flex-wrap: wrap;
   justify-content: center;
-}
-
-.summary .earned {
-  font-size: 24px;
-  color: #ffb627;
-  margin-bottom: 8px;
 }
 
 .dmg-table {
@@ -1785,7 +1693,6 @@ div.mod-card.sold {
 .card .icon,
 .mod-card .icon,
 .owned-mod .icon,
-.ws-item .icon,
 #loadout .slot,
 #mods .mod,
 .badge {
@@ -1800,8 +1707,7 @@ div.mod-card.sold {
 
 .card .icon,
 .mod-card .icon,
-.owned-mod .icon,
-.ws-item .icon {
+.owned-mod .icon {
   text-shadow:
     var(--outline),
     0 3px 0 var(--ink);
@@ -1958,8 +1864,7 @@ div.mod-card.sold {
 }
 
 /* Spinning coins. */
-.gold-dot,
-.coin {
+.gold-dot {
   display: inline-block;
   animation: coinspin 2.4s ease-in-out infinite;
 }
@@ -2021,7 +1926,7 @@ div.mod-card.sold {
   }
 }
 
-#runinfo .bolts.bump {
+#runinfo .gold.bump {
   display: inline-block;
   animation: bump 0.25s ease-out;
 }

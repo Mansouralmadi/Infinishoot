@@ -63,8 +63,8 @@ export class Hero implements SynergyHost {
   weapons: Weapon[] = [];
   passives: Record<string, number> = {};
   /** Live stats (static + per-step Mod effects). Shared by reference with the player. */
-  readonly stats: Stats = computeStats({}, {});
-  private statBase: Stats = computeStats({}, {});
+  readonly stats: Stats = computeStats({});
+  private statBase: Stats = computeStats({});
   gold = 0;
   rerollsLeft = 0;
   revivesLeft = 0;
@@ -99,8 +99,7 @@ export class Hero implements SynergyHost {
     readonly index: number,
     public name: string,
     readonly color: string,
-    /** Workshop levels and unlocked weapons of this player's own save. */
-    public workshop: Record<string, number>,
+    /** Weapons this player's own save has unlocked. */
     public unlocked: string[],
     readonly peerId = '',
   ) {
@@ -169,9 +168,9 @@ export class Hero implements SynergyHost {
     this.player.dispose();
   }
 
-  /** Rebuild static stats (passives + Workshop + Mods) and the live copy. */
+  /** Rebuild static stats (passives + Mods) and the live copy. */
   recomputeStats(): void {
-    this.statBase = computeStats(this.passives, this.workshop);
+    this.statBase = computeStats(this.passives);
     this.synergy.applyStatic(this.statBase);
     this.refreshLive();
     this.player.stats = this.stats;
@@ -239,7 +238,7 @@ export class Hero implements SynergyHost {
     }
     if (out.length === 0) {
       out.push(
-        { kind: 'bolts', id: 'bolts', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: '+5 gold' },
+        { kind: 'gold', id: 'gold', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: '+5 gold' },
         { kind: 'heal', id: 'heal', name: 'Snack', icon: '♥', color: '#ff5e7a', tag: 'BONUS', text: 'Heal 40 life' },
       );
     }
@@ -257,7 +256,7 @@ export class Hero implements SynergyHost {
       this.recomputeStats();
       const heal = PASSIVES[o.id].healOnPick;
       if (heal) this.player.heal(heal);
-    } else if (o.kind === 'bolts') this.gold += 5;
+    } else if (o.kind === 'gold') this.gold += 5;
     else if (o.kind === 'heal') this.player.heal(40);
     this.player.hp = Math.min(this.player.hp, this.player.maxHp);
     this.loadoutDirty = true;

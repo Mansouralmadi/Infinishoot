@@ -1,17 +1,17 @@
 import type { Input } from '../core/input';
-import { ACHIEVEMENTS, WORKSHOP, workshopCost } from '../data/meta';
+import { ACHIEVEMENTS } from '../data/meta';
 import { tagChips, type Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
 import type { ModDef } from '../game/modTypes';
 import type { ScoreEntry } from '../game/highscores';
-import { buyWorkshop, exportCode, importCode, refundWorkshop, resetSave, save } from '../game/save';
+import { exportCode, importCode, resetSave, save } from '../game/save';
 import { settings, saveSettings } from '../game/settings';
 import { sfx } from '../audio/sfx';
 import { fmtScore, type LoadoutItem } from './hud';
 import { MenuNav } from './menu';
 
 /** Full-screen menus. Plain DOM; every navigable element has `data-nav`. */
-export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'shop' | 'gameover' | 'workshop' | 'savedata' | 'online' | 'wait';
+export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'shop' | 'gameover' | 'unlocks' | 'savedata' | 'online' | 'wait';
 
 export interface ScreenActions {
   start(): void;
@@ -58,7 +58,7 @@ export interface ShopView {
 }
 
 export interface Offer {
-  kind: 'weapon' | 'passive' | 'bolts' | 'heal';
+  kind: 'weapon' | 'passive' | 'gold' | 'heal';
   id: string;
   name: string;
   icon: string;
@@ -75,7 +75,6 @@ export interface RunSummary {
   time: number;
   level: number;
   maxCombo: number;
-  bolts: number;
   loadout: LoadoutItem[];
   mods: string[];
   damage: { name: string; color: string; dmg: number }[];
@@ -114,7 +113,7 @@ export class Screens {
   <div class="menu">
     <button data-nav data-act="start">PLAY SOLO</button>
     <button data-nav data-act="online">PLAY ONLINE</button>
-    <button data-nav data-act="workshop">WORKSHOP</button>
+    <button data-nav data-act="unlocks">UNLOCKS</button>
     <button data-nav data-act="settings">SETTINGS</button>
   </div>
   <div class="wallet"></div>
@@ -183,28 +182,25 @@ export class Screens {
   <div class="section owned-title"></div>
   <div class="owned-mods"></div>
 </div>
-<div id="scr-workshop" class="screen dim" hidden>
-  <h1>WORKSHOP</h1>
-  <div class="wallet"></div>
+<div id="scr-unlocks" class="screen dim" hidden>
+  <h1>UNLOCKS</h1>
+  <p class="note">Achievements carry over between runs. Some add new weapons to your level-up cards.</p>
   <div class="scroll">
-    <div class="ws-grid"></div>
-    <div class="section">ACHIEVEMENTS</div>
     <div class="ach-list"></div>
   </div>
   <div class="menu row">
     <button data-nav data-act="savedata">SAVE DATA</button>
-    <button data-nav data-act="ws-back">BACK</button>
+    <button data-nav data-act="ul-back">BACK</button>
   </div>
 </div>
 <div id="scr-savedata" class="screen dim" hidden>
   <h1>SAVE DATA</h1>
-  <p class="note">Progress saves automatically in this browser. Use a save code to back it up, or to move it to another browser or device.</p>
+  <p class="note">Progress saves automatically on this device. Use a save code to back it up, or to move it to another device.</p>
   <textarea id="save-code" spellcheck="false" placeholder="Paste a save code here, then press IMPORT."></textarea>
   <div class="msg"></div>
   <div class="menu row wrap">
     <button data-nav data-act="export">EXPORT</button>
     <button data-nav data-act="import">IMPORT</button>
-    <button data-nav data-act="refund">REFUND UPGRADES</button>
     <button data-nav data-act="wipe">RESET SAVE</button>
     <button data-nav data-act="sd-back">BACK</button>
   </div>
@@ -220,13 +216,12 @@ export class Screens {
   <div class="unlocked"></div>
   <div class="menu row">
     <button data-nav data-act="retry">RETRY</button>
-    <button data-nav data-act="workshop">WORKSHOP</button>
     <button data-nav data-act="title">TITLE</button>
   </div>
   <div class="hiscores"></div>
 </div>`,
     );
-    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'shop', 'workshop', 'savedata', 'gameover', 'online', 'wait'];
+    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'shop', 'unlocks', 'savedata', 'gameover', 'online', 'wait'];
     for (const n of names) this.els[n] = root.querySelector<HTMLElement>(`#scr-${n}`)!;
     this.navs = {
       title: new MenuNav(this.els.title),
@@ -234,8 +229,8 @@ export class Screens {
       settings: new MenuNav(this.els.settings, { onBack: () => this.show(this.settingsReturn) }),
       levelup: new MenuNav(this.els.levelup, { horizontal: true }),
       shop: new MenuNav(this.els.shop, { columns: 4 }),
-      workshop: new MenuNav(this.els.workshop, { columns: 3, onBack: () => actions.title() }),
-      savedata: new MenuNav(this.els.savedata, { horizontal: true, onBack: () => this.show('workshop') }),
+      unlocks: new MenuNav(this.els.unlocks, { horizontal: true, onBack: () => actions.title() }),
+      savedata: new MenuNav(this.els.savedata, { horizontal: true, onBack: () => this.show('unlocks') }),
       gameover: new MenuNav(this.els.gameover, { horizontal: true }),
       online: new MenuNav(this.els.online, { onBack: () => actions.mpLeave() }),
       wait: new MenuNav(this.els.wait),
@@ -247,12 +242,8 @@ export class Screens {
     });
 
     root.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-act], [data-buy]');
+      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
       if (!btn) return;
-      if (btn.dataset.buy) {
-        this.buy(btn.dataset.buy);
-        return;
-      }
       switch (btn.dataset.act) {
         case 'start':
           return actions.start();
@@ -273,7 +264,7 @@ export class Screens {
         case 'retry':
           return actions.retry();
         case 'title':
-        case 'ws-back':
+        case 'ul-back':
           return actions.title();
         case 'pick':
           return actions.pick(Number(btn.dataset.index));
@@ -300,18 +291,16 @@ export class Screens {
           return this.show('settings');
         case 'back':
           return this.show(this.settingsReturn);
-        case 'workshop':
-          return this.show('workshop');
+        case 'unlocks':
+          return this.show('unlocks');
         case 'savedata':
           return this.show('savedata');
         case 'sd-back':
-          return this.show('workshop');
+          return this.show('unlocks');
         case 'export':
           return this.doExport();
         case 'import':
           return this.doImport();
-        case 'refund':
-          return this.doRefund();
         case 'wipe':
           return this.doWipe(btn);
       }
@@ -341,8 +330,8 @@ export class Screens {
     // Hide in-game banners and toasts behind menus.
     this.root.classList.toggle('menu-open', name !== 'none');
     if (name === 'settings') this.syncSettings();
-    if (name === 'title') this.renderWallet();
-    if (name === 'workshop') this.renderWorkshop();
+    if (name === 'title') this.renderProgress();
+    if (name === 'unlocks') this.renderUnlocks();
     if (name === 'savedata') {
       this.wipeArmed = false;
       this.msg('');
@@ -405,10 +394,10 @@ export class Screens {
 
   // ---------------------------------------------------------------- title / scores
 
-  private renderWallet(): void {
-    const html = `<span class="coin">¢</span> ${save.bolts.toLocaleString('en-US')} BOLTS`;
-    this.els.title.querySelector('.wallet')!.innerHTML = html;
-    this.els.workshop.querySelector('.wallet')!.innerHTML = html;
+  /** Title screen: how many achievements are done. */
+  private renderProgress(): void {
+    const done = ACHIEVEMENTS.filter((a) => save.achievements.includes(a.id)).length;
+    this.els.title.querySelector('.wallet')!.textContent = `★ ${done} / ${ACHIEVEMENTS.length} UNLOCKED`;
   }
 
   setHighScores(list: ScoreEntry[], highlight = -1): void {
@@ -502,35 +491,14 @@ export class Screens {
     this.show('shop', focus);
   }
 
-  // ---------------------------------------------------------------- workshop
+  // ---------------------------------------------------------------- unlocks
 
-  private renderWorkshop(): void {
-    this.renderWallet();
-    this.els.workshop.querySelector('.ws-grid')!.innerHTML = WORKSHOP.map((it) => {
-      const lv = save.workshop[it.id] ?? 0;
-      const maxed = lv >= it.maxLevel;
-      const cost = workshopCost(it, lv);
-      const can = !maxed && save.bolts >= cost;
-      const pips = Array.from({ length: it.maxLevel }, (_, i) => `<b class="${i < lv ? 'on' : ''}"></b>`).join('');
-      return `<button class="ws-item ${maxed ? 'maxed' : can ? 'can' : 'cant'}" data-nav data-buy="${it.id}">
-        <span class="icon" style="--c:${it.color}">${it.icon}</span>
-        <span class="info"><span class="name">${it.name}</span><span class="desc">${it.desc}</span><span class="pips">${pips}</span></span>
-        <span class="cost">${maxed ? 'MAX' : `¢${cost}`}</span>
-      </button>`;
-    }).join('');
-    this.els.workshop.querySelector('.ach-list')!.innerHTML = ACHIEVEMENTS.map((a) => {
+  private renderUnlocks(): void {
+    this.els.unlocks.querySelector('.ach-list')!.innerHTML = ACHIEVEMENTS.map((a) => {
       const done = save.achievements.includes(a.id);
-      const reward = a.unlockWeapon ? `Unlocks ${WEAPONS[a.unlockWeapon].name}` : `+${a.bolts} Bolts`;
+      const reward = a.unlockWeapon ? `Unlocks ${WEAPONS[a.unlockWeapon].name}` : '';
       return `<div class="ach ${done ? 'done' : ''}"><span class="check">${done ? '★' : '☆'}</span><span class="name">${a.name}</span><span class="desc">${a.desc}</span><span class="reward">${reward}</span></div>`;
     }).join('');
-  }
-
-  private buy(id: string): void {
-    const focus = this.navs.workshop.focus;
-    if (buyWorkshop(id)) sfx.powerUp();
-    else sfx.menuMove();
-    this.renderWorkshop();
-    this.navs.workshop.refresh(focus);
   }
 
   // ---------------------------------------------------------------- save data
@@ -565,16 +533,11 @@ export class Screens {
     }
   }
 
-  private doRefund(): void {
-    const n = refundWorkshop();
-    this.msg(n > 0 ? `Refunded ${n} Bolts. Spend them again in the Workshop.` : 'Nothing to refund.');
-  }
-
   private doWipe(btn: HTMLElement): void {
     if (!this.wipeArmed) {
       this.wipeArmed = true;
       btn.textContent = 'REALLY? PRESS AGAIN';
-      this.msg('This deletes all Bolts, upgrades and achievements in this browser.', false);
+      this.msg('This deletes your achievements, unlocked weapons and lifetime stats on this device.', false);
       return;
     }
     resetSave();
@@ -591,7 +554,6 @@ export class Screens {
     el.querySelector<HTMLElement>('.newbest')!.hidden = rank !== 0;
     el.querySelector('.summary')!.innerHTML = `
       <div class="big">${fmtScore(sum.score)}</div>
-      <div class="earned"><span class="coin">¢</span> +${sum.bolts} BOLTS</div>
       <div class="grid">
         <span>STAGE</span><b>${sum.stage}</b>
         <span>LEVEL</span><b>${sum.level}</b>

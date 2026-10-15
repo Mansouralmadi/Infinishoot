@@ -1,6 +1,6 @@
 # InfiniShoot
 
-A colorful twin-stick survivors-style roguelike for Windows. You aim an arm cannon while automatic weapons build up around you, survive timed stages against swarms, beat the boss, and dive through the portal to a harder stage. Bolts earned in each run buy permanent upgrades in the Workshop.
+A colorful twin-stick survivors-style roguelike for Windows. You aim an arm cannon while automatic weapons build up around you, survive timed stages against swarms, beat the boss, and dive through the portal to a harder stage. Every run starts equal; achievements unlock new weapons for future runs.
 
 Built with TypeScript, Vite and Three.js, with a Mega Man Legends-inspired low-poly look and subtle PS1-style effects.
 

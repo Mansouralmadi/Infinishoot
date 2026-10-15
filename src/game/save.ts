@@ -1,16 +1,14 @@
 import { loadJson, saveJson } from '../core/storage';
-import { ACHIEVEMENTS, WORKSHOP, workshopCost } from '../data/meta';
+import { ACHIEVEMENTS } from '../data/meta';
 import { WEAPONS } from '../data/weapons';
 
 /**
- * Persistent profile: Bolts, Workshop levels, unlocks, lifetime stats.
+ * Persistent profile: achievements (weapon unlocks) and lifetime stats.
  * Stored in localStorage automatically; can be exported as a text code for
  * backup or moving to another browser/device.
  */
 export interface SaveData {
   version: number;
-  bolts: number;
-  workshop: Record<string, number>;
   achievements: string[];
   lifetime: {
     runs: number;
@@ -19,22 +17,20 @@ export interface SaveData {
     bosses: number;
     bestStage: number;
     bestLevel: number;
-    boltsEarned: number;
     playTime: number;
   };
 }
 
 const KEY = 'save';
-const VERSION = 1;
+// v2 dropped Bolts and Workshop upgrades; older saves keep their achievements and stats.
+const VERSION = 2;
 const CODE_PREFIX = 'ISAVE1:';
 
 function fresh(): SaveData {
   return {
     version: VERSION,
-    bolts: 0,
-    workshop: {},
     achievements: [],
-    lifetime: { runs: 0, kills: 0, elites: 0, bosses: 0, bestStage: 0, bestLevel: 0, boltsEarned: 0, playTime: 0 },
+    lifetime: { runs: 0, kills: 0, elites: 0, bosses: 0, bestStage: 0, bestLevel: 0, playTime: 0 },
   };
 }
 
@@ -43,13 +39,6 @@ function normalize(raw: unknown): SaveData {
   const d = fresh();
   if (!raw || typeof raw !== 'object') return d;
   const r = raw as Partial<SaveData>;
-  if (typeof r.bolts === 'number' && r.bolts >= 0) d.bolts = Math.floor(r.bolts);
-  if (r.workshop && typeof r.workshop === 'object') {
-    for (const item of WORKSHOP) {
-      const lv = Number((r.workshop as Record<string, unknown>)[item.id]);
-      if (lv > 0) d.workshop[item.id] = Math.min(item.maxLevel, Math.floor(lv));
-    }
-  }
   if (Array.isArray(r.achievements)) {
     d.achievements = r.achievements.filter((a) => ACHIEVEMENTS.some((x) => x.id === a));
   }
@@ -76,40 +65,12 @@ export function unlockedWeapons(): string[] {
   return ids;
 }
 
-/** Buy the next Workshop level. Returns false if unaffordable or maxed. */
-export function buyWorkshop(id: string): boolean {
-  const item = WORKSHOP.find((w) => w.id === id);
-  if (!item) return false;
-  const lv = save.workshop[id] ?? 0;
-  if (lv >= item.maxLevel) return false;
-  const cost = workshopCost(item, lv);
-  if (save.bolts < cost) return false;
-  save.bolts -= cost;
-  save.workshop[id] = lv + 1;
-  persist();
-  return true;
-}
-
-/** Refund everything spent in the Workshop. */
-export function refundWorkshop(): number {
-  let refund = 0;
-  for (const item of WORKSHOP) {
-    const lv = save.workshop[item.id] ?? 0;
-    for (let i = 0; i < lv; i++) refund += workshopCost(item, i);
-  }
-  save.workshop = {};
-  save.bolts += refund;
-  persist();
-  return refund;
-}
-
 /** Grant an achievement once. Returns its def if newly earned. */
 export function grantAchievement(id: string) {
   if (save.achievements.includes(id)) return null;
   const def = ACHIEVEMENTS.find((a) => a.id === id);
   if (!def) return null;
   save.achievements.push(id);
-  save.bolts += def.bolts;
   persist();
   return def;
 }

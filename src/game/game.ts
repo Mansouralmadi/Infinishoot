@@ -92,7 +92,6 @@ export function xpForLevel(level: number): number {
 interface LobbyEntry {
   peerId: string; // '' = host
   name: string;
-  workshop: Record<string, number>;
   unlocked: string[];
 }
 
@@ -270,7 +269,7 @@ export class Game implements HeroWorld {
     });
     this.hud.onPause = () => this.pause();
     this.enemyCtx = this.makeEnemyCtx();
-    this.heroes = [this.makeHero(0, playerName(), save.workshop, unlockedWeapons())];
+    this.heroes = [this.makeHero(0, playerName(), unlockedWeapons())];
     this.goTitle();
   }
 
@@ -322,8 +321,8 @@ export class Game implements HeroWorld {
 
   // ------------------------------------------------------------------ heroes and contexts
 
-  private makeHero(index: number, name: string, workshop: Record<string, number>, unlocked: string[], peerId = ''): Hero {
-    const h = new Hero(this, index, name, HERO_COLORS[index % HERO_COLORS.length], workshop, unlocked, peerId);
+  private makeHero(index: number, name: string, unlocked: string[], peerId = ''): Hero {
+    const h = new Hero(this, index, name, HERO_COLORS[index % HERO_COLORS.length], unlocked, peerId);
     return h;
   }
 
@@ -459,7 +458,7 @@ export class Game implements HeroWorld {
     this.clearWorld();
     const h = this.hero;
     h.disposeWeapons();
-    h.workshop = save.workshop;
+    h.unlocked = unlockedWeapons();
     h.recomputeStats();
     h.player.reset(h.stats);
     this.hud.setVisible(false);
@@ -477,7 +476,7 @@ export class Game implements HeroWorld {
     this.role = 'solo';
     this.lobby = [];
     if (this.heroes.length !== 1 || this.local !== 0) {
-      const keep = this.makeHero(0, playerName(), save.workshop, unlockedWeapons());
+      const keep = this.makeHero(0, playerName(), unlockedWeapons());
       this.setHeroes([keep]);
       this.local = 0;
     }
@@ -604,11 +603,6 @@ export class Game implements HeroWorld {
     this.hero.gold += n;
   }
 
-  debugAddBolts(n: number): void {
-    save.bolts += n;
-    persist();
-  }
-
   // ------------------------------------------------------------------ stage end, shop, portal
 
   goldFx(h: Hero, n: number): void {
@@ -683,13 +677,7 @@ export class Game implements HeroWorld {
 
   // ------------------------------------------------------------------ end of run
 
-  private earnedBolts(h: Hero): number {
-    return Math.round(
-      (h.gold + Math.floor(this.kills / 25) + (this.stage - 1) * 25 + Math.floor(this.runTime / 60) * 5) * h.stats.boltMul,
-    );
-  }
-
-  private summary(h: Hero, earned: number): RunSummary {
+  private summary(h: Hero): RunSummary {
     return {
       score: this.score,
       stage: this.stage,
@@ -697,7 +685,6 @@ export class Game implements HeroWorld {
       time: this.runTime,
       level: this.level,
       maxCombo: this.maxCombo,
-      bolts: earned,
       loadout: h.loadout(),
       mods: h.synergy.slots.map((sl) => sl.def.name),
       damage: Object.entries(h.damageBy)
@@ -707,9 +694,8 @@ export class Game implements HeroWorld {
     };
   }
 
-  /** Bank Bolts and lifetime stats into this machine's save, then show game over. */
+  /** Bank lifetime stats into this machine's save, then show game over. */
   private bankAndShow(sum: RunSummary, quit = false): void {
-    save.bolts += sum.bolts;
     const L = save.lifetime;
     L.runs++;
     L.kills += sum.kills;
@@ -717,13 +703,11 @@ export class Game implements HeroWorld {
     L.bosses += Math.max(0, sum.stage - 1);
     L.bestStage = Math.max(L.bestStage, sum.stage);
     L.bestLevel = Math.max(L.bestLevel, sum.level);
-    L.boltsEarned += sum.bolts;
     L.playTime += sum.time;
     persist();
     this.paused = false;
     if (quit) {
       this.goTitle();
-      this.hud.toast(`+${sum.bolts} BOLTS BANKED`);
       return;
     }
     const rank = submitScore({ score: sum.score, stage: sum.stage, kills: sum.kills, date: new Date().toISOString().slice(0, 10) });
@@ -733,9 +717,9 @@ export class Game implements HeroWorld {
   private endRun(quit = false): void {
     for (const h of this.heroes) {
       if (!h.peerId || h.left) continue;
-      this.host?.send(h.peerId, { t: 'over', sum: this.summary(h, this.earnedBolts(h)) });
+      this.host?.send(h.peerId, { t: 'over', sum: this.summary(h) });
     }
-    this.bankAndShow(this.summary(this.hero, this.earnedBolts(this.hero)), quit);
+    this.bankAndShow(this.summary(this.hero), quit);
   }
 
   // ------------------------------------------------------------------ level-ups (per hero, team XP)
@@ -904,7 +888,7 @@ export class Game implements HeroWorld {
       if (!def) continue;
       this.newAchievements.push(id);
       const unlock = def.unlockWeapon ? ` - ${WEAPONS[def.unlockWeapon].name} unlocked!` : '';
-      this.hud.toast(`★ ${def.name}${unlock} (+${def.bolts} Bolts)`, 4);
+      this.hud.toast(`★ ${def.name}${unlock}`, 4);
       sfx.powerUp();
     }
   }
@@ -1789,7 +1773,7 @@ export class Game implements HeroWorld {
     this.role = 'host';
     const host = new NetHost(3);
     this.host = host;
-    this.lobby = [{ peerId: '', name, workshop: save.workshop, unlocked: unlockedWeapons() }];
+    this.lobby = [{ peerId: '', name, unlocked: unlockedWeapons() }];
     this.screens.setLobby({ code: '', players: [], isHost: true, status: 'Creating game...' });
     host.onMessage = (from, msg) => this.onHostMessage(from, msg as Record<string, unknown>);
     host.onLeave = (id) => this.onClientLeft(id);
@@ -1813,7 +1797,7 @@ export class Game implements HeroWorld {
   private hostStart(): void {
     if (this.role !== 'host' || !this.host) return;
     const heroes = this.lobby.map((p, i) =>
-      i === 0 ? this.hero : this.makeHero(i, p.name, p.workshop, p.unlocked.filter((id) => WEAPONS[id]), p.peerId),
+      i === 0 ? this.hero : this.makeHero(i, p.name, p.unlocked.filter((id) => WEAPONS[id]), p.peerId),
     );
     this.hero.name = this.lobby[0].name;
     this.setHeroes(heroes);
@@ -1843,7 +1827,7 @@ export class Game implements HeroWorld {
       this.screens.setLobby({ code: '', players: [], isHost: false, status: (err as Error).message });
       return;
     }
-    client.send({ t: 'hello', name, workshop: save.workshop, unlocked: unlockedWeapons() });
+    client.send({ t: 'hello', name, unlocked: unlockedWeapons() });
     this.screens.setLobby({ code: code.toUpperCase(), players: [], isHost: false, status: 'Connected! Waiting for the host to start...' });
   }
 
@@ -1866,7 +1850,6 @@ export class Game implements HeroWorld {
       this.lobby.push({
         peerId: from,
         name: String(m.name ?? 'Player').slice(0, 12),
-        workshop: (m.workshop as Record<string, number>) ?? {},
         unlocked: Array.isArray(m.unlocked) ? (m.unlocked as string[]) : unlockedWeapons(),
       });
       this.refreshLobby();
@@ -2063,7 +2046,7 @@ export class Game implements HeroWorld {
 
   private clientStart(seed: number, you: number, players: { name: string }[]): void {
     this.seed = seed;
-    const heroes = players.map((p, i) => this.makeHero(i, p.name, i === you ? save.workshop : {}, []));
+    const heroes = players.map((p, i) => this.makeHero(i, p.name, i === you ? unlockedWeapons() : []));
     this.setHeroes(heroes);
     this.local = you;
     for (const h of heroes) {

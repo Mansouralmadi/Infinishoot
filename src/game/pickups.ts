@@ -3,7 +3,7 @@ import { createRetroMaterial } from '../render/retroMaterial';
 import { commit } from '../render/instancing';
 
 /**
- * Pickups dropped in the world: XP gems (coloured by value), Bolts (meta
+ * Pickups dropped in the world: XP gems (coloured by value), gold (run
  * currency), hearts, magnets (vacuum all gems) and treasure chests.
  * Within magnet range they fly to the player, accelerating.
  */
