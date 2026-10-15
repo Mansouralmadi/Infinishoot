@@ -759,6 +759,52 @@ div.mod-card.sold,
   }
 }
 
+/* Pointer to the nearest closed chest, pinned to the screen edge. */
+#chestptr {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+}
+
+#chestptr img.px-icon,
+#chestptr .m {
+  animation: hop 0.8s steps(1) infinite;
+}
+
+#chestptr[hidden] {
+  display: none;
+}
+
+#chestptr img.px-icon {
+  width: 48px;
+  height: 48px;
+}
+
+#chestptr .m {
+  font: 10px var(--label);
+  color: var(--yellow);
+}
+
+#chestptr .arrow {
+  --a: var(--yellow);
+  position: absolute;
+  width: var(--p);
+  height: var(--p);
+  background: var(--a);
+  box-shadow:
+    calc(-1 * var(--p)) calc(-1 * var(--p)) 0 var(--a),
+    calc(-1 * var(--p)) 0 0 var(--a),
+    calc(-1 * var(--p)) var(--p) 0 var(--a),
+    calc(-2 * var(--p)) calc(-2 * var(--p)) 0 var(--a),
+    calc(-2 * var(--p)) calc(-1 * var(--p)) 0 var(--a),
+    calc(-2 * var(--p)) 0 0 var(--a),
+    calc(-2 * var(--p)) var(--p) 0 var(--a),
+    calc(-2 * var(--p)) calc(2 * var(--p)) 0 var(--a);
+  filter: drop-shadow(var(--p) var(--p) 0 var(--ink));
+}
+
 /* Co-op */
 #team {
   position: absolute;

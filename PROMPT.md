@@ -36,7 +36,7 @@ The aim is *cheerful, saturated, toy-like*, not gritty. PS1 limitations are used
 - **Multiplayer**: online co-op (host-authoritative, invite codes) is the next major feature.
 - **Meta progression**: kept light on purpose. No currency or permanent upgrades between runs; achievements unlock weapons into the level-up pool, and the run's own shop and Mods carry the build decisions.
 - **Arcade scoring**: points per kill, a combo multiplier that grows with kills and breaks on hit, no-hit stage bonuses, and a local high-score table.
-- **Procedural fields**: seeded, mostly open ground with sparse cover clusters (ruins, crates, groves) and paths. Same seed gives the same stage. Biomes change the look as stages go deeper.
+- **Procedural fields**: seeded, mostly open ground with sparse cover clusters (ruins, crates, groves), paths, explosive barrels and 6 treasure chests (walk in to get an item on the spot, no menu). Same seed gives the same stage. Biomes change the look as stages go deeper.
 - **Enemies**: data-driven definitions (stats, behaviour, model, drops). Swarmers chase and deal contact damage; specials have readable telegraphs (lunge flash, charge line, fuse ring, slam zone).
 - **Feel first**: hit-stop, screen shake, enemy hit flash, squash and stretch, knockback, chunky SFX. Swarm kills stay light so hundreds of deaths don't stutter; big kills get the heavy feedback.
 

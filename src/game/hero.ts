@@ -8,7 +8,7 @@ import type { LoadoutItem } from '../ui/hud';
 import type { Offer, ShopView } from '../ui/screens';
 import type { Enemy } from './enemies';
 import type { ModDef } from './modTypes';
-import { Player } from './player';
+import { Player, dashLevelMul } from './player';
 import { computeStats, type Stats } from './stats';
 import { MAX_MOD_SLOTS, Synergy, type SynergyHost } from './synergy';
 import { createWeapon, type Weapon, type WeaponCtx } from './weapons';
@@ -181,6 +181,7 @@ export class Hero implements SynergyHost {
   refreshLive(): void {
     Object.assign(this.stats, this.statBase);
     this.synergy.applyLive(this.stats);
+    this.stats.dashCooldownMul *= dashLevelMul(this.world.level);
   }
 
   loadout(): LoadoutItem[] {
@@ -267,6 +268,33 @@ export class Hero implements SynergyHost {
   consumePick(): void {
     if (this.chestsPending > 0) this.chestsPending--;
     else if (this.pendingLevels > 0) this.pendingLevels--;
+  }
+
+  /**
+   * A treasure chest's item, applied on the spot: a random passive this hero
+   * can take, else a level for an owned weapon, else gold.
+   */
+  chestItem(): { id: string; name: string; color: string; icon: string; text: string } {
+    const owned = Object.keys(this.passives).length;
+    const passives = Object.values(PASSIVES).filter((d) => {
+      const lv = this.passives[d.id] ?? 0;
+      return lv < d.maxLevel && (lv > 0 || owned < MAX_PASSIVES);
+    });
+    if (passives.length) {
+      const d = passives[Math.floor(this.rng.next() * passives.length)];
+      const lv = (this.passives[d.id] ?? 0) + 1;
+      this.applyOffer({ kind: 'passive', id: d.id, name: d.name, icon: d.icon, color: d.color, tag: '', text: d.desc });
+      return { id: d.id, name: d.name, color: d.color, icon: d.icon, text: lv > 1 ? `LV ${lv}` : 'NEW' };
+    }
+    const weapons = this.weapons.filter((w) => !w.maxed);
+    if (weapons.length) {
+      const w = weapons[Math.floor(this.rng.next() * weapons.length)];
+      w.levelUp();
+      this.loadoutDirty = true;
+      return { id: w.def.id, name: w.def.name, color: w.def.color, icon: w.def.icon, text: `LV ${w.level}` };
+    }
+    this.gold += 10;
+    return { id: 'gold', name: 'Gold', color: '#ffb627', icon: '●', text: '+10' };
   }
 
   // ---------------------------------------------------------------- shop

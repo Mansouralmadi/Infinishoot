@@ -19,6 +19,7 @@ import { createFieldArena, type Arena } from '../world/fieldArena';
 import { biomeForStage } from '../data/biomes';
 import { applyBiomeLook } from '../render/biomeLook';
 import { Barrels, barrelTuning, type Barrel } from './barrels';
+import { Chests } from './chests';
 import { BULLET_Y, Bullets, Team } from './bullets';
 import { CameraRig, cameraTuning } from './cameraRig';
 import { Director } from './director';
@@ -53,6 +54,7 @@ export const bombTuning = {
 };
 
 export const dropTuning = {
+  xpMul: 0.55, // XP gem value per enemy XP point (lower = slower levelling)
   goldChance: 0.006,
   heartChance: 0.004,
   magnetChance: 0.0015,
@@ -86,7 +88,7 @@ const REVIVE_RANGE = 2.4;
 /** XP needed to go from `level` to `level + 1`. */
 export function xpForLevel(level: number): number {
   const l = level - 1;
-  return Math.round(5 + 6 * l + 0.6 * Math.pow(l, 1.8));
+  return Math.round(6 + 8 * l + 1.4 * l * l);
 }
 
 interface LobbyEntry {
@@ -131,6 +133,7 @@ export class Game implements HeroWorld {
   readonly fx: Fx;
   readonly portal: Portal;
   readonly barrels: Barrels;
+  readonly chests: Chests;
   readonly pickups: Pickups;
   readonly juice = new Juice();
   readonly cam: CameraRig;
@@ -226,6 +229,8 @@ export class Game implements HeroWorld {
     this.portal = new Portal(this.scene);
     this.barrels = new Barrels(this.scene);
     this.barrels.load(this.arena);
+    this.chests = new Chests(this.scene);
+    this.chests.load(this.arena.chests);
     this.pickups = new Pickups(this.scene);
     this.cam = new CameraRig(aspect);
     this.dmg = new DamageNumbers(hudRoot);
@@ -444,6 +449,7 @@ export class Game implements HeroWorld {
     this.walls = new StaticBoxGrid(this.arena.colliders);
     this.enemyCtx.colliders = this.arena.colliders;
     this.barrels.load(this.arena);
+    this.chests.load(this.arena.chests);
   }
 
   private spawnSpot(i: number): { x: number; z: number } {
@@ -616,7 +622,7 @@ export class Game implements HeroWorld {
     this.bossesRun++;
     for (const e of this.enemies.list) {
       if (!e.active) continue;
-      this.pickups.spawn(PickupType.Gem, e.x, e.z, e.def.xp);
+      this.pickups.spawn(PickupType.Gem, e.x, e.z, e.def.xp * dropTuning.xpMul);
       this.vfx.burst(e.x, 0.6, e.z, { count: 2, color: e.def.bodyColor, speed: [2, 5], size: [0.15, 0.3], life: [0.3, 0.5], up: 4, gravity: 12 });
       this.enemies.kill(e);
     }
@@ -981,6 +987,7 @@ export class Game implements HeroWorld {
     this.collectors.length = 0;
     for (const h of this.heroes) this.collectors.push({ x: h.player.x, z: h.player.z, magnet: h.stats.magnet, alive: !h.player.dead && !h.left });
     this.pickups.update(dt, this.collectors, (t, v, who) => this.collect(this.heroes[who], t, v));
+    this.updateChests();
     this.particles.update(dt);
     this.fx.update(dt);
     if (this.heroes.length > 1) this.updateRevives(dt);
@@ -1405,7 +1412,7 @@ export class Game implements HeroWorld {
     if (by) by.bombCharge = Math.min(1, by.bombCharge + bombTuning.chargePerXp * xp);
 
     // Drops
-    this.pickups.spawn(PickupType.Gem, e.x, e.z, xp);
+    this.pickups.spawn(PickupType.Gem, e.x, e.z, xp * dropTuning.xpMul);
     const isBoss = !!def.boss;
     const big = e.elite || isBoss;
     if (big) {
@@ -1715,6 +1722,37 @@ export class Game implements HeroWorld {
     }
   }
 
+  /** Walk into a treasure chest to open it; closed chests sparkle near players. */
+  private updateChests(): void {
+    if (!this.isCombatMode) return;
+    for (const h of this.aliveHeroes) {
+      const i = this.chests.touching(h.player.x, h.player.z);
+      if (i >= 0) this.openChest(i, h);
+    }
+    if (this.stepN % 40 !== 0) return;
+    for (const c of this.chests.list) {
+      if (c.openT >= 0 || !this.aliveHeroes.some((h) => Math.hypot(h.player.x - c.x, h.player.z - c.z) < 30)) continue;
+      this.vfx.burst(c.x, 0.9, c.z, { count: 2, color: '#ffcd75', color2: '#f4f4f4', speed: [0.4, 1.4], size: [0.1, 0.18], life: [0.5, 0.9], up: 2.5, drag: 1 });
+    }
+  }
+
+  private openChest(i: number, h: Hero): void {
+    const c = this.chests.open(i);
+    if (!c) return;
+    this.host?.broadcast({ t: 'wchest', i });
+    const item = h.chestItem();
+    this.vfx.sound('chest', c.x, c.z);
+    this.vfx.ring(c.x, c.z, 1, 5, '#ffcd75', 0.35);
+    this.vfx.burst(c.x, 0.8, c.z, { count: 22, color: '#ffcd75', color2: item.color, speed: [3, 7], size: [0.12, 0.28], life: [0.4, 0.8], up: 7, gravity: 12 });
+    this.vfx.num(c.x, 2.6, c.z, `${item.name} ${item.text}`, 'crit');
+    const msg = `CHEST: ${item.name.toUpperCase()} ${item.text}`;
+    if (h === this.hero) {
+      this.hud.toast(msg, 3);
+      this.hud.flash(0.25);
+    } else this.tell(h, { t: 'toast', msg });
+    this.checkAchievements();
+  }
+
   /** Full-charge shots explode where they end. */
   private bulletBlast(i: number): void {
     const b = this.bullets;
@@ -1991,6 +2029,9 @@ export class Game implements HeroWorld {
         break;
       case 'start':
         this.clientStart(Number(m.seed), Number(m.you), (m.players as { name: string }[]) ?? []);
+        break;
+      case 'wchest':
+        this.chests.open(Number(m.i));
         break;
       case 'barrel': {
         const b = this.barrels.remove(Number(m.i));
@@ -2286,6 +2327,7 @@ export class Game implements HeroWorld {
     this.enemies.render(client ? netA : a, this.animTime);
     this.bullets.render(a);
     this.barrels.render(this.animTime);
+    this.chests.render(this.paused ? 0 : frameDt, this.animTime);
     this.particles.render();
     this.pickups.render(this.animTime);
     for (const h of this.heroes) for (const w of h.weapons) w.render(a, h.ctx);
@@ -2337,6 +2379,7 @@ export class Game implements HeroWorld {
       : local.synergy.slots.map((sl, i) => ({ def: sl.def, ro: local.synergy.readout(i) }));
     this.hud.setMods(mods.map((m) => ({ id: m.def.id, icon: m.def.icon, color: m.def.color, name: m.def.name, readout: m.ro, cursed: !!m.def.cursed })));
     this.renderTeam();
+    this.renderChestPointer();
     this.dmg.render(rdt, this.cam.camera);
     const boss = client ? this.netBoss : this.boss && this.boss.active ? { name: this.boss.def.name, hp01: Math.max(0, this.boss.hp / this.boss.maxHp) } : null;
     this.hud.update(
@@ -2378,6 +2421,43 @@ export class Game implements HeroWorld {
       m.position.set(this.mz.x, BULLET_Y, this.mz.z);
       m.scale.setScalar(0.8 + Math.random() * 0.6);
     });
+  }
+
+  /** Point at the nearest closed chest when it is off screen. */
+  private renderChestPointer(): void {
+    const p = this.hero.player;
+    let best: { x: number; z: number } | null = null;
+    let bd = 60;
+    if (this.isCombatMode && !p.dead) {
+      for (const c of this.chests.list) {
+        if (c.openT >= 0) continue;
+        const d = Math.hypot(c.x - p.x, c.z - p.z);
+        if (d < bd) {
+          bd = d;
+          best = c;
+        }
+      }
+    }
+    if (!best) {
+      this.hud.setChestPointer(null);
+      return;
+    }
+    this.tmp.set(best.x, 0.5, best.z).project(this.cam.camera);
+    const sx = ((this.tmp.x + 1) / 2) * innerWidth;
+    const sy = ((1 - this.tmp.y) / 2) * innerHeight;
+    const m = 70;
+    const seen = 10; // any part of the chest on screen: no pointer needed
+    if (sx > seen && sx < innerWidth - seen && sy > seen && sy < innerHeight - seen) {
+      this.hud.setChestPointer(null);
+      return;
+    }
+    // Clamp onto a rectangle inset from the screen edge, along the line from the centre.
+    const cx = innerWidth / 2;
+    const cy = innerHeight / 2;
+    const dx = sx - cx;
+    const dy = sy - cy;
+    const k = Math.min((cx - m) / Math.abs(dx || 1e-6), (cy - m) / Math.abs(dy || 1e-6));
+    this.hud.setChestPointer({ x: cx + dx * k, y: cy + dy * k, angle: (Math.atan2(dy, dx) * 180) / Math.PI, dist: bd });
   }
 
   /** Teammate bars and name tags (co-op only). */

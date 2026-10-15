@@ -18,11 +18,20 @@ export const playerTuning = {
   turnSpeed: 22, // visual facing smoothing
   dashSpeed: 24,
   dashTime: 0.16,
-  dashCooldown: 0.7,
+  dashCooldown: 0.7, // once fully trained (team level >= dashTrainedLevel)
+  dashCooldownStart: 1.6, // at team level 1
+  dashTrainedLevel: 20,
   dashIframesExtra: 0.06, // invulnerability lingers slightly after the dash
   hurtIframes: 0.7,
   hurtKnockback: 7,
 };
+
+/** Dash cooldown multiplier for the team level: slow at level 1, normal by dashTrainedLevel. */
+export function dashLevelMul(level: number): number {
+  const t = playerTuning;
+  const k = Math.min(1, Math.max(0, (level - 1) / (t.dashTrainedLevel - 1)));
+  return t.dashCooldownStart / t.dashCooldown + (1 - t.dashCooldownStart / t.dashCooldown) * k;
+}
 
 export class Player {
   readonly pos = { x: 0, z: 0 };

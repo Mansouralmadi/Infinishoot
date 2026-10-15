@@ -75,6 +75,7 @@ export class Hud {
            <div id="bombpip" class="pip"><span>BOMB</span></div>
          </div>
          <div id="banner"><div class="t"></div><div class="s"></div></div>
+         <div id="chestptr" hidden><i class="arrow"></i>${iconHtml('world_chest', '#ffcd75', '')}<span class="m"></span></div>
        </div>
        <div id="vignette"></div>
        <div id="flash"></div>
@@ -85,6 +86,18 @@ export class Hud {
     const pause = this.q('#pausebtn');
     pause.addEventListener('mousedown', (e) => e.stopPropagation());
     pause.addEventListener('click', () => this.onPause?.());
+  }
+
+  /** Edge-of-screen pointer to the nearest closed chest (null hides it). */
+  setChestPointer(p: { x: number; y: number; angle: number; dist: number } | null): void {
+    const el = this.el('#chestptr');
+    el.hidden = !p;
+    if (!p) return;
+    el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, -50%)`;
+    // Snap the arrow to 8 directions so it stays a clean pixel sprite.
+    const snapped = Math.round(p.angle / 45) * 45;
+    (el.querySelector('.arrow') as HTMLElement).style.transform = `rotate(${snapped}deg) translateX(30px)`;
+    this.text('#chestptr .m', `${Math.round(p.dist)}m`);
   }
 
   /** Called when the on-screen pause button is clicked. */

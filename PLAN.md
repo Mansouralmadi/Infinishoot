@@ -107,6 +107,11 @@ Known limits: some strict networks block direct WebRTC connections (would need a
 - [x] Bundled pixel fonts (work offline in the exe)
 - [x] Fix: XP gems no longer orbit the player; they home straight in (longest flight about 0.4 s)
 
+## Pacing and chests (done, v0.5.0)
+- [x] Treasure chests: 6 per stage spread over the map; walk into one for an item applied on the spot (a random passive, else a weapon level, else gold); closed chests bob and sparkle, and an edge-of-screen pointer shows the nearest one with its distance
+- [x] Slower levelling: enemies drop 45% less XP and the level curve is steeper (about level 14 at the end of stage 1 instead of 25-30)
+- [x] Dash recharge scales with team level: 1.6 s at level 1, down to 0.7 s by level 20
+
 ## Milestone 5: Heroes and content
 - [ ] 2-3 heroes with different starting weapons and stat quirks, unlocked through achievements; hero art with painted faces
 - [ ] More weapons (laser sweep, charge cannon) and passives
@@ -187,3 +192,4 @@ public/assets/         # models (glb), textures (png), audio
 - 2026-10-15: Removed the Workshop and Bolts (user). Runs now start equal; the in-run shop and Mods carry the build decisions. Achievements stay and still unlock weapons; they now live on an UNLOCKS screen (title menu) with Save Data. Save format v2 drops `bolts`, `workshop` and `boltsEarned`; older saves keep their achievements and lifetime stats. Rerolls and the revive came only from the Workshop, so runs start with none (the level-up Reroll button hides at 0). The co-op `hello` no longer carries Workshop levels.
 - 2026-10-15: v0.3.0. Save backup is a file now (user: no codes): SAVE TO FILE writes InfiniShoot-save.json (a Save dialog in the desktop app, starting in Documents), LOAD FROM FILE reads it back. Old ISAVE1 codes still load if pasted into a file. The desktop app keeps its own save in %APPDATA%\InfiniShoot, so new versions of the exe keep progress.
 - 2026-10-15: v0.4.0 pixel-art UI (user: "not AI slop"). Rejected glossy gradients and soft shadows; everything is whole UI pixels on one palette. Pixelify Sans was dropped for text because its 5/S and 2/Z look alike at UI sizes; Jersey 15/10 have clear numerals. Icons are game-icons.net silhouettes sampled onto a 24x24 grid at runtime (Path2D, 4x supersampling, coverage > 40%) and coloured from the palette; 15 of the first picks were swapped for bolder icons after a contact-sheet review. Gem magnet: the whole velocity is steered toward the player (no leftover sideways speed), speed ramps to 45 m/s, and a gem is collected if its next step would overshoot.
+- 2026-10-15: v0.5.0 (user: levelling too fast and interrupting; dash too spammy early; chests on the map). XP gems are worth 0.55x enemy XP and xpForLevel is now 6 + 8l + 1.4l^2; bot runs reach about level 5/7/10/14 at minutes 1-4 of stage 1 (was 6/10/14/24). A flat XP cut alone barely helped because kill volume peaks in the last minute, hence the steeper curve. Map chests give their item instantly instead of opening the level-up menu, so they add power without another interruption; hosts broadcast `wchest` events and item changes reach clients through the snapshot's passives and weapon lists. The dash cooldown factor comes from the team level in Hero.refreshLive, so clients get it with the synced stats.

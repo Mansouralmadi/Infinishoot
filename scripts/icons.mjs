@@ -76,6 +76,8 @@ const ART = {
   // level-up bonuses
   gold: 'swap-bag',
   heal: 'health-potion',
+  // HUD
+  world_chest: 'locked-chest',
 };
 
 const set = JSON.parse(readFileSync(new URL('../node_modules/@iconify-json/game-icons/icons.json', import.meta.url), 'utf8'));

@@ -20,6 +20,8 @@ export interface Arena {
   halfSize: number;
   /** Explosive barrels: drawn and destroyed by the game, not merged into the static props. */
   barrels: { x: number; z: number; box: AABB }[];
+  /** Treasure chest spots (not solid: you walk into them to open). */
+  chests: { x: number; z: number; facing: number }[];
 }
 
 const HALF = 55;
@@ -31,6 +33,7 @@ export function createFieldArena(seed: number, biome: BiomeDef = BIOMES[0]): Are
   const group = new THREE.Group();
   const colliders: AABB[] = [];
   const barrels: Arena['barrels'] = [];
+  const chests: Arena['chests'] = [];
   const tex = {
     grass: textures[biome.ground](),
     path: textures[biome.path](),
@@ -315,6 +318,14 @@ export function createFieldArena(seed: number, biome: BiomeDef = BIOMES[0]): Are
     else rocks(cx, cz);
   }
 
+  // Treasure chests spread over the field, away from the start and from each other.
+  for (let i = 0, tries = 0; chests.length < 6 && tries < 60; tries++) {
+    const p = spot(1.2, 1.2, 1.2);
+    if (!p || Math.hypot(p[0], p[1]) < 14 || chests.some((c) => Math.hypot(c.x - p[0], c.z - p[1]) < 22)) continue;
+    chests.push({ x: p[0], z: p[1], facing: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) + rng.range(-0.3, 0.3) });
+    i++;
+  }
+
   // Loose barrel groups out in the open, so there's always one worth shooting.
   for (let i = 0; i < 10; i++) {
     const c = spot(0.9, 0.9, 0.4);
@@ -328,5 +339,5 @@ export function createFieldArena(seed: number, biome: BiomeDef = BIOMES[0]): Are
 
   // Hundreds of props -> one draw call per material.
   mergeStatic(group);
-  return { group, colliders, halfSize: HALF, barrels };
+  return { group, colliders, halfSize: HALF, barrels, chests };
 }
