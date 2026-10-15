@@ -4,7 +4,7 @@ import { tagChips, type Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
 import type { ModDef } from '../game/modTypes';
 import type { ScoreEntry } from '../game/highscores';
-import { exportCode, importCode, resetSave, save } from '../game/save';
+import { exportFile, importFile, resetSave, save } from '../game/save';
 import { settings, saveSettings } from '../game/settings';
 import { sfx } from '../audio/sfx';
 import { fmtScore, type LoadoutItem } from './hud';
@@ -195,12 +195,12 @@ export class Screens {
 </div>
 <div id="scr-savedata" class="screen dim" hidden>
   <h1>SAVE DATA</h1>
-  <p class="note">Progress saves automatically on this device. Use a save code to back it up, or to move it to another device.</p>
-  <textarea id="save-code" spellcheck="false" placeholder="Paste a save code here, then press IMPORT."></textarea>
+  <p class="note">Your progress saves by itself. To back it up or move it to another PC, save it to a file, then load that file on the other PC.</p>
+  <input id="save-file" type="file" accept=".json,.txt,application/json" hidden />
   <div class="msg"></div>
   <div class="menu row wrap">
-    <button data-nav data-act="export">EXPORT</button>
-    <button data-nav data-act="import">IMPORT</button>
+    <button data-nav data-act="export">SAVE TO FILE</button>
+    <button data-nav data-act="import">LOAD FROM FILE</button>
     <button data-nav data-act="wipe">RESET SAVE</button>
     <button data-nav data-act="sd-back">BACK</button>
   </div>
@@ -509,28 +509,33 @@ export class Screens {
     m.classList.toggle('err', !ok);
   }
 
-  private get codeBox(): HTMLTextAreaElement {
-    return this.els.savedata.querySelector<HTMLTextAreaElement>('#save-code')!;
-  }
-
   private doExport(): void {
-    const code = exportCode();
-    this.codeBox.value = code;
-    this.codeBox.select();
-    const fallback = () => this.msg('Copy the code above and keep it somewhere safe.');
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(code).then(() => this.msg('Save code copied to the clipboard. Keep it somewhere safe.'), fallback);
-    } else fallback();
+    const url = URL.createObjectURL(new Blob([exportFile()], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'InfiniShoot-save.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    this.msg('Saved! Keep InfiniShoot-save.json somewhere safe.');
   }
 
   private doImport(): void {
-    try {
-      importCode(this.codeBox.value);
-      this.msg('Save loaded!');
-      sfx.powerUp();
-    } catch (err) {
-      this.msg((err as Error).message, false);
-    }
+    const input = this.els.savedata.querySelector<HTMLInputElement>('#save-file')!;
+    input.value = '';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      file.text().then((text) => {
+        try {
+          importFile(text);
+          this.msg('Save loaded!');
+          sfx.powerUp();
+        } catch (err) {
+          this.msg((err as Error).message, false);
+        }
+      });
+    };
+    input.click();
   }
 
   private doWipe(btn: HTMLElement): void {

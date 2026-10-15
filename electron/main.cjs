@@ -18,6 +18,14 @@ function createWindow() {
   });
   win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 
+  // "Save to file" asks where to put the save, starting in Documents.
+  // INFINISHOOT_SAVE_DIR skips the dialog (used for automated checks).
+  win.webContents.session.on('will-download', (_event, item) => {
+    const dir = process.env.INFINISHOOT_SAVE_DIR;
+    if (dir) item.setSavePath(path.join(dir, item.getFilename()));
+    else item.setSaveDialogOptions({ title: 'Save InfiniShoot progress', defaultPath: path.join(app.getPath('documents'), item.getFilename()) });
+  });
+
   // F11 toggles fullscreen.
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') {

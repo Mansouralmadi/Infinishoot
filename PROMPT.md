@@ -13,7 +13,7 @@ A plucky, anime-styled hero survives timed stages on big open fields while swarm
 - **Ships as a Windows desktop app**: a single portable exe (Electron wrapping the web build), double-click to play, no install. The game itself stays plain web code. Keyboard + mouse and gamepad are both first-class.
 - **Performance**: steady 60 fps on a mid-range laptop iGPU with 150+ enemies and 500+ projectiles on screen. Initial load under 5 MB, under 3 s on broadband.
 - **Stack**: TypeScript, Vite, Three.js (WebGL2). No heavy engine. Keep dependencies minimal: Three.js, WebAudio (or Howler), and optionally `lil-gui` for debug tweaking.
-- **No backend for v1**: saves in `localStorage`, with an export/import save code for backup and moving devices. Distributed as `InfiniShoot.exe` on GitHub Releases.
+- **No backend for v1**: saves in `localStorage`, with save/load to a file for backup and moving PCs. Distributed as `InfiniShoot.exe` on GitHub Releases.
 
 ## Art direction: Mega Man Legends-style
 The aim is *cheerful, saturated, toy-like*, not gritty. PS1 limitations are used for charm, not horror.

@@ -10,7 +10,7 @@ Download `InfiniShoot.exe` from the [Releases page](https://github.com/Mansoural
 
 The exe isn't code-signed yet, so Windows may show "Windows protected your PC". Click **More info**, then **Run anyway**.
 
-Press F11 for fullscreen. Progress saves automatically on your PC.
+Press F11 for fullscreen. Progress saves automatically on your PC. To back it up or move it to another PC, use UNLOCKS > SAVE DATA > SAVE TO FILE, then LOAD FROM FILE on the other PC.
 
 ## Build it
 

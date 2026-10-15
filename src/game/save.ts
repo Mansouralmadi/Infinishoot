@@ -4,8 +4,8 @@ import { WEAPONS } from '../data/weapons';
 
 /**
  * Persistent profile: achievements (weapon unlocks) and lifetime stats.
- * Stored in localStorage automatically; can be exported as a text code for
- * backup or moving to another browser/device.
+ * Stored in localStorage automatically; can be saved to a file for backup
+ * or moving to another PC.
  */
 export interface SaveData {
   version: number;
@@ -83,13 +83,30 @@ function checksum(s: string): string {
   return (h >>> 0).toString(36);
 }
 
-export function exportCode(): string {
-  const json = JSON.stringify(save);
-  const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(json)));
-  return `${CODE_PREFIX}${b64}.${checksum(b64)}`;
+/** The save as a small readable JSON file. */
+export function exportFile(): string {
+  return JSON.stringify({ game: 'InfiniShoot', save }, null, 2);
 }
 
-/** Replace the save with an exported code. Throws a readable error if invalid. */
+/** Load a save file (or an old save code). Throws a readable error if it isn't one. */
+export function importFile(text: string): void {
+  const c = text.trim();
+  if (c.startsWith(CODE_PREFIX)) {
+    importCode(c);
+    return;
+  }
+  let parsed: { game?: unknown; save?: unknown };
+  try {
+    parsed = JSON.parse(c);
+  } catch {
+    throw new Error('That file is not an InfiniShoot save.');
+  }
+  if (parsed?.game !== 'InfiniShoot' || !parsed.save) throw new Error('That file is not an InfiniShoot save.');
+  Object.assign(save, normalize(parsed.save));
+  persist();
+}
+
+/** Replace the save with an exported code (older backups). Throws a readable error if invalid. */
 export function importCode(code: string): void {
   const c = code.trim();
   if (!c.startsWith(CODE_PREFIX)) throw new Error('That is not an InfiniShoot save code.');
