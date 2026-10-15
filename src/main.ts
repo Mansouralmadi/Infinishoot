@@ -35,6 +35,9 @@ let fpsFrames = 0;
 let statsTimer = 0;
 
 const loop = new GameLoop({
+  // Co-op hosts keep simulating in a background tab so clients don't freeze.
+  runHidden: () => game.role === 'host',
+
   update(dt) {
     input.poll();
     game.update(dt);
