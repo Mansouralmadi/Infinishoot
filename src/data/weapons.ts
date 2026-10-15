@@ -1,3 +1,5 @@
+import type { Tag } from './tags';
+
 /**
  * Weapon definitions. Each level lists its full parameter set (not deltas)
  * plus the text shown on the level-up card. Behaviour lives in
@@ -10,6 +12,7 @@ export interface WeaponLevel {
 
 export interface WeaponDef {
   id: string;
+  tags: Tag[];
   name: string;
   icon: string;
   color: string;
@@ -22,6 +25,7 @@ export interface WeaponDef {
 export const WEAPONS: Record<string, WeaponDef> = {
   buster: {
     id: 'buster',
+    tags: ['projectile'],
     name: 'Buster',
     icon: '▶',
     color: '#ffd23f',
@@ -37,6 +41,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   drones: {
     id: 'drones',
+    tags: ['orbit'],
     name: 'Orbit Drones',
     icon: '✦',
     color: '#4fc3ff',
@@ -52,6 +57,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   aura: {
     id: 'aura',
+    tags: ['area', 'shock'],
     name: 'Zap Field',
     icon: '◎',
     color: '#3de0c8',
@@ -67,6 +73,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   lightning: {
     id: 'lightning',
+    tags: ['chain', 'shock'],
     name: 'Chain Zap',
     icon: 'ϟ',
     color: '#fff35c',
@@ -82,6 +89,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   discs: {
     id: 'discs',
+    tags: ['projectile', 'orbit'],
     name: 'Boomer Disc',
     icon: '◐',
     color: '#ff3df0',
@@ -97,6 +105,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   missiles: {
     id: 'missiles',
+    tags: ['projectile', 'explosive'],
     name: 'Seeker Pod',
     icon: '➶',
     color: '#ff5e5e',
@@ -112,6 +121,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   mines: {
     id: 'mines',
+    tags: ['explosive', 'trail'],
     name: 'Pop Mines',
     icon: '✷',
     color: '#ff9f3d',
@@ -127,6 +137,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   nova: {
     id: 'nova',
+    tags: ['area', 'frost'],
     name: 'Frost Nova',
     icon: '❄',
     color: '#9fe8ff',
@@ -142,6 +153,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   fire: {
     id: 'fire',
+    tags: ['trail', 'fire'],
     name: 'Blaze Boots',
     icon: '♨',
     color: '#ff7a2f',

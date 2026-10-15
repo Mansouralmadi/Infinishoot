@@ -5,6 +5,7 @@ import { Weapon, type WeaponCtx } from './base';
 /** The aimed arm cannon. Fires while the player holds fire. */
 export class Buster extends Weapon {
   private shotCd = 0;
+  private shotCount = 0;
   private mz = { x: 0, z: 0 };
   muzzleT = 0;
 
@@ -12,7 +13,7 @@ export class Buster extends Weapon {
     this.muzzleT = Math.max(0, this.muzzleT - dt);
     this.shotCd -= dt;
     const p = this.p;
-    if (!ctx.firing || ctx.player.dead || ctx.player.dashing) {
+    if (!ctx.firing || ctx.player.dead || ctx.player.dashing || ctx.flags.busterDisabled) {
       this.shotCd = Math.max(this.shotCd, 0);
       return;
     }
@@ -31,7 +32,12 @@ export class Buster extends Weapon {
     pl.muzzle(this.mz);
     const base = Math.atan2(pl.aim.z, pl.aim.x);
     const arc = THREE.MathUtils.degToRad(p.arc);
-    const size = p.size * Math.sqrt(ctx.stats.areaMul);
+    // Hair Trigger: every Nth shot is a mega shot.
+    this.shotCount++;
+    const every = ctx.flags.busterMegaEvery;
+    const mega = every > 0 && this.shotCount % every === 0;
+    const size = p.size * Math.sqrt(ctx.stats.areaMul) * (mega ? 2.2 : 1);
+    if (mega) ctx.sound('explode');
     for (let i = 0; i < p.shots; i++) {
       const fan = p.shots > 1 ? (i / (p.shots - 1) - 0.5) * arc : 0;
       const a = base + fan + (Math.random() - 0.5) * 0.05;
@@ -43,13 +49,13 @@ export class Buster extends Weapon {
         speed: p.speed,
         life: 0.75,
         radius: 0.2 * size,
-        damage: p.dmg,
-        knockback: 4,
+        damage: p.dmg * (mega ? 4 : 1),
+        knockback: mega ? 12 : 4,
         team: Team.Player,
-        color: '#fff36b',
+        color: mega ? '#ff7a2f' : '#fff36b',
         width: 0.32 * size,
         length: 0.8 * size,
-        pierce: p.pierce,
+        pierce: p.pierce + (mega ? 5 : 0),
       });
     }
     this.muzzleT = 0.05;

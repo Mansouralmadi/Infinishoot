@@ -50,7 +50,7 @@ export class Lightning extends Weapon {
       let fx = pl.x;
       let fy = 2.2;
       let fz = pl.z;
-      for (let c = 0; c <= p.chains && cur; c++) {
+      for (let c = 0; c <= p.chains + ctx.flags.chainBonus && cur; c++) {
         const target: Enemy = cur;
         this.chained.add(target.uid);
         this.jag(pts, fx, fy, fz, target.x, 0.9, target.z);

@@ -176,6 +176,10 @@ export class Enemy {
   slowT = 0;
   slowAmt = 0;
   shatter = 0; // bonus damage taken while frozen
+  burnT = 0;
+  burnDps = 0;
+  burnAcc = 0;
+  shockT = 0;
   lungeX = 0;
   lungeZ = 0;
   facing = 0;
@@ -210,6 +214,7 @@ export class Enemy {
     this.dmgMul = (o.dmgMul ?? 1) * (this.elite ? 1.5 : 1);
     this.bombStamp = 0;
     this.flash = this.frozen = this.slowT = this.shatter = 0;
+    this.burnT = this.burnDps = this.burnAcc = this.shockT = 0;
     this.sq = this.sqV = this.hopY = 0;
     this.timerA = this.def.behavior === 'boss' ? 3 : 1 + Math.random() * 2;
     this.strafe = Math.random() < 0.5 ? -1 : 1;
@@ -702,7 +707,10 @@ export class Enemies {
       else if (e.state === 'windup') {
         const fast = e.def.behavior === 'exploder' ? 70 : 40;
         b.flash.setXYZW(i, 1, 0.25, 0.3, 0.35 + 0.35 * Math.sin(time * fast));
-      } else if (e.elite) b.flash.setXYZW(i, 1, 0.85, 0.2, 0.25 + 0.15 * Math.sin(time * 6));
+      } else if (e.burnT > 0 && e.shockT > 0) b.flash.setXYZW(i, 1, 0.9, 0.3, 0.5);
+      else if (e.burnT > 0) b.flash.setXYZW(i, 1, 0.45, 0.1, 0.3 + 0.2 * Math.sin(time * 18 + e.uid));
+      else if (e.shockT > 0) b.flash.setXYZW(i, 1, 1, 0.4, Math.sin(time * 50 + e.uid) > 0.3 ? 0.55 : 0.1);
+      else if (e.elite) b.flash.setXYZW(i, 1, 0.85, 0.2, 0.25 + 0.15 * Math.sin(time * 6));
       else b.flash.setXYZW(i, 0, 0, 0, 0);
 
       const ss = e.radius * 2.6 * Math.min(1, sx / e.scale) * (1 - Math.min(0.6, e.hopY * 0.1));

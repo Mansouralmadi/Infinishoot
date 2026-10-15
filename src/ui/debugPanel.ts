@@ -9,6 +9,7 @@ import { bombTuning, cheats, scoreTuning, type Game } from '../game/game';
 import { directorTuning } from '../game/director';
 import { juiceTuning } from '../game/juice';
 import { WEAPONS } from '../data/weapons';
+import { MODS } from '../data/mods';
 import { audioSettings } from '../audio/sfx';
 
 /** lil-gui tweak panel. Hidden by default; toggle with the backquote key. */
@@ -86,6 +87,10 @@ export function createDebugPanel(renderer: RetroRenderer, game: Game, onResize: 
   const give = { weapon: 'drones' };
   run.add(give, 'weapon', Object.keys(WEAPONS)).name('Weapon');
   run.add({ g: () => game.debugGiveWeapon(give.weapon) }, 'g').name('Give / level weapon');
+  const giveMod = { mod: MODS[0].id };
+  run.add(giveMod, 'mod', MODS.map((m) => m.id)).name('Mod');
+  run.add({ m: () => game.debugGiveMod(giveMod.mod) }, 'm').name('Give mod');
+  run.add({ g: () => game.debugAddGold(20) }, 'g').name('+20 gold');
   run.add({ boss: () => game.debugSkipToBoss() }, 'boss').name('Skip to boss');
   run.add({ fill: () => (game.bombCharge = 1) }, 'fill').name('Fill bomb');
   run.add({ bolts: () => game.debugAddBolts(500) }, 'bolts').name('+500 Bolts (save)');

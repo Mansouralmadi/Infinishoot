@@ -1,6 +1,8 @@
 import type { Input } from '../core/input';
 import { ACHIEVEMENTS, WORKSHOP, workshopCost } from '../data/meta';
+import { tagChips, type Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
+import type { ModDef } from '../game/modTypes';
 import type { ScoreEntry } from '../game/highscores';
 import { buyWorkshop, exportCode, importCode, refundWorkshop, resetSave, save } from '../game/save';
 import { settings, saveSettings } from '../game/settings';
@@ -9,7 +11,7 @@ import { fmtScore, type LoadoutItem } from './hud';
 import { MenuNav } from './menu';
 
 /** Full-screen menus. Plain DOM; every navigable element has `data-nav`. */
-export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'gameover' | 'workshop' | 'savedata';
+export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'shop' | 'gameover' | 'workshop' | 'savedata';
 
 export interface ScreenActions {
   start(): void;
@@ -19,6 +21,27 @@ export interface ScreenActions {
   title(): void;
   pick(index: number): void;
   reroll(): void;
+  skip(): void;
+  buy(index: number): void;
+  sell(index: number): void;
+  moveMod(index: number, dir: -1 | 1): void;
+  shopReroll(): void;
+  shopHeal(): void;
+  shopDone(): void;
+}
+
+export interface ShopView {
+  gold: number;
+  interest: number;
+  interestCap: number;
+  offers: ({ def: ModDef; price: number; hint: string } | null)[];
+  owned: { def: ModDef; sell: number; readout: string }[];
+  slots: number;
+  rerollCost: number;
+  healCost: number;
+  healed: boolean;
+  loadout: LoadoutItem[];
+  stage: number;
 }
 
 export interface Offer {
@@ -29,6 +52,7 @@ export interface Offer {
   color: string;
   tag: string; // "NEW!" / "LV 3" / "BONUS"
   text: string;
+  tags?: readonly Tag[];
 }
 
 export interface RunSummary {
@@ -40,6 +64,7 @@ export interface RunSummary {
   maxCombo: number;
   bolts: number;
   loadout: LoadoutItem[];
+  mods: string[];
   damage: { name: string; color: string; dmg: number }[];
   achievements: string[];
 }
@@ -48,6 +73,10 @@ const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60
 
 function badge(i: LoadoutItem): string {
   return `<span class="badge" style="--c:${i.color}" title="${i.name}">${i.icon}<i>${i.max ? 'M' : i.level}</i></span>`;
+}
+
+function modChip(m: ModDef): string {
+  return `<span class="mod-chip ${m.cursed ? 'cursed' : ''}" style="--c:${m.color}" title="${m.desc}">${m.icon} ${m.name}</span>`;
 }
 
 type Named = Exclude<ScreenName, 'none'>;
@@ -59,7 +88,10 @@ export class Screens {
   private settingsReturn: ScreenName = 'title';
   private wipeArmed = false;
 
+  private root: HTMLElement;
+
   constructor(root: HTMLElement, actions: ScreenActions) {
+    this.root = root;
     root.insertAdjacentHTML(
       'beforeend',
       `
@@ -100,6 +132,14 @@ export class Screens {
   <div class="cards"></div>
   <div class="reroll-row"></div>
   <div class="build"></div>
+</div>
+<div id="scr-shop" class="screen dim" hidden>
+  <h1>SHOP</h1>
+  <div class="shop-top"></div>
+  <div class="shop-offers"></div>
+  <div class="menu row shop-extras"></div>
+  <div class="section owned-title"></div>
+  <div class="owned-mods"></div>
 </div>
 <div id="scr-workshop" class="screen dim" hidden>
   <h1>WORKSHOP</h1>
@@ -144,13 +184,14 @@ export class Screens {
   <div class="hiscores"></div>
 </div>`,
     );
-    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'workshop', 'savedata', 'gameover'];
+    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'shop', 'workshop', 'savedata', 'gameover'];
     for (const n of names) this.els[n] = root.querySelector<HTMLElement>(`#scr-${n}`)!;
     this.navs = {
       title: new MenuNav(this.els.title),
       pause: new MenuNav(this.els.pause, { onBack: () => actions.resume() }),
       settings: new MenuNav(this.els.settings, { onBack: () => this.show(this.settingsReturn) }),
       levelup: new MenuNav(this.els.levelup, { horizontal: true }),
+      shop: new MenuNav(this.els.shop, { columns: 4 }),
       workshop: new MenuNav(this.els.workshop, { columns: 3, onBack: () => actions.title() }),
       savedata: new MenuNav(this.els.savedata, { horizontal: true, onBack: () => this.show('workshop') }),
       gameover: new MenuNav(this.els.gameover, { horizontal: true }),
@@ -184,6 +225,22 @@ export class Screens {
           return actions.pick(Number(btn.dataset.index));
         case 'reroll':
           return actions.reroll();
+        case 'skip':
+          return actions.skip();
+        case 'buy':
+          return actions.buy(Number(btn.dataset.index));
+        case 'sell':
+          return actions.sell(Number(btn.dataset.index));
+        case 'mod-left':
+          return actions.moveMod(Number(btn.dataset.index), -1);
+        case 'mod-right':
+          return actions.moveMod(Number(btn.dataset.index), 1);
+        case 'shop-reroll':
+          return actions.shopReroll();
+        case 'shop-heal':
+          return actions.shopHeal();
+        case 'shop-done':
+          return actions.shopDone();
         case 'settings':
           this.settingsReturn = this.current;
           return this.show('settings');
@@ -224,9 +281,11 @@ export class Screens {
     });
   }
 
-  show(name: ScreenName): void {
+  show(name: ScreenName, focus?: number): void {
     this.current = name;
     for (const [k, el] of Object.entries(this.els)) el.hidden = k !== name;
+    // Hide in-game banners and toasts behind menus.
+    this.root.classList.toggle('menu-open', name !== 'none');
     if (name === 'settings') this.syncSettings();
     if (name === 'title') this.renderWallet();
     if (name === 'workshop') this.renderWorkshop();
@@ -235,7 +294,7 @@ export class Screens {
       this.msg('');
       this.els.savedata.querySelector<HTMLElement>('[data-act=wipe]')!.textContent = 'RESET SAVE';
     }
-    if (name !== 'none') this.navs[name].refresh(name === 'levelup' ? 1 : 0);
+    if (name !== 'none') this.navs[name].refresh(focus ?? (name === 'levelup' ? 1 : 0));
   }
 
   update(input: Input, dt: number): void {
@@ -276,7 +335,7 @@ export class Screens {
 
   // ---------------------------------------------------------------- level-up
 
-  showLevelUp(offers: Offer[], title: string, rerolls: number, loadout: LoadoutItem[]): void {
+  showLevelUp(offers: Offer[], title: string, rerolls: number, loadout: LoadoutItem[], skipGold = 0): void {
     const el = this.els.levelup;
     el.querySelector('h1')!.textContent = title;
     el.querySelector('.cards')!.innerHTML = offers
@@ -286,19 +345,72 @@ export class Screens {
           <div class="icon" style="--c:${o.color}">${o.icon}</div>
           <div class="name">${o.name}</div>
           <div class="desc">${o.text}</div>
+          ${o.tags ? `<div class="chips">${tagChips(o.tags)}</div>` : ''}
           <div class="kind">${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : 'BONUS'}</div>
           <div class="key">${i + 1}</div>
         </button>`,
       )
       .join('');
-    el.querySelector('.reroll-row')!.innerHTML = rerolls > 0 ? `<button data-nav data-act="reroll">REROLL (${rerolls}) [R]</button>` : '';
+    el.querySelector('.reroll-row')!.innerHTML =
+      (rerolls > 0 ? `<button data-nav data-act="reroll">REROLL (${rerolls}) [R]</button>` : '') +
+      (skipGold > 0 ? `<button data-nav data-act="skip" class="skip">SKIP +${skipGold}<span class="gold-dot"></span></button>` : '');
     el.querySelector('.build')!.innerHTML = loadout.map(badge).join('');
     this.show('levelup');
   }
 
   /** The pause screen shows the current build. */
-  setPauseBuild(loadout: LoadoutItem[]): void {
-    this.els.pause.querySelector('.build')!.innerHTML = loadout.map(badge).join('');
+  setPauseBuild(loadout: LoadoutItem[], mods: ModDef[] = []): void {
+    this.els.pause.querySelector('.build')!.innerHTML =
+      loadout.map(badge).join('') + (mods.length ? `<div class="mod-strip">${mods.map(modChip).join('')}</div>` : '');
+  }
+
+  // ---------------------------------------------------------------- shop
+
+  showShop(v: ShopView, focus?: number): void {
+    const el = this.els.shop;
+    el.querySelector('h1')!.textContent = `STAGE ${v.stage} SHOP`;
+    el.querySelector('.shop-top')!.innerHTML =
+      `<span class="gold-big"><span class="gold-dot"></span> ${v.gold} GOLD</span>` +
+      `<span class="interest">Interest next clear: +${v.interest} (1 per 5 held, max ${v.interestCap})</span>`;
+    el.querySelector('.shop-offers')!.innerHTML = v.offers
+      .map((o, i) => {
+        if (!o) return `<div class="mod-card sold">SOLD</div>`;
+        const m = o.def;
+        const cant = o.price > v.gold || v.owned.length >= v.slots;
+        return `<button class="mod-card ${m.rarity} ${m.cursed ? 'cursed' : ''} ${cant ? 'cant' : ''}" data-nav data-act="buy" data-index="${i}">
+          <div class="rarity">${m.cursed ? 'CURSED' : m.rarity.toUpperCase()}</div>
+          <div class="icon" style="--c:${m.color}">${m.icon}</div>
+          <div class="name">${m.name}</div>
+          <div class="desc">${m.desc}</div>
+          ${m.synergy ? `<div class="chips">${tagChips(m.synergy)}</div>` : ''}
+          ${o.hint ? `<div class="hint">${o.hint}</div>` : ''}
+          <div class="price"><span class="gold-dot"></span> ${o.price}</div>
+        </button>`;
+      })
+      .join('');
+    el.querySelector('.shop-extras')!.innerHTML =
+      `<button data-nav data-act="shop-reroll" class="${v.rerollCost > v.gold ? 'cant' : ''}">REROLL ${v.rerollCost ? `<span class="gold-dot"></span> ${v.rerollCost}` : 'FREE'}</button>` +
+      `<button data-nav data-act="shop-heal" class="${v.healed || v.healCost > v.gold ? 'cant' : ''}">HEAL 40% <span class="gold-dot"></span> ${v.healCost}</button>` +
+      `<button data-nav data-act="shop-done" class="continue">CONTINUE &#9654;</button>`;
+    el.querySelector('.owned-title')!.textContent = `YOUR MODS ${v.owned.length}/${v.slots} — damage flows left to right`;
+    const empty = Math.max(0, v.slots - v.owned.length);
+    el.querySelector('.owned-mods')!.innerHTML =
+      v.owned
+        .map(
+          (o, i) => `<div class="owned-mod ${o.def.cursed ? 'cursed' : ''}" title="${o.def.desc}">
+          <div class="slot-no">${i + 1}</div>
+          <div class="icon" style="--c:${o.def.color}">${o.def.icon}</div>
+          <div class="name">${o.def.name}</div>
+          ${o.readout ? `<div class="readout">${o.readout}</div>` : ''}
+          <div class="ctrl">
+            <button data-nav data-act="mod-left" data-index="${i}" ${i === 0 ? 'disabled' : ''}>&#9664;</button>
+            <button data-nav data-act="mod-right" data-index="${i}" ${i === v.owned.length - 1 ? 'disabled' : ''}>&#9654;</button>
+            <button data-nav data-act="sell" data-index="${i}" class="sell">SELL +${o.sell}</button>
+          </div>
+        </div>`,
+        )
+        .join('') + '<div class="owned-mod empty"></div>'.repeat(empty);
+    this.show('shop', focus);
   }
 
   // ---------------------------------------------------------------- workshop
@@ -407,7 +519,8 @@ export class Screens {
             `<div class="dmg-row"><span>${d.name}</span><div class="bar"><div style="width:${(d.dmg / max) * 100}%;background:${d.color}"></div></div><b>${fmtScore(d.dmg)}</b></div>`,
         )
         .join('');
-    el.querySelector('.build')!.innerHTML = sum.loadout.map(badge).join('');
+    el.querySelector('.build')!.innerHTML =
+      sum.loadout.map(badge).join('') + (sum.mods.length ? `<div class="mod-strip">MODS: ${sum.mods.join(' · ')}</div>` : '');
     el.querySelector('.unlocked')!.innerHTML = sum.achievements.length ? `★ NEW: ${sum.achievements.join(' · ')}` : '';
     this.setHighScores(list, rank);
     this.show('gameover');

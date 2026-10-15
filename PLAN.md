@@ -61,7 +61,24 @@ Goal: hectic, movement-first runs where you get stronger both during and between
 - [x] Dev autoplay bot (src/dev/bot.ts) for balance and performance runs
 - **Playable:** full survivors-style runs with persistent progression.
 
-## Milestone 4: Biomes, bosses and evolutions
+## Milestone 3.5: Synergies and the shop (done)
+Goal: Balatro-style build decisions, where the best pick depends on what you already own.
+- [x] Weapon tags (Projectile, Orbit, Area, Chain, Explosive, Fire, Frost, Shock, Trail) shown on level-up cards
+- [x] Mods: 32 perks in 5 ordered slots; damage flows left to right as (amount + add) x mult, so order matters; Echo copies the Mod to its right
+- [x] Mod kinds: tag synergies, triggers (dash, crit, kill, hurt, every 8th shot, standing still, moving), scaling (Bloodlust, Hoarder, Momentum, Collector), economy (Piggy Bank, Coupon Book), cursed tradeoffs (Glass Cannon, Pacifist Core, Overclocked Heart, Greedy Gremlin)
+- [x] Statuses and combos: Burn, Shock (+20% damage taken), Freeze; Burn + Shock = Overload blast, explosion on a burning enemy = Napalm, killing a frozen enemy = Shatter
+- [x] Run gold: drops, chests, stage clear, plus interest (1 per 5 held, capped); left-over gold converts to Bolts at run end
+- [x] Shop after each boss: 4 Mods, escalating rerolls, heal, buy/sell/reorder with synergy hints ("You have: 2 explosive")
+- [x] Level-up Skip for gold
+- **Playable:** builds that combo, plus a real spend-vs-save economy.
+
+## Milestone 4: Online co-op (next)
+- [ ] Host-authoritative co-op over WebRTC with invite codes (PeerJS signaling), 2-4 players
+- [ ] Shared stage, shared XP and gold or per-player picks (decide), revive downed teammates
+- [ ] Snapshot sync for enemies/pickups, client-side prediction for your own hero
+- **Playable:** two browsers on different networks clear a stage together.
+
+## Milestone 4b: Biomes, bosses and evolutions
 - [ ] 3-4 biomes cycling by stage (palette, fog, props, music)
 - [ ] 2 more bosses with distinct patterns, boss every stage rotates
 - [ ] Weapon evolutions: max weapon + matching passive becomes a stronger evolved form
@@ -139,3 +156,5 @@ public/assets/         # models (glb), textures (png), audio
 - 2026-10-15: Redesigned as a survivors-style twin-stick roguelike (user request: harder, more hectic, open stages, weapons that level visibly, more enemy variety, progression between runs, deployable with saves). Chosen: timed stages + boss, aimed Buster plus auto weapons, itch.io hosting, local saves plus export code (cloud saves deferred: they need a server and logins).
 - 2026-10-15: Performance: static arena props are merged per material (217 to ~70 draw calls), and instance buffers upload only live slots via update ranges (full-capacity uploads were the main frame cost). Simulation with ~270 enemies and every weapon maxed: about 0.5 ms per step.
 - 2026-10-15: Boss HP scales by stage only (2,400 at stage 1), and normal spawns drop to 25% during the boss, after bot runs showed the boss was unkillable with minute-scaled HP.
+- 2026-10-15: Pushed to GitHub (Mansouralmadi/Infinishoot), committing straight to main per the user. Next big features chosen: synergy perks first (shop between stages, Balatro-style), then online co-op only (no local co-op).
+- 2026-10-15: Mods live in a shop rather than in level-ups so level-ups stay about weapons, and gold creates its own spend/save/interest decisions. In-run gold replaced the Bolt pickups; Bolts are now only earned at run end (kills, stages, minutes, left-over gold). Echo shares state with the Mod it copies, so echoed counters (Bloodlust) also stack twice as fast.

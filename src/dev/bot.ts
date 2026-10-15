@@ -23,6 +23,13 @@ export function installBot(game: Game, input: Input): void {
     poll(): void;
   };
 
+  /** Shop policy: buy affordable Mods left to right while slots remain, then continue. */
+  const shop = () => {
+    const btns = Array.from(document.querySelectorAll<HTMLElement>('#scr-shop [data-act=buy]'));
+    for (const b of btns) if (!b.classList.contains('cant')) b.click();
+    document.querySelector<HTMLElement>('#scr-shop [data-act=shop-done]')?.click();
+  };
+
   const step = () => {
     const g = game;
     const p = g.player;
@@ -89,6 +96,7 @@ export function installBot(game: Game, input: Input): void {
     if (bd < 1.3 && p.dashReady01 >= 1) inp.pressed.add('Space');
     if (g.bombCharge >= 1 && Math.hypot(ax, az) > 1) inp.pressed.add('KeyQ');
     if (g.mode === 'levelup') inp.pressed.add('Digit1');
+    if (g.mode === 'shop') shop();
     inp.poll();
     inp.device = 'kbm';
     g.update(1 / 60);

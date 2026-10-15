@@ -1,7 +1,9 @@
 import type * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import type { SpatialHash } from '../../core/spatialHash';
+import type { Tag } from '../../data/tags';
 import type { WeaponDef } from '../../data/weapons';
+import type { ModFlags } from '../modTypes';
 import type { Bullets } from '../bullets';
 import type { Enemy, Enemies } from '../enemies';
 import type { Fx } from '../fx';
@@ -21,6 +23,10 @@ export interface DamageOpts {
   canCrit?: boolean;
   /** Show a damage number and play the hit sound (off for auras, burns, blasts). */
   loud?: boolean;
+  /** Override the source weapon's tags (Mods, combos). */
+  tags?: readonly Tag[];
+  /** Don't apply statuses or fire Mod hit triggers (DoT ticks, combo blasts). */
+  noStatus?: boolean;
 }
 
 /** Everything a weapon may touch. Implemented by Game. */
@@ -37,6 +43,8 @@ export interface WeaponCtx {
   fx: Fx;
   /** Manual fire held (mouse / trigger / auto-fire). */
   firing: boolean;
+  /** Summed Mod flags (Hair Trigger, Pacifist Core, Lightning Rod...). */
+  readonly flags: ModFlags;
   /** Apply base damage (scaled by stats, crits, shatter). Returns the dealt amount. */
   damage(e: Enemy, base: number, o: DamageOpts): number;
   nearest(x: number, z: number, r: number, skip?: (e: Enemy) => boolean): Enemy | null;

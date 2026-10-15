@@ -4,13 +4,15 @@ import { Rng, randomSeed } from '../core/rng';
 import { SpatialHash, StaticBoxGrid } from '../core/spatialHash';
 import { ENEMIES, type EnemyDef } from '../data/enemies';
 import { ACHIEVEMENTS } from '../data/meta';
+import { MOD_BY_ID, MODS, MOD_RARITY_WEIGHT } from '../data/mods';
 import { PASSIVES } from '../data/passives';
+import type { Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
 import { sfx } from '../audio/sfx';
 import { disposeObject } from '../render/dispose';
 import { DamageNumbers } from '../ui/damageNumbers';
 import { Hud, type LoadoutItem } from '../ui/hud';
-import { Screens, type Offer, type RunSummary } from '../ui/screens';
+import { Screens, type Offer, type RunSummary, type ShopView } from '../ui/screens';
 import { createFieldArena, type Arena } from '../world/fieldArena';
 import { BULLET_Y, Bullets, Team } from './bullets';
 import { CameraRig, cameraTuning } from './cameraRig';
@@ -26,6 +28,8 @@ import { Portal } from './portal';
 import { grantAchievement, persist, save, unlockedWeapons } from './save';
 import { settings, saveSettings } from './settings';
 import { computeStats, type Stats } from './stats';
+import type { ModDef } from './modTypes';
+import { MAX_MOD_SLOTS, Synergy, type SynergyHost } from './synergy';
 import { createWeapon, type Buster, type DamageOpts, type Weapon, type WeaponCtx } from './weapons';
 
 export const scoreTuning = {
@@ -43,14 +47,34 @@ export const bombTuning = {
 };
 
 export const dropTuning = {
-  boltChance: 0.02,
+  goldChance: 0.006,
   heartChance: 0.004,
   magnetChance: 0.0015,
 };
 
+/** Run economy (gold), Balatro-style: earn, hold for interest, or spend in the shop. */
+export const economyTuning = {
+  clearGold: 5, // flat gold for clearing a stage
+  interestPer: 5, // +1 gold per this much held at stage clear
+  interestCap: 5, // max interest per stage (Piggy Bank raises it)
+  rerollBase: 2, // first paid reroll; +1 each reroll in the same shop
+  healCost: 3,
+  shopOffers: 4,
+};
+
+/** Status effects and their combos. */
+export const statusTuning = {
+  burnTime: 3,
+  shockTime: 2,
+  shockMult: 0.2, // shocked enemies take +20% damage
+  shatterDamage: 18,
+  overloadDamage: 30,
+  napalmDps: 8,
+};
+
 export const cheats = { god: false };
 
-export type Mode = 'title' | 'fight' | 'levelup' | 'cleared' | 'portal' | 'transition' | 'dead';
+export type Mode = 'title' | 'fight' | 'levelup' | 'shop' | 'cleared' | 'portal' | 'transition' | 'dead';
 
 const MAX_WEAPONS = 6;
 const MAX_PASSIVES = 6;
@@ -69,7 +93,7 @@ export function xpForLevel(level: number): number {
  *   title -> fight (timer, level-ups) -> boss -> cleared -> portal -> transition -> fight ...
  *   any -> dead -> (retry | title)
  */
-export class Game {
+export class Game implements SynergyHost {
   readonly scene = new THREE.Scene();
   arena: Arena;
   readonly player: Player;
@@ -100,8 +124,15 @@ export class Game {
   xpNext = xpForLevel(1);
   weapons: Weapon[] = [];
   passives: Record<string, number> = {};
-  stats: Stats = computeStats({}, {});
-  boltsRun = 0;
+  /** Live stats (static stats + per-step Mod effects). Weapons and the player read this object. */
+  readonly stats: Stats = computeStats({}, {});
+  private statBase: Stats = computeStats({}, {});
+  gold = 0;
+  readonly synergy: Synergy;
+  private shopOffers: (ModDef | null)[] = [];
+  private shopRerolls = 0;
+  private shopHealed = false;
+  private overloads = 0;
   private pendingLevels = 0;
   private chestsPending = 0;
   private resumeMode: Mode = 'fight';
@@ -116,7 +147,7 @@ export class Game {
   private offers: Offer[] = [];
   private comboT = 0;
   private damagedThisStage = false;
-  private rng = new Rng(randomSeed());
+  rng = new Rng(randomSeed());
   private modeT = 0;
   private gameOverShown = false;
   private stageLoaded = false;
@@ -169,6 +200,7 @@ export class Game {
     this.cam = new CameraRig(aspect);
     this.dmg = new DamageNumbers(hudRoot);
     this.hud = new Hud(hudRoot);
+    this.synergy = new Synergy(this);
     this.screens = new Screens(hudRoot, {
       start: () => this.startRun(),
       resume: () => this.resume(),
@@ -177,6 +209,13 @@ export class Game {
       title: () => this.goTitle(),
       pick: (i) => this.pickOffer(i),
       reroll: () => this.reroll(),
+      skip: () => this.skipLevel(),
+      buy: (i) => this.buyMod(i),
+      sell: (i) => this.sellMod(i),
+      moveMod: (i, d) => this.moveMod(i, d),
+      shopReroll: () => this.shopReroll(),
+      shopHeal: () => this.shopHeal(),
+      shopDone: () => this.shopDone(),
     });
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyF' && this.isCombatMode && !this.paused) {
@@ -236,6 +275,9 @@ export class Game {
       get time() {
         return game.runTime;
       },
+      get flags() {
+        return game.synergy.flags;
+      },
       enemies: this.enemies,
       hash: this.hash,
       bullets: this.bullets,
@@ -245,7 +287,7 @@ export class Game {
       damage: (e, base, o) => this.damage(e, base, o),
       nearest: (x, z, r, skip) => this.nearestEnemy(x, z, r, skip),
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),
-      blast: (x, z, r, base, color, source) => this.blast(x, z, r, base, color, source),
+      blast: (x, z, r, base, color, source) => this.blast(x, z, r, base, color, source, WEAPONS[source]?.tags ?? ['explosive']),
       sound: (name) => sfx.weapon(name),
     };
   }
@@ -289,7 +331,8 @@ export class Game {
   }
 
   private spawnOpts(extra: SpawnOpts = {}): SpawnOpts {
-    return { hpMul: this.director.hpMul, dmgMul: this.director.dmgMul, speedMul: this.director.speedMul, ...extra };
+    const hpMul = (extra.hpMul ?? this.director.hpMul) * (1 + this.synergy.flags.enemyHp);
+    return { dmgMul: this.director.dmgMul, speedMul: this.director.speedMul, ...extra, hpMul };
   }
 
   // ------------------------------------------------------------------ flow
@@ -314,6 +357,21 @@ export class Game {
     this.scene.add(this.arena.group);
     this.walls = new StaticBoxGrid(this.arena.colliders);
     this.enemyCtx.colliders = this.arena.colliders;
+  }
+
+  /** Rebuild static stats (passives + Workshop + Mods) and the live copy. */
+  private recomputeStats(): void {
+    this.statBase = computeStats(this.passives, save.workshop);
+    this.synergy.applyStatic(this.statBase);
+    this.refreshLive();
+    this.player.stats = this.stats;
+    this.player.hp = Math.min(this.player.hp, this.stats.maxHp);
+  }
+
+  /** Live stats = static stats + per-step Mod effects (moving, timers). */
+  private refreshLive(): void {
+    Object.assign(this.stats, this.statBase);
+    this.synergy.applyLive(this.stats);
   }
 
   private disposeWeapons(): void {
@@ -344,13 +402,14 @@ export class Game {
     this.xp = 0;
     this.xpNext = xpForLevel(1);
     this.pendingLevels = this.chestsPending = 0;
-    this.boltsRun = this.dashes = this.elitesRun = this.bossesRun = 0;
+    this.gold = this.dashes = this.elitesRun = this.bossesRun = this.overloads = 0;
     this.damageBy = {};
     this.newAchievements = [];
     this.passives = {};
     this.disposeWeapons();
     this.weapons = [createWeapon('buster', this.scene)];
-    this.stats = computeStats(this.passives, save.workshop);
+    this.synergy.reset();
+    this.recomputeStats();
     this.rerollsLeft = this.stats.rerolls;
     this.revivesLeft = this.stats.revives;
     this.clearWorld();
@@ -385,7 +444,7 @@ export class Game {
   pause(): void {
     if (!this.isCombatMode || this.paused) return;
     this.paused = true;
-    this.screens.setPauseBuild(this.loadout());
+    this.screens.setPauseBuild(this.loadout(), this.synergy.slots.map((sl) => sl.def));
     this.screens.show('pause');
   }
 
@@ -405,6 +464,17 @@ export class Game {
 
   debugSkipToBoss(): void {
     if (this.mode === 'fight') this.director.time = Math.max(this.director.time, this.director.duration - 3);
+  }
+
+  debugGiveMod(id: string): void {
+    const m = MOD_BY_ID[id];
+    if (!m || this.synergy.owns(id) || this.synergy.full) return;
+    this.synergy.add(m);
+    this.recomputeStats();
+  }
+
+  debugAddGold(n: number): void {
+    this.gold += n;
   }
 
   debugAddBolts(n: number): void {
@@ -432,15 +502,142 @@ export class Game {
     this.pickups.vacuum = true;
     const noHit = this.damagedThisStage ? 0 : scoreTuning.noHitBonus * this.stage;
     this.score += noHit;
-    const bonusBolts = 20 * this.stage;
-    this.boltsRun += bonusBolts;
+    // Gold: flat reward plus interest on what you're holding (capped).
+    const cap = economyTuning.interestCap + this.synergy.flags.interestCap;
+    const interest = Math.min(cap, Math.floor(this.gold / economyTuning.interestPer));
+    this.gold += economyTuning.clearGold + interest;
     this.player.heal(this.player.maxHp * 0.3);
-    let sub = `+${bonusBolts} BOLTS`;
+    let sub = `+${economyTuning.clearGold} GOLD &middot; INTEREST +${interest}`;
     if (noHit) sub += `<br>NO-HIT BONUS +${noHit.toLocaleString('en-US')}`;
     this.hud.showBanner('STAGE CLEAR!', sub, 2.4);
     sfx.stageClear();
     this.hud.flash(0.5);
     this.checkAchievements();
+  }
+
+  // ------------------------------------------------------------------ shop
+
+  private openShop(): void {
+    this.mode = 'shop';
+    this.shopRerolls = 0;
+    this.shopHealed = false;
+    this.rollShop();
+    sfx.chest();
+    this.showShop();
+  }
+
+  private rollShop(): void {
+    const pool = MODS.filter((m) => !this.synergy.owns(m.id));
+    this.shopOffers = [];
+    for (let k = 0; k < economyTuning.shopOffers && pool.length; k++) {
+      let r = this.rng.next() * pool.reduce((a, m) => a + MOD_RARITY_WEIGHT[m.rarity], 0);
+      let i = 0;
+      while (i < pool.length - 1 && (r -= MOD_RARITY_WEIGHT[pool[i].rarity]) > 0) i++;
+      this.shopOffers.push(pool.splice(i, 1)[0]);
+    }
+  }
+
+  private price(m: ModDef): number {
+    return Math.max(1, Math.round(m.price * (1 - this.synergy.flags.shopDiscount)));
+  }
+
+  private get rerollCost(): number {
+    if (this.shopRerolls < this.synergy.flags.freeRerolls) return 0;
+    return economyTuning.rerollBase + this.shopRerolls - this.synergy.flags.freeRerolls;
+  }
+
+  private showShop(focus?: number): void {
+    const cap = economyTuning.interestCap + this.synergy.flags.interestCap;
+    const view: ShopView = {
+      gold: this.gold,
+      interest: Math.min(cap, Math.floor(this.gold / economyTuning.interestPer)),
+      interestCap: cap,
+      offers: this.shopOffers.map((m) => (m ? { def: m, price: this.price(m), hint: this.synergyHint(m) } : null)),
+      owned: this.synergy.slots.map((sl, i) => ({ def: sl.def, sell: Math.floor(this.price(sl.def) / 2), readout: this.synergy.readout(i) })),
+      slots: MAX_MOD_SLOTS,
+      rerollCost: this.rerollCost,
+      healCost: economyTuning.healCost,
+      healed: this.shopHealed || this.player.hp >= this.player.maxHp,
+      loadout: this.loadout(),
+      stage: this.stage,
+    };
+    this.screens.showShop(view, focus);
+    this.loadoutDirty = true;
+  }
+
+  /** Why a Mod fits the current build, shown on its shop card. */
+  private synergyHint(m: ModDef): string {
+    if (!m.synergy) return '';
+    const parts = m.synergy
+      .map((t) => [t, this.synergy.tagCount(t)] as const)
+      .filter(([, n]) => n > 0)
+      .map(([t, n]) => `${n} ${t}`);
+    return parts.length ? `You have: ${parts.join(', ')}` : '';
+  }
+
+  private buyMod(i: number): void {
+    const m = this.shopOffers[i];
+    if (this.mode !== 'shop' || !m) return;
+    const cost = this.price(m);
+    if (this.gold < cost || this.synergy.full) {
+      sfx.menuMove();
+      this.hud.toast(this.synergy.full ? 'MOD SLOTS FULL: SELL ONE FIRST' : 'NOT ENOUGH GOLD');
+      return;
+    }
+    this.gold -= cost;
+    this.synergy.add(m);
+    this.shopOffers[i] = null;
+    this.recomputeStats();
+    sfx.powerUp();
+    this.showShop(i);
+  }
+
+  private sellMod(i: number): void {
+    if (this.mode !== 'shop') return;
+    const sl = this.synergy.slots[i];
+    if (!sl) return;
+    this.gold += Math.floor(this.price(sl.def) / 2);
+    this.synergy.remove(i);
+    this.recomputeStats();
+    sfx.coin();
+    this.showShop();
+  }
+
+  private moveMod(i: number, dir: -1 | 1): void {
+    if (this.mode !== 'shop') return;
+    this.synergy.move(i, dir);
+    this.recomputeStats();
+    sfx.menuMove();
+    this.showShop();
+  }
+
+  private shopReroll(): void {
+    if (this.mode !== 'shop') return;
+    const cost = this.rerollCost;
+    if (this.gold < cost) {
+      this.hud.toast('NOT ENOUGH GOLD');
+      return;
+    }
+    this.gold -= cost;
+    this.shopRerolls++;
+    this.rollShop();
+    sfx.menuSelect();
+    this.showShop();
+  }
+
+  private shopHeal(): void {
+    if (this.mode !== 'shop' || this.shopHealed || this.gold < economyTuning.healCost) return;
+    this.gold -= economyTuning.healCost;
+    this.shopHealed = true;
+    this.player.heal(this.player.maxHp * 0.4);
+    sfx.heal();
+    this.showShop();
+  }
+
+  private shopDone(): void {
+    if (this.mode !== 'shop') return;
+    this.screens.show('none');
+    this.openPortal();
   }
 
   private openPortal(): void {
@@ -466,7 +663,7 @@ export class Game {
   private endRun(quit = false): void {
     // Every run pays something: pickups, plus kills, stages and minutes survived.
     const earned = Math.round(
-      (this.boltsRun + Math.floor(this.kills / 25) + (this.stage - 1) * 25 + Math.floor(this.runTime / 60) * 5) * this.stats.boltMul,
+      (this.gold + Math.floor(this.kills / 25) + (this.stage - 1) * 25 + Math.floor(this.runTime / 60) * 5) * this.stats.boltMul,
     );
     save.bolts += earned;
     const L = save.lifetime;
@@ -499,9 +696,10 @@ export class Game {
       maxCombo: this.maxCombo,
       bolts: earned,
       loadout: this.loadout(),
+      mods: this.synergy.slots.map((sl) => sl.def.name),
       damage: Object.entries(this.damageBy)
         .sort((a, b) => b[1] - a[1])
-        .map(([id, dmg]) => ({ name: WEAPONS[id]?.name ?? (id === 'bomb' ? 'Bomb' : 'Other'), color: WEAPONS[id]?.color ?? '#ff3df0', dmg })),
+        .map(([id, dmg]) => ({ name: this.sourceName(id), color: WEAPONS[id]?.color ?? MOD_BY_ID[id]?.color ?? '#ff3df0', dmg })),
       achievements: this.newAchievements.map((id) => ACHIEVEMENTS.find((a) => a.id === id)!.name),
     };
   }
@@ -525,6 +723,7 @@ export class Game {
       this.level++;
       this.xpNext = xpForLevel(this.level);
       this.pendingLevels++;
+      this.synergy.levelUp();
     }
   }
 
@@ -534,13 +733,13 @@ export class Game {
     for (const w of this.weapons) {
       if (w.maxed) continue;
       const next = w.def.levels[w.level];
-      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, w: 3 });
+      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, w: 3 });
     }
     if (this.weapons.length < MAX_WEAPONS) {
       for (const id of unlockedWeapons()) {
         if (this.weapons.some((w) => w.def.id === id)) continue;
         const d = WEAPONS[id];
-        cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, w: 2.4 });
+        cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, w: 2.4 });
       }
     }
     const owned = Object.keys(this.passives).length;
@@ -558,7 +757,7 @@ export class Game {
     }
     if (out.length === 0) {
       out.push(
-        { kind: 'bolts', id: 'bolts', name: 'Bolt Bag', icon: '¢', color: '#ffb627', tag: 'BONUS', text: '+25 Bolts' },
+        { kind: 'bolts', id: 'bolts', name: 'Gold Bag', icon: '\u25CF', color: '#ffb627', tag: 'BONUS', text: '+5 gold' },
         { kind: 'heal', id: 'heal', name: 'Snack', icon: '♥', color: '#ff5e7a', tag: 'BONUS', text: 'Heal 40 life' },
       );
     }
@@ -574,7 +773,7 @@ export class Game {
     this.mode = 'levelup';
     this.offers = this.buildOffers();
     sfx.levelUp();
-    this.screens.showLevelUp(this.offers, this.levelUpTitle(), this.rerollsLeft, this.loadout());
+    this.screens.showLevelUp(this.offers, this.levelUpTitle(), this.rerollsLeft, this.loadout(), this.skipGold);
   }
 
   private pickOffer(i: number): void {
@@ -587,20 +786,37 @@ export class Game {
       else this.weapons.push(createWeapon(o.id, this.scene));
     } else if (o.kind === 'passive') {
       this.passives[o.id] = (this.passives[o.id] ?? 0) + 1;
-      this.stats = computeStats(this.passives, save.workshop);
-      this.player.stats = this.stats;
+      this.recomputeStats();
       const heal = PASSIVES[o.id].healOnPick;
       if (heal) this.player.heal(heal);
-    } else if (o.kind === 'bolts') this.boltsRun += 25;
+    } else if (o.kind === 'bolts') this.gold += 5;
     else if (o.kind === 'heal') this.player.heal(40);
     this.player.hp = Math.min(this.player.hp, this.player.maxHp);
     this.loadoutDirty = true;
     sfx.powerUp();
 
+    this.finishPick(o.color);
+  }
+
+  /** Skip this level-up for gold (economy decision: power now vs. shop later). */
+  private skipLevel(): void {
+    if (this.mode !== 'levelup') return;
+    const g = this.skipGold;
+    this.gold += g;
+    sfx.coin();
+    this.dmg.spawn(this.player.x, 2.6, this.player.z, `+${g}\u25CF`, 'score');
+    this.finishPick('#ffb627');
+  }
+
+  get skipGold(): number {
+    return 2 + Math.floor(this.level / 8);
+  }
+
+  private finishPick(color: string): void {
     if (this.chestsPending > 0) this.chestsPending--;
     else this.pendingLevels--;
     const p = this.player;
-    this.particles.burst(p.x, 1, p.z, { count: 20, color: o.color, color2: '#ffffff', speed: [3, 8], size: [0.12, 0.3], life: [0.4, 0.8], up: 6, gravity: 10 });
+    this.particles.burst(p.x, 1, p.z, { count: 20, color, color2: '#ffffff', speed: [3, 8], size: [0.12, 0.3], life: [0.4, 0.8], up: 6, gravity: 10 });
     this.checkAchievements();
 
     if (this.pendingLevels > 0 || this.chestsPending > 0) {
@@ -611,7 +827,7 @@ export class Game {
     this.screens.show('none');
     this.mode = this.resumeMode;
     p.invuln = Math.max(p.invuln, 0.6);
-    this.fx.ring(p.x, p.z, 1, 8, o.color, 0.35);
+    this.fx.ring(p.x, p.z, 1, 8, color, 0.35);
     for (const e of this.enemiesInRadius(p.x, p.z, 4, this.targets)) {
       const d = Math.hypot(e.x - p.x, e.z - p.z) || 1;
       e.kx += ((e.x - p.x) / d) * 14 * (1 - e.def.knockbackResist);
@@ -624,7 +840,7 @@ export class Game {
     this.rerollsLeft--;
     this.offers = this.buildOffers();
     sfx.menuSelect();
-    this.screens.showLevelUp(this.offers, this.levelUpTitle(), this.rerollsLeft, this.loadout());
+    this.screens.showLevelUp(this.offers, this.levelUpTitle(), this.rerollsLeft, this.loadout(), this.skipGold);
   }
 
   // ------------------------------------------------------------------ achievements
@@ -686,6 +902,10 @@ export class Game {
       input.endStep();
       return;
     }
+    if (this.mode === 'shop') {
+      input.endStep();
+      return;
+    }
     if (this.mode === 'title') {
       input.endStep();
       return;
@@ -728,6 +948,11 @@ export class Game {
     if (p.update(dt, p.dead ? null : input, this.arena.colliders, wantDash && !p.dead)) this.onDash();
     this.updateFootsteps(dt);
 
+    // --- Mods: timers and live stats (moving, adrenaline...) ---
+    this.synergy.moving = p.speed > 1.2;
+    this.synergy.tick(dt);
+    this.refreshLive();
+
     // --- Spatial hash first: weapons and enemies query it ---
     this.hash.clear();
     for (const e of this.enemies.list) if (e.alive) this.hash.insert(e, e.x, e.z, e.radius);
@@ -749,6 +974,7 @@ export class Game {
     this.enemyCtx.targetAlive = !p.dead;
     this.enemies.update(dt, this.enemyCtx);
     if (!p.dead) this.contactDamage();
+    this.updateStatuses(dt);
     this.recycleFarEnemies(dt);
 
     // --- Projectiles, pickups, effects ---
@@ -779,7 +1005,7 @@ export class Game {
       if (this.boss && !this.boss.active) this.boss = null;
       if (this.director.bossSpawned && !this.boss) this.stageClear();
     } else if (this.mode === 'cleared') {
-      if (this.modeT > 2.2) this.openPortal();
+      if (this.modeT > 2.2) this.openShop();
     } else if (this.mode === 'portal') {
       if (this.portal.age > 0.5 && Math.hypot(p.x - this.portal.x, p.z - this.portal.z) < 1.3) {
         this.mode = 'transition';
@@ -826,6 +1052,7 @@ export class Game {
   private onDash(): void {
     const p = this.player;
     this.dashes++;
+    this.synergy.dash();
     sfx.dash();
     this.juice.shake(0.05);
     this.fx.ring(p.x, p.z, 1, 3, '#4fc3ff', 0.25);
@@ -957,9 +1184,13 @@ export class Game {
 
   private damage(e: Enemy, base: number, o: DamageOpts): number {
     if (!e.active || e.hp <= 0) return 0;
-    let amount = base * this.stats.damageMul;
-    if (e.frozen > 0 && e.shatter > 0) amount *= 1 + e.shatter;
+    const tags: readonly Tag[] = o.tags ?? WEAPONS[o.source]?.tags ?? [];
     const crit = !!o.canCrit && this.rng.chance(this.stats.critChance);
+    const ev = { e, source: o.source, tags, dist: Math.hypot(e.x - this.player.x, e.z - this.player.z), crit };
+    // Stats first, then Mods left to right, then statuses and crit.
+    let amount = this.synergy.damage(ev, base * this.stats.damageMul);
+    if (e.frozen > 0 && e.shatter > 0) amount *= 1 + e.shatter;
+    if (e.shockT > 0) amount *= 1 + statusTuning.shockMult + this.synergy.flags.shockMult;
     if (crit) amount *= this.stats.critMult;
     amount = Math.max(1, Math.round(amount));
     e.hp -= amount;
@@ -985,12 +1216,99 @@ export class Game {
     if (o.loud || crit) {
       this.particles.burst(hx, BULLET_Y, hz, { count: 3, color: '#ffffff', color2: e.def.bodyColor, speed: [3, 7], size: [0.1, 0.18], life: [0.12, 0.25], dir: { x: -(o.dirX ?? 0), z: -(o.dirZ ?? 0), spread: 2.4 } });
     }
-    if (e.hp <= 0) this.killEnemy(e);
+    // Statuses from the weapon's own tags, then Mod triggers.
+    if (!o.noStatus && e.hp > 0) {
+      if (tags.includes('fire')) this.ignite(e, Math.max(3, amount * 0.15));
+      if (tags.includes('shock')) this.shock(e);
+    }
+    if (!o.noStatus) {
+      this.synergy.hit(ev);
+      if (crit) this.synergy.crit(ev);
+    }
+    if (e.hp <= 0 && e.active) this.killEnemy(e, o.source);
     return amount;
   }
 
-  private killEnemy(e: Enemy): void {
+  // ------------------------------------------------------------------ statuses and combos
+
+  ignite(e: Enemy, dps: number): void {
+    if (!e.active || e.hp <= 0) return;
+    e.burnT = statusTuning.burnTime;
+    e.burnDps = Math.max(e.burnDps, dps);
+    if (e.shockT > 0) this.overload(e);
+  }
+
+  shock(e: Enemy): void {
+    if (!e.active || e.hp <= 0) return;
+    e.shockT = statusTuning.shockTime + this.synergy.flags.shockTime;
+    if (e.burnT > 0) this.overload(e);
+  }
+
+  /** Burn + Shock on the same enemy: consume both for a blast. */
+  private overload(e: Enemy): void {
+    e.burnT = e.shockT = 0;
+    e.burnDps = 0;
+    this.overloads++;
+    const m = 1 + this.synergy.flags.overloadMult;
+    if (this.overloads % 3 === 1) this.dmg.spawn(e.x, 2.2, e.z, 'OVERLOAD!', 'crit');
+    this.blast(e.x, e.z, 1.8 * Math.sqrt(m), statusTuning.overloadDamage * m, '#ffe14d', 'overload', ['explosive'], true);
+  }
+
+  /** Frozen enemy killed: ice shards burst out. */
+  private shatter(e: Enemy): void {
+    const m = 1 + this.synergy.flags.shatterMult;
+    this.particles.burst(e.x, 0.8, e.z, { count: 10, color: '#ffffff', color2: '#9fe8ff', speed: [5, 10], size: [0.1, 0.25], life: [0.2, 0.4], up: 3, gravity: 10 });
+    this.fx.ring(e.x, e.z, 1, 4, '#9fe8ff', 0.2);
+    for (const o of this.enemiesInRadius(e.x, e.z, 2, this.targets).slice()) {
+      if (o === e) continue;
+      const d = Math.hypot(o.x - e.x, o.z - e.z) || 1;
+      this.damage(o, statusTuning.shatterDamage * m, { source: 'shatter', tags: ['frost'], dirX: (o.x - e.x) / d, dirZ: (o.z - e.z) / d, knockback: 4, noStatus: true });
+    }
+  }
+
+  /** Lightning arc from an enemy through nearby ones (Mods: Crit Cascade). */
+  zap(from: Enemy, hops: number, dmg: number): void {
+    const hit = new Set<number>([from.uid]);
+    let cur: Enemy = from;
+    for (let i = 0; i < hops; i++) {
+      const next = this.nearestEnemy(cur.x, cur.z, 5, (o) => hit.has(o.uid));
+      if (!next) break;
+      hit.add(next.uid);
+      const steps = 5;
+      for (let k = 1; k < steps; k++) {
+        const t = k / steps;
+        this.particles.burst(cur.x + (next.x - cur.x) * t, 1, cur.z + (next.z - cur.z) * t, { count: 1, color: '#fff35c', color2: '#ffffff', speed: [0, 0.5], size: [0.12, 0.2], life: [0.08, 0.14] });
+      }
+      this.fx.star(next.x, 1, next.z, 1, '#fff35c', 0.1);
+      this.damage(next, dmg, { source: 'zap', tags: ['chain', 'shock'], canCrit: false, noStatus: false });
+      cur = next;
+    }
+  }
+
+  /** Burn damage ticks and status timers. */
+  private updateStatuses(dt: number): void {
+    for (const e of this.enemies.list) {
+      if (!e.active) continue;
+      if (e.shockT > 0) e.shockT -= dt;
+      if (e.burnT <= 0) continue;
+      e.burnT -= dt;
+      e.burnAcc += dt;
+      if (e.burnAcc < 0.5) continue;
+      e.burnAcc = 0;
+      if (this.rng.chance(0.5)) this.particles.burst(e.x, 0.6 + e.radius, e.z, { count: 1, color: '#ff7a2f', color2: '#ffd23f', speed: [0.2, 1], size: [0.15, 0.3], life: [0.3, 0.5], up: 2, drag: 2 });
+      this.damage(e, e.burnDps * 0.5, { source: 'burn', tags: ['fire'], noStatus: true });
+      if (e.burnT <= 0) e.burnDps = 0;
+    }
+  }
+
+  private sourceName(id: string): string {
+    const named: Record<string, string> = { bomb: 'Bomb', burn: 'Burning', shatter: 'Shatter', overload: 'Overload', zap: 'Crit Zaps', exploder: 'Enemy blasts' };
+    return WEAPONS[id]?.name ?? MOD_BY_ID[id]?.name ?? named[id] ?? 'Other';
+  }
+
+  private killEnemy(e: Enemy, source = ''): void {
     const def = e.def;
+    const wasFrozen = e.frozen > 0;
     this.kills++;
     this.combo++;
     this.comboT = scoreTuning.comboWindow;
@@ -1005,10 +1323,10 @@ export class Game {
     const big = e.elite || isBoss;
     if (big) {
       this.pickups.spawn(PickupType.Chest, e.x, e.z);
-      for (let i = 0; i < (isBoss ? 12 : 4); i++) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 2);
+      for (let i = 0; i < (isBoss ? 6 : 2); i++) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 1);
       if (e.elite) this.elitesRun++;
     } else {
-      if (this.rng.chance(dropTuning.boltChance)) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 1);
+      if (this.rng.chance(dropTuning.goldChance)) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 1);
       if (this.rng.chance(dropTuning.heartChance)) this.pickups.spawn(PickupType.Heart, e.x, e.z);
       if (this.rng.chance(dropTuning.magnetChance)) this.pickups.spawn(PickupType.Magnet, e.x, e.z);
     }
@@ -1035,17 +1353,27 @@ export class Game {
       }
     }
     this.enemies.kill(e);
+    // Combos and Mod triggers after the kill is resolved (they may kill more).
+    if (wasFrozen) this.shatter(e);
+    this.synergy.kill(e, source);
     if (this.kills === 300 || this.kills % 1000 === 0) this.checkAchievements();
   }
 
-  private blast(x: number, z: number, r: number, base: number, color: string, source: string): void {
+  blast(x: number, z: number, r: number, base: number, color: string, source: string, tags: Tag[] = ['explosive'], noStatus = false): void {
+    const explosive = tags.includes('explosive');
+    if (explosive) r *= 1 + this.synergy.flags.explosiveArea * this.synergy.tagCount('explosive');
     sfx.explode();
     this.fx.ring(x, z, 1, r * 2, color, 0.25);
     this.fx.star(x, 1, z, r, color, 0.12);
     this.particles.burst(x, 0.6, z, { count: 8, color, color2: '#fff35c', speed: [3, 8], size: [0.15, 0.3], life: [0.2, 0.45], up: 4, gravity: 12 });
-    for (const e of this.enemiesInRadius(x, z, r, this.targets).slice()) {
+    const targets = this.enemiesInRadius(x, z, r, this.targets).slice();
+    // Napalm: an explosion that catches a burning enemy sets the whole blast alight.
+    const napalm = explosive && !noStatus && targets.some((e) => e.burnT > 0);
+    if (napalm) this.fx.ring(x, z, 1, r * 2.2, '#ff5e3a', 0.35);
+    for (const e of targets) {
       const d = Math.hypot(e.x - x, e.z - z) || 1;
-      this.damage(e, base, { source, dirX: (e.x - x) / d, dirZ: (e.z - z) / d, knockback: 8, canCrit: true });
+      this.damage(e, base, { source, tags, dirX: (e.x - x) / d, dirZ: (e.z - z) / d, knockback: 8, canCrit: true, noStatus });
+      if (napalm && e.active) this.ignite(e, statusTuning.napalmDps);
     }
   }
 
@@ -1112,6 +1440,7 @@ export class Game {
     const d = Math.hypot(dx, dz) || 1;
     if (!p.hurt(dmg, dx / d, dz / d)) return;
     this.damagedThisStage = true;
+    this.synergy.hurt();
     if (this.combo >= 25) this.dmg.spawn(p.x, 3, p.z, 'COMBO BREAK', 'player');
     this.combo = 0;
     sfx.playerHurt();
@@ -1154,13 +1483,16 @@ export class Game {
     switch (type) {
       case PickupType.Gem:
         this.gainXp(value);
+        this.synergy.gem(value);
         sfx.gem();
         break;
-      case PickupType.Bolt:
-        this.boltsRun += value;
+      case PickupType.Bolt: {
+        const g = Math.max(1, Math.round(value * (1 + this.synergy.flags.goldMul)));
+        this.gold += g;
         sfx.coin();
-        this.dmg.spawn(p.x, 2.4, p.z, `+${value}¢`, 'score');
+        this.dmg.spawn(p.x, 2.4, p.z, `+${g}\u25CF`, 'score');
         break;
+      }
       case PickupType.Heart: {
         const h = p.heal(30);
         sfx.heal();
@@ -1174,7 +1506,7 @@ export class Game {
         break;
       case PickupType.Chest:
         this.chestsPending++;
-        this.boltsRun += 10;
+        this.gold += 2;
         sfx.chest();
         this.hud.flash(0.3);
         break;
@@ -1267,7 +1599,7 @@ export class Game {
   render(alpha: number, frameDt: number): void {
     const p = this.player;
     const input = this.input;
-    const frozen = this.paused || this.mode === 'levelup';
+    const frozen = this.paused || this.mode === 'levelup' || this.mode === 'shop';
     const a = this.juice.hitStop > 0 || frozen ? 1 : alpha;
     const rdt = frozen ? 0 : frameDt;
     if (!frozen) {
@@ -1319,6 +1651,7 @@ export class Game {
       this.loadoutDirty = false;
       this.hud.setLoadout(this.loadout());
     }
+    this.hud.setMods(this.synergy.slots.map((sl, i) => ({ icon: sl.def.icon, color: sl.def.color, name: sl.def.name, readout: this.synergy.readout(i), cursed: !!sl.def.cursed })));
     this.dmg.render(rdt, this.cam.camera);
     const boss = this.boss && this.boss.active ? this.boss : null;
     this.hud.update(
@@ -1336,7 +1669,7 @@ export class Game {
         xp01: this.xp / this.xpNext,
         timeLeft: !this.director.bossSpawned ? this.director.remaining : this.boss ? -1 : -2,
         kills: this.kills,
-        bolts: this.boltsRun,
+        gold: this.gold,
         boss: boss ? { name: boss.def.name, hp01: Math.max(0, boss.hp / boss.maxHp) } : null,
         lowHp: !p.dead && p.hp / p.maxHp <= 0.3 && this.mode !== 'title',
       },

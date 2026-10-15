@@ -17,7 +17,7 @@ export interface HudState {
   xp01: number;
   timeLeft: number; // seconds; -1 = boss fight, -2 = stage cleared
   kills: number;
-  bolts: number;
+  gold: number;
   boss: { name: string; hp01: number } | null;
   lowHp: boolean;
 }
@@ -62,6 +62,7 @@ export class Hud {
          <div id="score">0</div>
          <div id="combo"><div class="mult">x1</div><div class="num"></div><div class="cbar"><div></div></div></div>
          <div id="loadout"><div class="row weapons"></div><div class="row passives"></div></div>
+         <div id="mods"></div>
          <div id="meters">
            <div id="dashpip" class="pip"><span>DASH</span></div>
            <div id="bombpip" class="pip"><span>BOMB</span></div>
@@ -142,6 +143,21 @@ export class Hud {
     this.el('#loadout .passives').innerHTML = html('passive');
   }
 
+  private lastMods = '';
+
+  /** Owned Mods, bottom-right, with live readouts (only rebuilt when the markup changes). */
+  setMods(mods: { icon: string; color: string; name: string; readout: string; cursed: boolean }[]): void {
+    const html = mods
+      .map(
+        (m) =>
+          `<div class="mod ${m.cursed ? 'cursed' : ''}" style="--c:${m.color}" title="${m.name}"><span>${m.icon}</span>${m.readout ? `<i>${m.readout}</i>` : ''}</div>`,
+      )
+      .join('');
+    if (html === this.lastMods) return;
+    this.lastMods = html;
+    this.el('#mods').innerHTML = html;
+  }
+
   update(s: HudState, dt: number): void {
     // XP
     this.el('#xpbar .fill').style.transform = `scaleX(${Math.min(1, s.xp01)})`;
@@ -172,7 +188,7 @@ export class Hud {
       this.lastHp = s.hp;
     }
     this.text('#runinfo .kills', `☠ ${s.kills}`);
-    this.text('#runinfo .bolts', `¢ ${s.bolts}`);
+    this.text('#runinfo .bolts', `● ${s.gold}`);
 
     // Timer / boss
     this.text('#timer .clock', s.timeLeft >= 0 ? fmtClock(s.timeLeft) : s.timeLeft === -1 ? 'BOSS!' : 'CLEAR!');
