@@ -17,7 +17,16 @@ export type VfxEvent =
   | ['n', number, number, number, string | number, NumKind]
   | ['a', number, number, string, number]
   | ['k', number, number, number]
-  | ['h', 'banner' | 'toast' | 'flash', string, string, number];
+  | ['h', 'banner' | 'toast' | 'flash', string, string, number]
+  | ['z', number, number, number, number];
+
+export interface DangerZone {
+  x: number;
+  z: number;
+  r: number;
+  t: number;
+  life: number;
+}
 
 export type NumKind = 'hit' | 'crit' | 'player' | 'heal' | 'score';
 
@@ -28,6 +37,8 @@ export interface VfxTargets {
   dmg: DamageNumbers;
   juice: Juice;
   hud: Hud;
+  /** Danger zones drawn on the ground (telegraphed strikes). */
+  zones: DangerZone[];
   listener(): { x: number; z: number };
 }
 
@@ -80,6 +91,12 @@ export class Vfx {
   shake(x: number, z: number, amount: number): void {
     this.playShake(x, z, amount);
     this.rec(['k', x, z, amount]);
+  }
+
+  /** A red danger zone on the ground for `life` seconds, with a ring closing in. */
+  zone(x: number, z: number, r: number, life: number): void {
+    this.t.zones.push({ x, z, r, t: life, life });
+    this.rec(['z', x, z, r, life]);
   }
 
   /** Team-wide HUD messages. */
@@ -139,6 +156,9 @@ export class Vfx {
       case 'k':
         this.playShake(e[1], e[2], e[3]);
         break;
+      case 'z':
+        this.t.zones.push({ x: e[1], z: e[2], r: e[3], t: e[4], life: e[4] });
+        break;
       case 'h':
         if (e[1] === 'banner') this.t.hud.showBanner(e[2], e[3], e[4]);
         else if (e[1] === 'toast') this.t.hud.toast(e[2], e[4]);
@@ -157,6 +177,7 @@ export class Vfx {
       case 'r':
       case 'a':
       case 'k':
+      case 'z':
         return [e[1], e[2]];
       default:
         return [NaN, NaN];

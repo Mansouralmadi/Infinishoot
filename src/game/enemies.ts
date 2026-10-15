@@ -9,7 +9,8 @@ import { resolveCircleVsBoxes, type AABB } from '../world/collision';
 import { commit } from '../render/instancing';
 
 export type EnemyState = 'spawning' | 'move' | 'windup' | 'attack' | 'recover';
-type BossAction = 'ring' | 'summon' | 'slam';
+export type BossAction = 'ring' | 'summon' | 'slam' | 'charge' | 'spiral' | 'waves' | 'volley' | 'rain';
+export const BOSS_ACTIONS: BossAction[] = ['ring', 'summon', 'slam', 'charge', 'spiral', 'waves', 'volley', 'rain'];
 
 const SPAWN_TIME = 0.45;
 const BATCH_CAP = 700; // max simultaneous enemies of one type
@@ -118,6 +119,41 @@ function buildModel(def: EnemyDef, add: Part): void {
       add(new THREE.BoxGeometry(r * 0.5, r * 0.25, r * 0.7), DARK, r * 0.5, r * 0.12, 0.1);
       break;
     }
+    case 'rex': {
+      // Armoured dino-rhino: chunky body, horned head, back spikes, tail, stomping legs.
+      add(new THREE.BoxGeometry(r * 1.5, r * 1.0, r * 1.9), B, 0, r * 0.95, -r * 0.1);
+      add(new THREE.BoxGeometry(r * 1.2, r * 0.85, r * 0.9), B, 0, r * 1.15, r * 1.15);
+      add(new THREE.BoxGeometry(r * 1.0, r * 0.3, r * 0.6), '#ffffff', 0, r * 0.8, r * 1.5);
+      add(new THREE.ConeGeometry(r * 0.22, r * 0.9, 6).rotateX(Math.PI / 2.6), A, 0, r * 1.55, r * 1.65);
+      add(new THREE.ConeGeometry(r * 0.12, r * 0.45, 5).rotateX(Math.PI / 2.6), A, 0, r * 1.15, r * 1.75);
+      for (let k = 0; k < 4; k++) add(new THREE.ConeGeometry(r * 0.2, r * 0.55, 4), A, 0, r * 1.6, r * (0.6 - k * 0.45));
+      add(new THREE.ConeGeometry(r * 0.35, r * 1.3, 6).rotateX(-Math.PI / 2), B, 0, r * 0.9, -r * 1.6);
+      for (const sx of [-1, 1]) {
+        add(new THREE.BoxGeometry(r * 0.45, r * 0.6, r * 0.5), DARK, sx * r * 0.55, r * 0.3, r * 0.55);
+        add(new THREE.BoxGeometry(r * 0.45, r * 0.6, r * 0.5), DARK, sx * r * 0.55, r * 0.3, -r * 0.65);
+        add(new THREE.SphereGeometry(r * 0.17, 6, 4), '#ffffff', sx * r * 0.45, r * 1.35, r * 1.55);
+        add(new THREE.SphereGeometry(r * 0.08, 5, 4), DARK, sx * r * 0.45, r * 1.37, r * 1.7);
+      }
+      break;
+    }
+    case 'queen': {
+      // Flying hive queen: striped body, crown, big wings, stinger.
+      add(new THREE.SphereGeometry(r * 0.75, 12, 8), B, 0, r * 1.3, r * 0.35);
+      add(new THREE.SphereGeometry(r * 0.9, 12, 8).scale(1, 0.9, 1.25), B, 0, r * 1.1, -r * 0.9);
+      for (let k = 0; k < 3; k++) add(new THREE.CylinderGeometry(r * 0.88 - k * 0.12 * r, r * 0.88 - k * 0.12 * r, r * 0.16, 12).rotateX(Math.PI / 2), DARK, 0, r * 1.1, -r * (0.5 + k * 0.42));
+      add(new THREE.ConeGeometry(r * 0.25, r * 0.8, 6).rotateX(-Math.PI / 2), DARK, 0, r * 1.05, -r * 2.25);
+      eye(r * 1.45, r * 0.9, 0.9);
+      add(new THREE.CylinderGeometry(r * 0.38, r * 0.42, r * 0.28, 8), A, 0, r * 2.05, r * 0.35);
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * Math.PI * 2 + 0.4;
+        add(new THREE.ConeGeometry(r * 0.09, r * 0.35, 4), A, Math.cos(a) * r * 0.32, r * 2.32, r * 0.35 + Math.sin(a) * r * 0.32);
+      }
+      for (const sx of [-1, 1]) {
+        add(new THREE.BoxGeometry(r * 1.7, 0.06, r * 1.0).rotateZ(sx * -0.35), '#c8f4ff', sx * r * 1.3, r * 1.9, -r * 0.3);
+        add(new THREE.BoxGeometry(r * 1.2, 0.06, r * 0.7).rotateZ(sx * -0.2), '#e8fbff', sx * r * 1.1, r * 1.6, -r * 0.9);
+      }
+      break;
+    }
   }
 }
 
@@ -194,6 +230,12 @@ export class Enemy {
   targetX = 0;
   targetZ = 0;
   strafe = 1;
+  /** Boss attack counters: sub-attacks left, spiral angle, pattern timer. */
+  burst = 0;
+  spin = 0;
+  timerB = 0;
+  /** Boss attack queue position. */
+  step = 0;
   /** Squash-and-stretch spring: displacement and velocity. */
   sq = 0;
   sqV = 0;
@@ -218,7 +260,9 @@ export class Enemy {
     this.flash = this.frozen = this.slowT = this.shatter = 0;
     this.burnT = this.burnDps = this.burnAcc = this.shockT = this.burnOwner = 0;
     this.sq = this.sqV = this.hopY = 0;
-    this.timerA = this.def.behavior === 'boss' ? 3 : 1 + Math.random() * 2;
+    this.timerA = this.def.boss ? 3 : 1 + Math.random() * 2;
+    this.burst = this.spin = this.timerB = this.step = 0;
+    this.action = 'ring';
     this.strafe = Math.random() < 0.5 ? -1 : 1;
   }
 
@@ -250,6 +294,8 @@ export interface EnemyCtx {
   spawnChild(defId: string, x: number, z: number, parent: Enemy): void;
   detonate(e: Enemy): void;
   slam(e: Enemy): void;
+  /** Mark a ground strike: telegraphed, then hits players inside after `delay`. */
+  strike(x: number, z: number, r: number, delay: number, damage: number): void;
 }
 
 // ------------------------------------------------------------------ rendering helpers
@@ -279,6 +325,9 @@ class GroundDecals {
   readonly markers: THREE.InstancedMesh;
   readonly lines: THREE.InstancedMesh;
   readonly zones: THREE.InstancedMesh;
+  /** Filled danger discs (boss strike zones). */
+  readonly discs: THREE.InstancedMesh;
+  private discMat: THREE.MeshBasicMaterial;
   private markerMat: THREE.MeshBasicMaterial;
   private dangerMat: THREE.MeshBasicMaterial;
 
@@ -295,7 +344,9 @@ class GroundDecals {
       64,
     );
     this.zones = new THREE.InstancedMesh(new THREE.RingGeometry(0.86, 1, 32).rotateX(-Math.PI / 2), this.dangerMat, 64);
-    for (const m of [this.shadows, this.markers, this.lines, this.zones]) {
+    this.discMat = new THREE.MeshBasicMaterial({ color: '#ff2d4a', transparent: true, opacity: 0.3, depthWrite: false });
+    this.discs = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2), this.discMat, 32);
+    for (const m of [this.shadows, this.markers, this.lines, this.zones, this.discs]) {
       m.frustumCulled = false;
       m.count = 0;
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -307,6 +358,7 @@ class GroundDecals {
   setPulse(time: number): void {
     this.markerMat.opacity = 0.5 + 0.5 * Math.sin(time * 25);
     this.dangerMat.opacity = 0.35 + 0.25 * Math.sin(time * 30);
+    this.discMat.opacity = 0.28 + 0.1 * Math.sin(time * 30);
   }
 }
 
@@ -325,6 +377,8 @@ export class Enemies {
   private up = new THREE.Vector3(0, 1, 0);
   private alive = 0;
   private counts = new Map<string, number>();
+  /** Danger zones to draw this frame (owned by the game's effects bus). */
+  zones: { x: number; z: number; r: number; t: number; life: number }[] = [];
 
   constructor(private scene: THREE.Scene) {
     this.decals = new GroundDecals(scene, 2048);
@@ -534,12 +588,22 @@ export class Enemies {
           wantX = e.vx;
           wantZ = e.vz;
           break;
+        case 'rex':
+          rigid = this.updateRex(e, dt, ctx, nx, nz, dist, speed);
+          wantX = e.vx;
+          wantZ = e.vz;
+          break;
+        case 'queen':
+          this.updateQueen(e, dt, ctx, nx, nz, dist, speed);
+          wantX = e.vx;
+          wantZ = e.vz;
+          break;
       }
 
       // Separation from neighbours so crowds spread out instead of stacking.
       let sx = 0;
       let sz = 0;
-      if (e.def.behavior !== 'boss') {
+      if (!e.def.boss) {
         const r = e.radius;
         ctx.hash.query(e.x, e.z, r * 2, (o) => {
           if (o === e || !o.alive) return;
@@ -549,7 +613,7 @@ export class Enemies {
           const min = r + o.radius;
           if (d2 > 0.0001 && d2 < min * min) {
             const d = Math.sqrt(d2);
-            const push = ((min - d) / min) * (o.def.behavior === 'boss' ? 3 : 1);
+            const push = ((min - d) / min) * (o.def.boss ? 3 : 1);
             sx += (ox / d) * push;
             sz += (oz / d) * push;
           }
@@ -564,7 +628,8 @@ export class Enemies {
       e.kz *= kd;
       e.x += (e.vx + e.kx + sx * 7) * dt;
       e.z += (e.vz + e.kz + sz * 7) * dt;
-      if (e.hopY <= 0 && resolveCircleVsBoxes(e, e.radius, ctx.colliders) && rigid && e.def.behavior === 'charger') {
+      const walled = e.def.behavior !== 'queen' && e.hopY <= 0 && resolveCircleVsBoxes(e, e.radius, ctx.colliders);
+      if (walled && rigid && e.def.behavior === 'charger') {
         // Rhinos stop (and wobble) when they hit a wall mid-charge.
         this.enter(e, 'recover', e.def.charge!.recover, -7);
       }
@@ -661,13 +726,171 @@ export class Enemies {
     return false;
   }
 
+  /**
+   * Rampage Rex: stomps after you, then cycles a chain of three charges (each
+   * telegraphed by a ground line), a spinning bullet spiral, and expanding
+   * shockwave rings. Returns true while charging.
+   */
+  private updateRex(e: Enemy, dt: number, ctx: EnemyCtx, nx: number, nz: number, dist: number, speed: number): boolean {
+    const CHARGE_SPEED = 24;
+    const CHARGE_TIME = 0.5;
+    if (e.state === 'move') {
+      e.facing = Math.atan2(nx, nz);
+      e.vx = nx * speed;
+      e.vz = nz * speed;
+      e.timerA -= dt;
+      if (e.timerA <= 0 && ctx.targetAlive) {
+        const order: BossAction[] = ['charge', 'spiral', 'charge', 'waves'];
+        e.action = dist > 13 ? 'charge' : order[e.step++ % order.length];
+        e.vx = e.vz = 0;
+        if (e.action === 'charge') {
+          e.burst = 3;
+          this.lockOn(e, nx, nz, nx, nz);
+          this.enter(e, 'windup', 0.85, -6, ctx);
+        } else this.enter(e, 'windup', 0.7, -5, ctx);
+      }
+      return false;
+    }
+    if (e.state === 'windup') {
+      e.vx = e.vz = 0;
+      // Charges keep aiming during the first half of the wind-up.
+      if (e.action === 'charge' && e.t > 0.3) this.lockOn(e, nx, nz, nx, nz);
+      if (e.t > 0) return false;
+      if (e.action === 'charge') this.enter(e, 'attack', CHARGE_TIME, 9);
+      else if (e.action === 'spiral') {
+        e.spin = Math.atan2(nz, nx);
+        e.timerB = 0;
+        this.enter(e, 'attack', 2.6, 6);
+      } else {
+        e.burst = 3;
+        e.timerB = 0;
+        this.enter(e, 'attack', 1.5, 6);
+      }
+      return false;
+    }
+    if (e.state === 'attack') {
+      if (e.action === 'charge') {
+        e.vx = e.lungeX * CHARGE_SPEED;
+        e.vz = e.lungeZ * CHARGE_SPEED;
+        if (e.t <= 0) {
+          e.vx = e.vz = 0;
+          if (--e.burst > 0) {
+            this.lockOn(e, nx, nz, nx, nz);
+            this.enter(e, 'windup', 0.45, -5, ctx);
+          } else this.enter(e, 'recover', 1.1, -8);
+        }
+        return true;
+      }
+      e.vx = e.vz = 0;
+      e.timerB -= dt;
+      if (e.action === 'spiral') {
+        // Three arms turning steadily: walk around it, not through it.
+        while (e.timerB <= 0) {
+          e.timerB += 0.1;
+          for (let k = 0; k < 3; k++) {
+            const a = e.spin + (k / 3) * Math.PI * 2;
+            ctx.fireBullet(e, Math.cos(a), Math.sin(a), 7, 12);
+          }
+          e.spin += 0.24;
+        }
+      } else if (e.timerB <= 0 && e.burst > 0) {
+        // Shockwave rings with a gap that rotates each wave.
+        e.timerB = 0.5;
+        e.burst--;
+        e.squash(-6);
+        const n = 22;
+        const gap = Math.atan2(nz, nx) + e.burst * 1.3;
+        for (let i = 0; i < n; i++) {
+          const a = gap + ((i + 1.5) / (n + 2)) * Math.PI * 2;
+          ctx.fireBullet(e, Math.cos(a), Math.sin(a), 6.5, 14);
+        }
+      }
+      if (e.t <= 0) this.enter(e, 'recover', 0.9, 6);
+      return false;
+    }
+    e.vx = e.vz = 0;
+    if (e.t <= 0) {
+      e.state = 'move';
+      e.timerA = 1.8;
+    }
+    return false;
+  }
+
+  /**
+   * Hive Queen: hovers at range and circles you, firing aimed fans, raining
+   * telegraphed strikes around you, and calling in Zippies.
+   */
+  private updateQueen(e: Enemy, dt: number, ctx: EnemyCtx, nx: number, nz: number, dist: number, speed: number): void {
+    const tgt = ctx.target;
+    e.facing = Math.atan2(nx, nz);
+    e.timerB += dt;
+    e.hopY = 1.4 + Math.sin(e.timerB * 3) * 0.3;
+    if (e.state === 'move') {
+      const radial = dist > 10 ? 1 : dist < 7 ? -1 : 0;
+      e.vx = (nx * radial - nz * e.strafe * 0.8) * speed;
+      e.vz = (nz * radial + nx * e.strafe * 0.8) * speed;
+      e.timerA -= dt;
+      if (e.timerA <= 0 && ctx.targetAlive) {
+        const order: BossAction[] = ['volley', 'rain', 'volley', 'summon'];
+        e.action = order[e.step++ % order.length];
+        if (Math.random() < 0.3) e.strafe *= -1;
+        this.enter(e, 'windup', e.action === 'rain' ? 0.5 : 0.6, -5, ctx);
+      }
+      return;
+    }
+    e.vx *= 0.9;
+    e.vz *= 0.9;
+    if (e.state === 'windup') {
+      if (e.t > 0) return;
+      if (e.action === 'volley') {
+        e.burst = 3;
+        e.spin = 0;
+        this.enter(e, 'attack', 1.2, 4);
+      } else if (e.action === 'rain') {
+        ctx.strike(tgt.x, tgt.z, 2.2, 1.1, 18);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + Math.random();
+          const d = 3.5 + Math.random() * 3;
+          ctx.strike(tgt.x + Math.cos(a) * d, tgt.z + Math.sin(a) * d, 2.2, 1.1 + i * 0.12, 18);
+        }
+        this.enter(e, 'recover', 1.0, 6);
+      } else {
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          ctx.spawnChild('zippy', e.x + Math.cos(a) * 2.5, e.z + Math.sin(a) * 2.5, e);
+        }
+        this.enter(e, 'recover', 0.8, 8);
+      }
+      return;
+    }
+    if (e.state === 'attack') {
+      e.spin -= dt;
+      if (e.spin <= 0 && e.burst > 0) {
+        e.spin = 0.35;
+        e.burst--;
+        const base = Math.atan2(nz, nx);
+        for (let i = 0; i < 7; i++) {
+          const a = base + (i / 6 - 0.5) * 0.9;
+          ctx.fireBullet(e, Math.cos(a), Math.sin(a), 9.5, 13);
+        }
+        e.squash(5);
+      }
+      if (e.t <= 0) this.enter(e, 'recover', 0.6, 4);
+      return;
+    }
+    if (e.t <= 0) {
+      e.state = 'move';
+      e.timerA = 1.6;
+    }
+  }
+
   // ---------------------------------------------------------------- render
 
   /** Write every active enemy into its type's instanced mesh, plus ground decals. */
   render(alpha: number, time: number): void {
     for (const b of this.batches.values()) b.mesh.count = 0;
     const d = this.decals;
-    d.shadows.count = d.markers.count = d.lines.count = d.zones.count = 0;
+    d.shadows.count = d.markers.count = d.lines.count = d.zones.count = d.discs.count = 0;
     d.setPulse(time);
 
     for (const e of this.list) {
@@ -693,8 +916,8 @@ export class Enemies {
 
       // Telegraphs drawn on the ground.
       if (e.state === 'windup' && e.frozen <= 0) {
-        if (e.def.behavior === 'charger') {
-          const C = e.def.charge!;
+        if (e.def.behavior === 'charger' || (e.def.behavior === 'rex' && e.action === 'charge')) {
+          const C = e.def.charge ?? { speed: 24, duration: 0.5 };
           const len = C.speed * C.duration + 1;
           this.q.setFromAxisAngle(this.up, Math.atan2(e.lungeX, e.lungeZ));
           this.m4.compose(this.v.set(x, 0.04, z), this.q, this.s.set(e.radius * 1.6, 1, len));
@@ -737,10 +960,20 @@ export class Enemies {
       d.shadows.setMatrixAt(d.shadows.count++, this.m4);
     }
 
+    for (const zn of this.zones) {
+      if (d.zones.count >= 62 || d.discs.count >= 32) break;
+      this.m4.makeScale(zn.r, 1, zn.r).setPosition(zn.x, 0.045, zn.z);
+      d.discs.setMatrixAt(d.discs.count++, this.m4);
+      this.m4.makeScale(zn.r, 1, zn.r).setPosition(zn.x, 0.05, zn.z);
+      d.zones.setMatrixAt(d.zones.count++, this.m4);
+      const k = Math.max(0.05, zn.t / zn.life) * zn.r;
+      this.m4.makeScale(k, 1, k).setPosition(zn.x, 0.05, zn.z);
+      d.zones.setMatrixAt(d.zones.count++, this.m4);
+    }
     for (const b of this.batches.values()) {
       commit(b.mesh.instanceMatrix, b.mesh.count);
       commit(b.flash, b.mesh.count);
     }
-    for (const m of [d.shadows, d.markers, d.lines, d.zones]) commit(m.instanceMatrix, m.count);
+    for (const m of [d.shadows, d.markers, d.lines, d.zones, d.discs]) commit(m.instanceMatrix, m.count);
   }
 }

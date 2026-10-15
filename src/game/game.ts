@@ -208,6 +208,8 @@ export class Game implements HeroWorld {
   private tmp = new THREE.Vector3();
   private scratch: Enemy[] = [];
   private shownCharge = 0;
+  /** Telegraphed ground strikes (Hive Queen) counting down. */
+  private strikes: { x: number; z: number; r: number; t: number; dmg: number }[] = [];
 
   constructor(
     private input: Input,
@@ -235,6 +237,7 @@ export class Game implements HeroWorld {
       dmg: this.dmg,
       juice: this.juice,
       hud: this.hud,
+      zones: this.enemies.zones,
       listener: () => this.heroes[this.local]?.player ?? { x: 0, z: 0 },
     });
     this.screens = new Screens(hudRoot, {
@@ -372,7 +375,7 @@ export class Game implements HeroWorld {
       hash: this.hash,
       colliders: this.arena.colliders,
       onWindup: (e) => {
-        if (e.def.behavior === 'boss') this.vfx.sound('bossWindup', e.x, e.z);
+        if (e.def.boss) this.vfx.sound('bossWindup', e.x, e.z);
         else if (e.def.behavior !== 'spawner') this.vfx.sound('telegraph', e.x, e.z);
       },
       fireBullet: (e, dx, dz, speed, damage) => {
@@ -400,6 +403,10 @@ export class Game implements HeroWorld {
       },
       detonate: (e) => this.detonate(e),
       slam: (e) => this.bossSlam(e),
+      strike: (x, z, r, delay, damage) => {
+        this.strikes.push({ x, z, r, t: delay, dmg: damage * this.director.dmgMul });
+        this.vfx.zone(x, z, r, delay);
+      },
     };
   }
 
@@ -423,6 +430,8 @@ export class Game implements HeroWorld {
     this.portal.close();
     this.juice.reset();
     this.boss = null;
+    this.strikes.length = 0;
+    this.enemies.zones.length = 0;
     for (const h of this.heroes) h.bombT = -1;
   }
 
@@ -980,6 +989,7 @@ export class Game implements HeroWorld {
     this.enemies.update(dt, this.enemyCtx);
     for (const h of this.heroes) if (!h.player.dead && !h.left) this.contactDamage(h);
     this.updateStatuses(dt);
+    this.updateStrikes(dt);
     this.recycleFarEnemies(dt);
 
     this.updateBullets(dt);
@@ -1237,7 +1247,7 @@ export class Game implements HeroWorld {
     const alive = this.aliveHeroes;
     if (!alive.length) return;
     for (const e of this.enemies.list) {
-      if (!e.alive || e.elite || e.def.behavior === 'boss' || e.def.behavior === 'spawner') continue;
+      if (!e.alive || e.elite || e.def.boss || e.def.behavior === 'spawner') continue;
       if (alive.some((h) => Math.hypot(e.x - h.player.x, e.z - h.player.z) < RECYCLE_DIST)) continue;
       const pos = this.ringPoint(18, 24, e.radius + 0.2);
       if (!pos) continue;
@@ -1412,7 +1422,7 @@ export class Game implements HeroWorld {
 
     // Drops
     this.pickups.spawn(PickupType.Gem, e.x, e.z, xp);
-    const isBoss = def.behavior === 'boss';
+    const isBoss = !!def.boss;
     const big = e.elite || isBoss;
     if (big) {
       // Every hero gets a chest from bosses; elites drop one.
@@ -1517,6 +1527,23 @@ export class Game implements HeroWorld {
       this.damage(o, 40, { source: 'exploder', dirX: (o.x - e.x) / d, dirZ: (o.z - e.z) / d, knockback: 10 }, this.hero);
     }
     if (e.active) this.killEnemy(e, 'exploder', null);
+  }
+
+  private updateStrikes(dt: number): void {
+    for (let i = this.strikes.length - 1; i >= 0; i--) {
+      const s = this.strikes[i];
+      s.t -= dt;
+      if (s.t > 0) continue;
+      this.strikes.splice(i, 1);
+      this.vfx.ring(s.x, s.z, 1, (s.r * 2.2) / 0.46 / 2, '#ff7a2f', 0.3);
+      this.vfx.star(s.x, 0.8, s.z, s.r * 1.2, '#ffb627', 0.12);
+      this.vfx.burst(s.x, 0.4, s.z, { count: 10, color: '#ff3df0', color2: '#ffd23f', speed: [3, 8], size: [0.15, 0.3], life: [0.25, 0.5], up: 6, gravity: 14 });
+      this.vfx.sound('explode', s.x, s.z);
+      this.vfx.shake(s.x, s.z, 0.2);
+      for (const h of this.aliveHeroes) {
+        if (Math.hypot(h.player.x - s.x, h.player.z - s.z) < s.r + h.player.radius * 0.6) this.hurtHero(h, s.dmg, s.x, s.z);
+      }
+    }
   }
 
   private bossSlam(e: Enemy): void {
@@ -1910,7 +1937,7 @@ export class Game implements HeroWorld {
     const cx = forHero.player.x;
     const cz = forHero.player.z;
     const near = (x: number, z: number) => Math.abs(x - cx) < INTEREST && Math.abs(z - cz) < INTEREST;
-    const en = this.enemies.list.filter((e) => e.active && (near(e.x, e.z) || e.def.behavior === 'boss'));
+    const en = this.enemies.list.filter((e) => e.active && (near(e.x, e.z) || e.def.boss));
     const bi: number[] = [];
     for (let i = 0; i < this.bullets.count; i++) if (near(this.bullets.x[i], this.bullets.z[i])) bi.push(i);
     const pi: number[] = [];
@@ -2200,7 +2227,7 @@ export class Game implements HeroWorld {
       e.burnT = r.burn ? 1 : 0;
       e.shockT = r.shock ? 1 : 0;
       e.flash = r.flash ? 0.07 : 0;
-      e.action = r.slam ? 'slam' : 'ring';
+      e.action = r.action;
       e.lungeX = Math.sin(r.lunge);
       e.lungeZ = Math.cos(r.lunge);
       e.targetX = r.targetX;
@@ -2268,6 +2295,11 @@ export class Game implements HeroWorld {
       h.player.render(h === local || !client ? a : netA, rdt);
     }
     p.renderPos(a, this.playerPos);
+    // Danger zones are cosmetic timers: tick them with the frame (they hold still in menus).
+    const zones = this.enemies.zones;
+    if (!this.paused && this.mode !== 'levelup' && this.mode !== 'shop') {
+      for (let i = zones.length - 1; i >= 0; i--) if ((zones[i].t -= frameDt) <= 0) zones.splice(i, 1);
+    }
     this.enemies.render(client ? netA : a, this.animTime);
     this.bullets.render(a);
     this.barrels.render(this.animTime);

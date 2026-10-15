@@ -1,5 +1,5 @@
 import type { Rng } from '../core/rng';
-import { ENEMIES, type EnemyDef } from '../data/enemies';
+import { ENEMIES, bossForStage, type EnemyDef } from '../data/enemies';
 
 /**
  * Survival director. Each stage is a timed fight: the number of enemies kept
@@ -114,7 +114,7 @@ export class Director {
 
     if (this.time >= this.duration && !this.bossSpawned) {
       this.bossSpawned = true;
-      this.queue.push({ kind: 'boss', def: ENEMIES.king });
+      this.queue.push({ kind: 'boss', def: bossForStage(this.stage) });
     }
 
     if (this.time >= this.nextElite && !this.bossSpawned) {

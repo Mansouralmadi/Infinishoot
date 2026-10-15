@@ -369,7 +369,7 @@ export const MODS: ModDef[] = [
     price: 4,
     desc: 'Elites pay 4 gold. Bosses pay 15.',
     onKill: (e, _s, api) => {
-      if (e.def.behavior === 'boss') api.addGold(15);
+      if (e.def.boss) api.addGold(15);
       else if (e.elite) api.addGold(4);
     },
   },

@@ -62,7 +62,7 @@ export function installBot(game: Game, input: Input): void {
         az += (dz / (d * d + 0.1)) * 2;
       }
     }
-    const boss = g.enemies.list.find((e) => e.active && e.def.behavior === 'boss');
+    const boss = g.enemies.list.find((e) => e.active && e.def.boss);
     let mx: number;
     let mz: number;
     if (g.mode === 'portal') {

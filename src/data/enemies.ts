@@ -1,6 +1,6 @@
 /** Enemy definitions. Pure data; behaviour lives in game/enemies.ts. */
-export type Behavior = 'chase' | 'lunge' | 'shooter' | 'charger' | 'exploder' | 'spawner' | 'boss';
-export type Model = 'bopper' | 'swarmer' | 'shooter' | 'charger' | 'exploder' | 'splitter' | 'spawner' | 'king';
+export type Behavior = 'chase' | 'lunge' | 'shooter' | 'charger' | 'exploder' | 'spawner' | 'boss' | 'rex' | 'queen';
+export type Model = 'bopper' | 'swarmer' | 'shooter' | 'charger' | 'exploder' | 'splitter' | 'spawner' | 'king' | 'rex' | 'queen';
 
 export interface EnemyDef {
   id: string;
@@ -33,6 +33,8 @@ export interface EnemyDef {
   fuse?: { range: number; time: number; radius: number; damage: number };
   split?: { into: string; count: number };
   spawn?: { into: string; count: number; interval: number };
+  /** Stage boss (boss bar, bounty, no crowd separation). */
+  boss?: boolean;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -222,6 +224,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     name: 'King Bopper',
     behavior: 'boss',
     model: 'king',
+    boss: true,
     hp: 2400,
     speed: 2.5,
     radius: 2.0,
@@ -234,4 +237,46 @@ export const ENEMIES: Record<string, EnemyDef> = {
     minMinute: -1,
     weight: 0,
   },
+  rex: {
+    id: 'rex',
+    name: 'Rampage Rex',
+    behavior: 'rex',
+    model: 'rex',
+    boss: true,
+    hp: 2700,
+    speed: 3.2,
+    radius: 2.1,
+    bodyColor: '#3de0c8',
+    accentColor: '#ff7a2f',
+    contactDamage: 25,
+    knockbackResist: 0.97,
+    xp: 100,
+    score: 12000,
+    minMinute: -1,
+    weight: 0,
+  },
+  queen: {
+    id: 'queen',
+    name: 'Hive Queen',
+    behavior: 'queen',
+    model: 'queen',
+    boss: true,
+    hp: 2300,
+    speed: 4.5,
+    radius: 1.8,
+    bodyColor: '#ffd23f',
+    accentColor: '#ff3df0',
+    contactDamage: 20,
+    knockbackResist: 0.97,
+    xp: 100,
+    score: 12000,
+    minMinute: -1,
+    weight: 0,
+  },
 };
+
+/** Bosses rotate by stage: King, Rex, Queen, King... */
+export const BOSS_ORDER = ['king', 'rex', 'queen'];
+export function bossForStage(stage: number): EnemyDef {
+  return ENEMIES[BOSS_ORDER[(Math.max(1, stage) - 1) % BOSS_ORDER.length]];
+}

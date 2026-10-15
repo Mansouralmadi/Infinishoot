@@ -120,6 +120,7 @@ export class Screens {
   <div class="wallet"></div>
   <div class="hiscores"></div>
   <div class="controls">WASD / L-stick move &middot; Mouse / R-stick aim &amp; shoot &middot; Hold right click / X charge shot &middot; Space / LB dash &middot; Q / RB bomb &middot; Esc / Start pause</div>
+  <div class="version">v${__APP_VERSION__}</div>
 </div>
 <div id="scr-pause" class="screen dim" hidden>
   <h1>PAUSED</h1>

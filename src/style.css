@@ -2093,3 +2093,12 @@ div.mod-card.sold {
     transition: none !important;
   }
 }
+
+.version {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  opacity: 0.7;
+}
