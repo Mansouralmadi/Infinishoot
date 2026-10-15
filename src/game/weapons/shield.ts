@@ -26,6 +26,8 @@ export class Shield extends Weapon {
   private arcMat: THREE.MeshBasicMaterial;
   private domeMat: THREE.MeshBasicMaterial;
   private builtArc = -1;
+  /** Arc in degrees (level + Mega Buster), synced for clients. */
+  private arc = 0;
 
   constructor(def: WeaponDef, private scene: THREE.Scene) {
     super(def);
@@ -42,11 +44,12 @@ export class Shield extends Weapon {
   }
 
   net(): number[] {
-    return [this.up, Math.round(this.energy * 100) / 100];
+    return [this.up, Math.round(this.energy * 100) / 100, this.arc];
   }
   setNet(a: number[]): void {
     this.up = a[0] ?? 0;
     this.energy = a[1] ?? 1;
+    this.arc = a[2] ?? this.p.arc;
   }
 
   private radius(ctx: WeaponCtx): number {
@@ -55,17 +58,20 @@ export class Shield extends Weapon {
 
   /** Is (dx, dz) from the player inside the shield's arc? */
   private inArc(ctx: WeaponCtx, dx: number, dz: number): boolean {
-    if (this.p.arc >= 360) return true;
+    if (this.arc >= 360) return true;
     const a = Math.atan2(dz, dx) - Math.atan2(ctx.player.aim.z, ctx.player.aim.x);
-    return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) <= (this.p.arc * Math.PI) / 360;
+    return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) <= (this.arc * Math.PI) / 360;
   }
 
   update(dt: number, ctx: WeaponCtx): void {
     const p = this.p;
     const pl = ctx.player;
-    const want = ctx.charging && !pl.dead && !this.broken;
-    if (want) this.energy -= dt / p.dur;
-    else this.energy = Math.min(1, this.energy + dt / (p.dur * 1.5));
+    // Mega Buster widens the arc; Quick Draw / Capacitor stretch the energy.
+    this.arc = Math.min(360, p.arc + 60 * ctx.flags.chargeSplit);
+    const speed = this.rightClickSpeed(ctx);
+    const want = ctx.charging && !pl.dead && !this.broken && !ctx.flags.busterDisabled;
+    if (want) this.energy -= dt / (p.dur * speed);
+    else this.energy = Math.min(1, this.energy + (dt * speed) / (p.dur * 1.5));
     if (this.energy <= 0) {
       this.energy = 0;
       this.broken = true;
@@ -76,8 +82,9 @@ export class Shield extends Weapon {
     if (!this.up) return;
 
     const r = this.radius(ctx);
-    const evo = this.evolved;
-    // Bullets: blocked, or reflected by the Mirror Aegis.
+    // Bullets: blocked, or reflected by the Mirror Aegis (or with Overcharge).
+    const reflect = this.evolved || ctx.flags.overcharge;
+    const dmg = p.dmg * ctx.stats.chargeDmg;
     const b = ctx.bullets;
     for (let i = 0; i < b.count; i++) {
       if (b.team[i] !== Team.Enemy) continue;
@@ -85,12 +92,12 @@ export class Shield extends Weapon {
       const dz = b.z[i] - pl.z;
       const d = Math.hypot(dx, dz);
       if (d > r + 0.3 || !this.inArc(ctx, dx, dz)) continue;
-      if (evo) {
+      if (reflect) {
         const sp = Math.max(14, Math.hypot(b.vx[i], b.vz[i]) * 1.5);
         b.team[i] = Team.Player;
         b.vx[i] = (dx / (d || 1)) * sp;
         b.vz[i] = (dz / (d || 1)) * sp;
-        b.damage[i] = p.dmg * 1.5;
+        b.damage[i] = dmg * 1.5;
         b.knockback[i] = 4;
         b.life[i] = 1;
         b.owner[i] = ctx.owner;
@@ -115,7 +122,7 @@ export class Shield extends Weapon {
       const dz = e.z - pl.z;
       if (!this.inArc(ctx, dx, dz)) continue;
       const d = Math.hypot(dx, dz) || 1;
-      ctx.damage(e, p.dmg, { source: 'shield', dirX: dx / d, dirZ: dz / d, knockback: p.knock, loud: true });
+      ctx.damage(e, dmg, { source: 'shield', dirX: dx / d, dirZ: dz / d, knockback: p.knock, canCrit: true, loud: true });
       n++;
     }
     if (n) ctx.sound('disc');
@@ -125,11 +132,10 @@ export class Shield extends Weapon {
     const pl = ctx.player;
     this.group.visible = this.up > 0 && !pl.dead;
     if (!this.group.visible) return;
-    const p = this.p;
     const evo = this.evolved;
-    if (this.builtArc !== p.arc) {
-      this.builtArc = p.arc;
-      const arc = (Math.min(360, p.arc) * Math.PI) / 180;
+    if (this.builtArc !== this.arc) {
+      this.builtArc = this.arc;
+      const arc = (this.arc * Math.PI) / 180;
       this.arcMesh.geometry.dispose();
       // Centred on +X (the aim direction in the group's frame), lying flat.
       this.arcMesh.geometry = new THREE.RingGeometry(0.6, 1, 24, 1, -arc / 2, arc).rotateX(-Math.PI / 2);

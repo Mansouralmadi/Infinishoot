@@ -79,7 +79,10 @@ export class Grenade extends Weapon {
   update(dt: number, ctx: WeaponCtx): void {
     this.muzzleT = Math.max(0, this.muzzleT - dt);
     const p = this.p;
-    const area = Math.sqrt(ctx.stats.areaMul);
+    // Overcharge: bigger, harder blasts. Plasma Core: right-click damage.
+    const over = ctx.flags.overcharge;
+    const area = Math.sqrt(ctx.stats.areaMul) * (over ? 1.4 : 1);
+    const dmg = p.dmg * ctx.stats.chargeDmg * (over ? 1.5 : 1);
     for (let i = this.shells.length - 1; i >= 0; i--) {
       const s = this.shells[i];
       s.t += dt;
@@ -90,10 +93,10 @@ export class Grenade extends Weapon {
       if (k < 1) continue;
       this.shells.splice(i, 1);
       if (s.small) {
-        ctx.blast(s.x, s.z, 1.8 * area, p.dmg * 0.4, this.color, 'grenade');
+        ctx.blast(s.x, s.z, 1.8 * area, dmg * 0.4, this.color, 'grenade');
         continue;
       }
-      ctx.blast(s.x, s.z, p.radius * area, p.dmg, this.color, 'grenade');
+      ctx.blast(s.x, s.z, p.radius * area, dmg, this.color, 'grenade');
       ctx.sound('explode');
       for (let b = 0; b < p.bomblets; b++) {
         const a = (b / p.bomblets) * Math.PI * 2 + ctx.rng.next() * 0.5;
@@ -104,11 +107,16 @@ export class Grenade extends Weapon {
 
     this.cd -= dt;
     const pl = ctx.player;
-    if (!ctx.charging || pl.dead || this.cd > 0) return;
-    this.cd = p.cd * ctx.stats.cooldownMul;
+    if (!ctx.charging || pl.dead || this.cd > 0 || ctx.flags.busterDisabled) return;
+    this.cd = (p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx);
     pl.muzzle(this.mz);
-    const range = p.range;
-    this.lob(this.mz.x, this.mz.z, pl.x + pl.aim.x * range, pl.z + pl.aim.z * range, false);
+    // Mega Buster: extra grenades in a fan.
+    const n = 1 + ctx.flags.chargeSplit;
+    const base = Math.atan2(pl.aim.z, pl.aim.x);
+    for (let k = 0; k < n; k++) {
+      const a = base + (n > 1 ? (k / (n - 1) - 0.5) * 0.6 : 0);
+      this.lob(this.mz.x, this.mz.z, pl.x + Math.cos(a) * p.range, pl.z + Math.sin(a) * p.range, false);
+    }
     this.muzzleT = 0.08;
     pl.recoil = 1.4;
     ctx.sound('mine');

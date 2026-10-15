@@ -4,7 +4,7 @@ import { createRetroMaterial, type RetroMaterial } from '../../render/retroMater
 import type { Enemy } from '../enemies';
 import { Weapon, type WeaponCtx } from './base';
 
-const MAX = 3;
+const MAX = 9;
 const THROW = 0.35;
 const RANGE = 7;
 const TICK = 0.25;
@@ -73,13 +73,21 @@ export class GravityWell extends Weapon {
     for (let i = 0; i + 2 < a.length; i += 3) this.wells.push({ fx: a[i], fz: a[i + 1], x: a[i], z: a[i + 1], t: a[i + 2], tickT: 0 });
   }
 
+  /** Overcharge: bigger, longer, stronger vortexes. */
   private radius(ctx: WeaponCtx): number {
-    return this.p.radius * Math.sqrt(ctx.stats.areaMul);
+    return this.p.radius * Math.sqrt(ctx.stats.areaMul) * (ctx.flags.overcharge ? 1.25 : 1);
+  }
+
+  private life(ctx: WeaponCtx): number {
+    return this.p.life + (ctx.flags.overcharge ? 1.5 : 0);
   }
 
   update(dt: number, ctx: WeaponCtx): void {
     const p = this.p;
     const r = this.radius(ctx);
+    const life = this.life(ctx);
+    const pullMul = ctx.flags.overcharge ? 1.3 : 1;
+    const dmgMul = ctx.stats.chargeDmg;
     for (let i = this.wells.length - 1; i >= 0; i--) {
       const w = this.wells[i];
       w.t += dt;
@@ -90,7 +98,7 @@ export class GravityWell extends Weapon {
         const dz = w.z - e.z;
         const d = Math.hypot(dx, dz) || 1;
         if (d < 0.4) continue;
-        const pull = p.pull * (1 - e.def.knockbackResist) * (0.4 + 0.6 * (1 - d / r)) * dt;
+        const pull = p.pull * pullMul * (1 - e.def.knockbackResist) * (0.4 + 0.6 * (1 - d / r)) * dt;
         e.x += (dx / d) * Math.min(pull, d);
         e.z += (dz / d) * Math.min(pull, d);
       }
@@ -98,11 +106,11 @@ export class GravityWell extends Weapon {
       if (w.tickT <= 0) {
         w.tickT += TICK;
         let n = 0;
-        for (const e of ctx.inRadius(w.x, w.z, r, this.hits)) ctx.damage(e, p.dps * TICK, { source: 'well', loud: n++ < 3 });
+        for (const e of ctx.inRadius(w.x, w.z, r, this.hits)) ctx.damage(e, p.dps * TICK * dmgMul, { source: 'well', loud: n++ < 3 });
       }
-      if (w.t >= THROW + p.life) {
+      if (w.t >= THROW + life) {
         if (p.implode > 0) {
-          ctx.blast(w.x, w.z, r * 0.8, p.implode, this.color, 'well');
+          ctx.blast(w.x, w.z, r * 0.8, p.implode * dmgMul, this.color, 'well');
           ctx.sound('explode');
         }
         this.wells.splice(i, 1);
@@ -111,10 +119,15 @@ export class GravityWell extends Weapon {
 
     this.cd -= dt;
     const pl = ctx.player;
-    if (!ctx.charging || pl.dead || this.cd > 0) return;
-    this.cd = p.cd * ctx.stats.cooldownMul;
-    if (this.wells.length >= MAX) this.wells.shift();
-    this.wells.push({ fx: pl.x, fz: pl.z, x: pl.x + pl.aim.x * RANGE, z: pl.z + pl.aim.z * RANGE, t: 0, tickT: 0 });
+    if (!ctx.charging || pl.dead || this.cd > 0 || ctx.flags.busterDisabled) return;
+    this.cd = (p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx);
+    // Mega Buster: extra vortexes side by side.
+    const n = 1 + ctx.flags.chargeSplit;
+    for (let k = 0; k < n; k++) {
+      const side = (k - (n - 1) / 2) * r * 1.6;
+      if (this.wells.length >= MAX) this.wells.shift();
+      this.wells.push({ fx: pl.x, fz: pl.z, x: pl.x + pl.aim.x * RANGE - pl.aim.z * side, z: pl.z + pl.aim.z * RANGE + pl.aim.x * side, t: 0, tickT: 0 });
+    }
     this.muzzleT = 0.08;
     pl.recoil = 1.2;
     ctx.sound('freeze');
@@ -122,7 +135,6 @@ export class GravityWell extends Weapon {
 
   render(_alpha: number, ctx: WeaponCtx): void {
     const evo = this.evolved;
-    const p = this.p;
     const r = this.radius(ctx);
     this.swirlMat.color.set(this.color);
     this.rimMat.color.set(this.color);
@@ -131,7 +143,7 @@ export class GravityWell extends Weapon {
       g.visible = !!w;
       if (!w) return;
       const flying = w.t < THROW;
-      const left = THROW + p.life - w.t;
+      const left = THROW + this.life(ctx) - w.t;
       // Grows in on landing, collapses in the last 0.3 s.
       const k = flying ? 0.15 : Math.min(1, (w.t - THROW) * 6, left / 0.3);
       if (flying) {

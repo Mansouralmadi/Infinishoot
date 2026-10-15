@@ -20,7 +20,7 @@ export class Scatter extends Weapon {
     this.muzzleT = Math.max(0, this.muzzleT - dt);
     this.shotCd -= dt;
     const pl = ctx.player;
-    if (!ctx.firing || pl.dead || pl.dashing) {
+    if (!ctx.firing || pl.dead || pl.dashing || ctx.flags.busterDisabled) {
       this.shotCd = Math.max(this.shotCd, 0);
       return;
     }
@@ -35,10 +35,13 @@ export class Scatter extends Weapon {
     const evo = this.evolved;
     pl.muzzle(this.mz);
     const base = Math.atan2(pl.aim.z, pl.aim.x);
-    const spread = (p.spread * Math.PI) / 180;
-    const size = Math.sqrt(ctx.stats.areaMul) * (evo ? 1.3 : 1);
-    for (let i = 0; i < p.pellets; i++) {
-      const a = base + (i / (p.pellets - 1) - 0.5) * spread + (ctx.rng.next() - 0.5) * 0.08;
+    // Buster multishot levels add pellets; Hair Trigger makes MEGA blasts.
+    const pellets = p.pellets + 3 * ctx.multishot;
+    const spread = ((p.spread + 10 * ctx.multishot) * Math.PI) / 180;
+    const mega = this.megaShot(ctx);
+    const size = Math.sqrt(ctx.stats.areaMul) * (evo ? 1.3 : 1) * (mega ? 1.6 : 1);
+    for (let i = 0; i < pellets; i++) {
+      const a = base + (i / (pellets - 1) - 0.5) * spread + (ctx.rng.next() - 0.5) * 0.08;
       const sp = p.speed * (0.85 + ctx.rng.next() * 0.3);
       ctx.bullets.spawn({
         x: this.mz.x,
@@ -48,13 +51,13 @@ export class Scatter extends Weapon {
         speed: sp,
         life: p.life,
         radius: 0.18 * size,
-        damage: p.dmg,
-        knockback: 3,
+        damage: p.dmg * (mega ? 4 : 1),
+        knockback: mega ? 8 : 3,
         team: Team.Player,
-        color: evo ? '#ff5e3a' : '#ffe9a8',
+        color: mega ? '#ff7a2f' : evo ? '#ff5e3a' : '#ffe9a8',
         width: (evo ? 0.34 : 0.2) * size,
         length: (evo ? 1.3 : 0.45) * size,
-        pierce: p.pierce,
+        pierce: p.pierce + (mega ? 5 : 0),
         owner: ctx.owner,
         kind: evo ? 3 : 2,
       });

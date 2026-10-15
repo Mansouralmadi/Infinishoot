@@ -377,6 +377,10 @@ export class Game implements HeroWorld {
       get armSecondary() {
         return hero.weapons.some((w) => w.def.slot === 'secondary');
       },
+      get multishot() {
+        const b = hero.weapons.find((w) => w.def.id === 'buster');
+        return b ? b.p.shots - 1 : 0;
+      },
       damage: (e, base, o) => this.damage(e, base, o, hero),
       nearest: (x, z, r, skip) => this.nearestEnemy(x, z, r, skip),
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),

@@ -8,7 +8,7 @@ import type { Enemy } from '../enemies';
 import { Weapon, type WeaponCtx } from './base';
 
 const MAX = 12;
-const STORM_TAGS: Tag[] = ['area', 'shock'];
+const STORM_TAGS: Tag[] = ['projectile', 'area', 'shock'];
 
 interface Orb {
   x: number;
@@ -17,6 +17,8 @@ interface Orb {
   vz: number;
   life: number;
   tickT: number;
+  /** Hair Trigger MEGA orb: bigger and x4 damage. */
+  mega: boolean;
 }
 
 /**
@@ -60,13 +62,13 @@ export class PlasmaOrb extends Weapon {
 
   net(): number[] {
     const out = [this.muzzleT];
-    for (const o of this.orbs) out.push(Math.round(o.x * 10) / 10, Math.round(o.z * 10) / 10);
+    for (const o of this.orbs) out.push(Math.round(o.x * 10) / 10, Math.round(o.z * 10) / 10, o.mega ? 1 : 0);
     return out;
   }
   setNet(a: number[]): void {
     this.muzzleT = a[0] ?? 0;
     this.orbs.length = 0;
-    for (let i = 1; i + 1 < a.length; i += 2) this.orbs.push({ x: a[i], z: a[i + 1], vx: 0, vz: 0, life: 1, tickT: 0 });
+    for (let i = 1; i + 2 < a.length; i += 3) this.orbs.push({ x: a[i], z: a[i + 1], vx: 0, vz: 0, life: 1, tickT: 0, mega: a[i + 2] === 1 });
   }
 
   update(dt: number, ctx: WeaponCtx): void {
@@ -83,8 +85,8 @@ export class PlasmaOrb extends Weapon {
       if (o.tickT <= 0) {
         o.tickT += p.tick;
         let n = 0;
-        for (const e of ctx.inRadius(o.x, o.z, r, this.hits)) {
-          ctx.damage(e, p.dmg, { source: 'orb', tags: evo ? STORM_TAGS : undefined, knockback: 0, loud: n < 3 });
+        for (const e of ctx.inRadius(o.x, o.z, o.mega ? r * 1.5 : r, this.hits)) {
+          ctx.damage(e, p.dmg * (o.mega ? 4 : 1), { source: 'orb', tags: evo ? STORM_TAGS : undefined, knockback: 0, canCrit: true, loud: n < 3 });
           if (n++ < 4) ctx.fx.star(e.x, 0.9, e.z, 0.7, this.color, 0.08);
         }
         if (n) ctx.sound('zap');
@@ -97,15 +99,22 @@ export class PlasmaOrb extends Weapon {
 
     this.shotCd -= dt;
     const pl = ctx.player;
-    if (!ctx.firing || pl.dead || pl.dashing) {
+    if (!ctx.firing || pl.dead || pl.dashing || ctx.flags.busterDisabled) {
       this.shotCd = Math.max(this.shotCd, 0);
       return;
     }
     if (this.shotCd > 0) return;
     this.shotCd += 1 / (p.rate / ctx.stats.cooldownMul);
-    if (this.orbs.length >= MAX) this.orbs.shift();
     pl.muzzle(this.mz);
-    this.orbs.push({ x: this.mz.x, z: this.mz.z, vx: pl.aim.x * p.speed, vz: pl.aim.z * p.speed, life: p.life, tickT: 0.05 });
+    // Buster multishot levels fan out extra orbs.
+    const n = 1 + ctx.multishot;
+    const mega = this.megaShot(ctx);
+    const base = Math.atan2(pl.aim.z, pl.aim.x);
+    for (let k = 0; k < n; k++) {
+      if (this.orbs.length >= MAX) this.orbs.shift();
+      const a = base + (n > 1 ? (k / (n - 1) - 0.5) * 0.35 : 0);
+      this.orbs.push({ x: this.mz.x, z: this.mz.z, vx: Math.cos(a) * p.speed, vz: Math.sin(a) * p.speed, life: p.life, tickT: 0.05, mega });
+    }
     this.muzzleT = 0.06;
     pl.recoil = 1.2;
     ctx.sound('chargeShot');
@@ -121,7 +130,7 @@ export class PlasmaOrb extends Weapon {
       if (!o) return;
       // Orbs move linearly; draw them where they'll be this frame.
       g.position.set(o.x + o.vx * (alpha - 1) * SIM_DT, BULLET_Y, o.z + o.vz * (alpha - 1) * SIM_DT);
-      const s = (evo ? 1.5 : 1) * (1 + Math.sin(ctx.time * 30 + i) * 0.08);
+      const s = (evo ? 1.5 : 1) * (o.mega ? 1.8 : 1) * (1 + Math.sin(ctx.time * 30 + i) * 0.08);
       g.scale.setScalar(s);
       g.children[2].visible = g.children[3].visible = evo;
       g.rotation.set(ctx.time * 3 + i, ctx.time * 5, 0);

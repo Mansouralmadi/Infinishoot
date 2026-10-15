@@ -1,4 +1,5 @@
 import type { ModDef } from '../game/modTypes';
+import { isRightClick } from './weapons';
 
 /**
  * Mods: bought in the shop between stages, held in ordered slots. They key
@@ -160,7 +161,7 @@ export const MODS: ModDef[] = [
     color: '#ffd23f',
     rarity: 'common',
     price: 5,
-    desc: 'Every 8th Buster shot is a MEGA shot: x4 damage, huge, pierces 5.',
+    desc: 'Every 8th left-click shot is a MEGA shot: x4 damage, huge, pierces 5.',
     synergy: ['projectile'],
     flags: { busterMegaEvery: 8 },
   },
@@ -448,7 +449,7 @@ export const MODS: ModDef[] = [
     color: '#7df9ff',
     rarity: 'common',
     price: 4,
-    desc: 'Charge shots charge 50% faster.',
+    desc: 'Right click charges 50% faster (grenades and vortexes reload faster, the shield lasts longer).',
     synergy: ['projectile'],
     flags: { chargeSpeed: 0.5 },
   },
@@ -459,9 +460,9 @@ export const MODS: ModDef[] = [
     color: '#3dffb0',
     rarity: 'common',
     price: 5,
-    desc: 'Charge shots deal x1.8.',
+    desc: 'Right-click attacks deal x1.8.',
     synergy: ['projectile'],
-    dmg: (ev) => (ev.source === 'charge' ? { mult: 1.8 } : undefined),
+    dmg: (ev) => (isRightClick(ev.source) ? { mult: 1.8 } : undefined),
   },
   {
     id: 'thunder_shot',
@@ -470,10 +471,12 @@ export const MODS: ModDef[] = [
     color: '#ffe14d',
     rarity: 'uncommon',
     price: 6,
-    desc: 'Charge shot hits Shock and arc lightning to 3 nearby enemies.',
+    desc: 'Right-click hits Shock and arc lightning to 3 nearby enemies.',
     synergy: ['projectile', 'shock', 'chain'],
     onHit: (ev, api) => {
-      if (ev.source !== 'charge') return;
+      if (!isRightClick(ev.source)) return;
+      // Vortex and shield hit many times a second: only some of their hits arc.
+      if ((ev.source === 'well' || ev.source === 'shield') && !api.chance(0.2)) return;
       api.shock(ev.e);
       api.zap(ev.e, 3, 22);
     },
@@ -485,7 +488,7 @@ export const MODS: ModDef[] = [
     color: '#3dffb0',
     rarity: 'rare',
     price: 9,
-    desc: 'Full-charge shots fire 3 at once.',
+    desc: 'Full-charge shots fire 3 at once. Grenades and vortexes come in 3s; the shield gets wider.',
     synergy: ['projectile'],
     flags: { chargeSplit: 2 },
   },
@@ -496,7 +499,7 @@ export const MODS: ModDef[] = [
     color: '#ff3df0',
     rarity: 'rare',
     price: 8,
-    desc: 'Keep holding past full for a second charge level: x2 damage, huge pierce and a bigger blast.',
+    desc: 'Keep holding past full for a second charge level: x2 damage, huge pierce and a bigger blast. Grenades and vortexes get bigger; the shield reflects bullets.',
     synergy: ['projectile', 'explosive'],
     flags: { overcharge: true },
   },
@@ -524,7 +527,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 5,
     cursed: true,
-    desc: 'Your Buster stops firing. Every other weapon x1.6 and recharges 20% faster.',
+    desc: 'Your arm cannon stops firing (left and right click). Every other weapon x1.6 and recharges 20% faster.',
     flags: { busterDisabled: true },
     stat: (s) => {
       s.cooldownMul *= 0.8;

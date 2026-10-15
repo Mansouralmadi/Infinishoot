@@ -58,6 +58,8 @@ export interface WeaponCtx {
   /** An arm weapon has taken over the Buster's rapid fire / charge shot. */
   readonly armPrimary: boolean;
   readonly armSecondary: boolean;
+  /** Extra shots from Buster levels; left-click arm weapons inherit them. */
+  readonly multishot: number;
   /** Summed Mod flags (Hair Trigger, Pacifist Core, Lightning Rod...). */
   readonly flags: ModFlags;
   /** Apply base damage (scaled by stats, crits, shatter). Returns the dealt amount. */
@@ -98,6 +100,20 @@ export abstract class Weapon {
 
   get color(): string {
     return this.evolved ? this.def.evo!.color : this.def.color;
+  }
+
+  /** Right-click arm weapons: recharge speed from Quick Draw / Capacitor. */
+  protected rightClickSpeed(ctx: WeaponCtx): number {
+    return ctx.stats.chargeSpeed * (1 + ctx.flags.chargeSpeed);
+  }
+
+  /** Left-click arm weapons: Hair Trigger makes every Nth shot a MEGA shot. */
+  private shotCount = 0;
+  protected megaShot(ctx: WeaponCtx): boolean {
+    const every = ctx.flags.busterMegaEvery;
+    if (every <= 0 || ++this.shotCount % every !== 0) return false;
+    ctx.sound('explode');
+    return true;
   }
 
   /** Pixel icon id (evolved weapons get their own icon). */

@@ -29,6 +29,11 @@ export interface WeaponDef {
   levels: WeaponLevel[];
 }
 
+/** Damage from the right-click slot: the Buster's charge shot or a secondary arm weapon. */
+export function isRightClick(source: string): boolean {
+  return source === 'charge' || WEAPONS[source]?.slot === 'secondary';
+}
+
 export const WEAPONS: Record<string, WeaponDef> = {
   buster: {
     id: 'buster',

@@ -5,7 +5,10 @@ import type { Enemy } from '../enemies';
 import { Weapon, type WeaponCtx } from './base';
 
 const TICK = 0.15;
-const FAN = 0.24; // radians between evolved side beams
+const FAN = 0.24; // radians between side beams
+const MAX_BEAMS = 5;
+/** Beam i's angle offset in FAN steps: centre, then alternating sides. */
+const SLOT = [0, -1, 1, -2, 2];
 const PRISM = ['#ff7af0', '#5cf2ff', '#fff35c'];
 
 /**
@@ -14,6 +17,10 @@ const PRISM = ['#ff7af0', '#5cf2ff', '#fff35c'];
  */
 export class Laser extends Weapon {
   private on = 0;
+  /** Beam count (evolution + Buster multishot), synced for clients. */
+  private count = 1;
+  /** Hair Trigger MEGA pulse flash. */
+  private megaT = 0;
   private tickT = 0;
   private soundT = 0;
   private mz = { x: 0, z: 0 };
@@ -25,7 +32,7 @@ export class Laser extends Weapon {
   constructor(def: WeaponDef, private scene: THREE.Scene) {
     super(def);
     const additive = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false } as const;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < MAX_BEAMS; i++) {
       const mat = new THREE.MeshBasicMaterial({ color: '#ffffff', ...additive });
       const glowMat = new THREE.MeshBasicMaterial({ color: def.color, opacity: 0.55, ...additive });
       const core = new THREE.Mesh(this.geo, mat);
@@ -39,11 +46,13 @@ export class Laser extends Weapon {
   }
 
   net(): number[] {
-    return [this.on, this.muzzleT];
+    return [this.on, this.muzzleT, this.count, Math.round(this.megaT * 100) / 100];
   }
   setNet(a: number[]): void {
     this.on = a[0] ?? 0;
     this.muzzleT = a[1] ?? 0;
+    this.count = a[2] ?? 1;
+    this.megaT = a[3] ?? 0;
   }
 
   private get range(): number {
@@ -53,7 +62,9 @@ export class Laser extends Weapon {
   update(dt: number, ctx: WeaponCtx): void {
     this.muzzleT = Math.max(0, this.muzzleT - dt);
     const pl = ctx.player;
-    this.on = ctx.firing && !pl.dead && !pl.dashing ? 1 : 0;
+    this.megaT = Math.max(0, this.megaT - dt);
+    this.count = Math.min(MAX_BEAMS, this.p.beams + 2 * ctx.multishot);
+    this.on = ctx.firing && !pl.dead && !pl.dashing && !ctx.flags.busterDisabled ? 1 : 0;
     if (!this.on) {
       this.tickT = 0;
       return;
@@ -70,10 +81,13 @@ export class Laser extends Weapon {
     const p = this.p;
     pl.muzzle(this.mz);
     const base = Math.atan2(pl.aim.z, pl.aim.x);
-    const width = p.width * Math.sqrt(ctx.stats.areaMul);
-    for (let b = 0; b < p.beams; b++) {
-      const a = base + (b === 0 ? 0 : b === 1 ? -FAN : FAN);
-      const dmg = p.dps * TICK * (b === 0 ? 1 : 0.6);
+    // Hair Trigger: every Nth tick is a MEGA pulse.
+    const mega = this.megaShot(ctx);
+    if (mega) this.megaT = 0.15;
+    const width = p.width * Math.sqrt(ctx.stats.areaMul) * (mega ? 2 : 1);
+    for (let b = 0; b < this.count; b++) {
+      const a = base + SLOT[b] * FAN;
+      const dmg = p.dps * TICK * (b === 0 ? 1 : 0.6) * (mega ? 4 : 1);
       this.burn(ctx, Math.cos(a), Math.sin(a), width, dmg);
     }
   }
@@ -106,12 +120,12 @@ export class Laser extends Weapon {
     const oz = pl.rig.root.position.z - pl.z;
     const base = Math.atan2(pl.aim.x, pl.aim.z); // three.js yaw: +Z forward
     const flicker = 0.85 + Math.random() * 0.3;
-    const width = p.width * Math.sqrt(ctx.stats.areaMul) * flicker;
+    const width = p.width * Math.sqrt(ctx.stats.areaMul) * flicker * (this.megaT > 0 ? 2 : 1);
     this.beams.forEach((bm, i) => {
-      const shown = i < p.beams;
+      const shown = i < this.count;
       bm.core.visible = bm.glow.visible = shown;
       if (!shown) return;
-      const yaw = base + (i === 0 ? 0 : i === 1 ? FAN : -FAN);
+      const yaw = base - SLOT[i] * FAN; // three.js yaw turns the other way
       const len = this.range * (i === 0 ? 1 : 0.85);
       for (const m of [bm.core, bm.glow]) {
         m.position.set(this.mz.x + ox, BULLET_Y, this.mz.z + oz);
@@ -119,7 +133,7 @@ export class Laser extends Weapon {
       }
       bm.core.scale.set(width * 0.35, 1, len);
       bm.glow.scale.set(width * (evo ? 1.6 : 1.2), 2, len);
-      bm.glowMat.color.set(evo ? PRISM[(i + Math.floor(ctx.time * 8)) % 3] : this.def.color);
+      bm.glowMat.color.set(this.megaT > 0 ? '#ff7a2f' : evo ? PRISM[(i + Math.floor(ctx.time * 8)) % 3] : this.def.color);
     });
   }
 

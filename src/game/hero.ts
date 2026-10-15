@@ -212,10 +212,8 @@ export class Hero implements SynergyHost {
     type Cand = Offer & { w: number };
     const cands: Cand[] = [];
     const armTaken = (slot: string) => this.weapons.some((w) => w.def.slot === slot);
-    // With both arm slots taken the Buster no longer fires, so stop offering it.
-    const busterIdle = armTaken('primary') && armTaken('secondary');
     for (const w of this.weapons) {
-      if (w.maxed || (busterIdle && w.def.id === 'buster')) continue;
+      if (w.maxed) continue;
       const next = w.def.levels[w.level];
       if (w.def.evo && w.level + 1 === w.def.levels.length) {
         const evo = w.def.evo;

@@ -17,7 +17,6 @@ const CHARGE_COLORS = ['#7df9ff', '#3dffb0', '#ff3df0']; // partial, full, overc
  */
 export class Buster extends Weapon {
   private shotCd = 0;
-  private shotCount = 0;
   private mz = { x: 0, z: 0 };
   /** 0..1 = first charge level, 1..2 = overcharge (with the Overcharge Mod). */
   charge = 0;
@@ -152,11 +151,8 @@ export class Buster extends Weapon {
     const base = Math.atan2(pl.aim.z, pl.aim.x);
     const arc = THREE.MathUtils.degToRad(p.arc);
     // Hair Trigger: every Nth shot is a mega shot.
-    this.shotCount++;
-    const every = ctx.flags.busterMegaEvery;
-    const mega = every > 0 && this.shotCount % every === 0;
+    const mega = this.megaShot(ctx);
     const size = p.size * Math.sqrt(ctx.stats.areaMul) * (mega ? 2.2 : 1);
-    if (mega) ctx.sound('explode');
     for (let i = 0; i < p.shots; i++) {
       const fan = p.shots > 1 ? (i / (p.shots - 1) - 0.5) * arc : 0;
       const a = base + fan + (Math.random() - 0.5) * 0.05;
