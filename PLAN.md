@@ -1,6 +1,6 @@
-# InfiniShoot — Project Plan
+﻿# InfiniShoot — Project Plan
 
-Browser-based **twin-stick survivors-style roguelike**, endless runs, with a colourful **Mega Man Legends-style** cartoony late-90s 3D look.
+Desktop **twin-stick survivors-style roguelike**, endless runs, with a colourful **Mega Man Legends-style** cartoony late-90s 3D look.
 Stack: **TypeScript + Vite + Three.js (WebGL2)**. Static hosting, no backend.
 
 Each milestone ends with a playable build. Estimates assume one part-time dev with AI assistance.
@@ -57,7 +57,7 @@ Goal: hectic, movement-first runs where you get stronger both during and between
 - [x] Meta progression: Bolts banked per run, Workshop (12 permanent upgrades), 8 achievements (4 unlock weapons)
 - [x] Saves: auto-save in localStorage, export/import save code with checksum, refund, reset
 - [x] New HUD (XP bar, timer, boss bar, loadout), Workshop and save-data screens, game over with damage breakdown
-- [x] itch.io packaging: relative base path, `npm run package` builds infinishoot-itch.zip
+- [x] ~~itch.io packaging~~ replaced by the desktop exe (see decision log)
 - [x] Dev autoplay bot (src/dev/bot.ts) for balance and performance runs
 - **Playable:** full survivors-style runs with persistent progression.
 
@@ -81,7 +81,7 @@ Goal: Balatro-style build decisions, where the best pick depends on what you alr
 - [x] Lobby (host/join, names, player list), waiting screens while teammates pick, teammate life bars and name tags, per-player colors
 - **Playable:** two browsers clear a stage together.
 
-Known limits: the host's tab must stay visible (browsers pause hidden tabs); some strict networks block direct WebRTC connections (would need a TURN relay).
+Known limits: some strict networks block direct WebRTC connections (would need a TURN relay).
 
 ## Milestone 4b: Biomes, bosses and evolutions
 - [ ] 3-4 biomes cycling by stage (palette, fog, props, music)
@@ -104,8 +104,8 @@ Known limits: the host's tab must stay visible (browsers pause hidden tabs); som
 
 ## Milestone 7: Release
 - [ ] Performance audit on a range of machines; quality presets
-- [ ] Cross-browser test (Chrome, Firefox, Edge, Safari)
-- [ ] Publish on itch.io, then gather feedback
+- [ ] Code-sign the exe (removes the SmartScreen warning); optional Mac/Linux builds
+- [ ] Publish `InfiniShoot.exe` on GitHub Releases, then gather feedback
 
 ---
 
@@ -164,3 +164,4 @@ public/assets/         # models (glb), textures (png), audio
 - 2026-10-15: Pushed to GitHub (Mansouralmadi/Infinishoot), committing straight to main per the user. Next big features chosen: synergy perks first (shop between stages, Balatro-style), then online co-op only (no local co-op).
 - 2026-10-15: Mods live in a shop rather than in level-ups so level-ups stay about weapons, and gold creates its own spend/save/interest decisions. In-run gold replaced the Bolt pickups; Bolts are now only earned at run end (kills, stages, minutes, left-over gold). Echo shares state with the Mod it copies, so echoed counters (Bloodlust) also stack twice as fast.
 - 2026-10-15: Online co-op design (user): separate gold and own shop per player; XP shared as a team (assumed, Vampire Survivors style). Host-authoritative simulation with client-owned movement, chosen over lockstep because JS floating point isn't guaranteed identical across browsers and lockstep adds input delay. Refactored Game into team state plus per-player Hero (src/game/hero.ts); solo is simply one hero. Gameplay timing must never depend on render (the portal used to), because hosts may not render every frame.
+- 2026-10-15: Dropped the itch.io build (user: downloads should be plug and play, no command lines). The game now ships as a single portable Windows exe built with Electron + electron-builder (`npm run dist`, about 100 MB). Electron's `backgroundThrottling: false` also fixes the co-op host pausing when its window is in the background. Vite's `base: './'` stays because the app loads dist/index.html from disk. three, peerjs and lil-gui moved to devDependencies since Vite bundles them, so the exe ships no node_modules.

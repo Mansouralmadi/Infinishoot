@@ -7,7 +7,8 @@ Roadmap and decision log: @PLAN.md
 - `npm run dev`: dev server at http://localhost:5173
 - `npm run typecheck`: strict TypeScript check (must pass)
 - `npm run build`: typecheck + production build to `dist/`
-- `npm run package`: build + zip `dist/` into `infinishoot-itch.zip` for itch.io (see ITCH.md)
+- `npm run app`: build and open the Electron desktop app
+- `npm run dist`: build the portable Windows exe to `release/InfiniShoot.exe` (Electron, electron/main.cjs). This is the only shipped build; there is no itch.io build.
 
 ## Conventions
 - Gameplay simulates in 2D on the XZ plane; meshes are presentation only and interpolate between `prev` and `pos`.

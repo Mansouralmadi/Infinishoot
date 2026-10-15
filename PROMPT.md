@@ -1,19 +1,19 @@
-# InfiniShoot — Master Prompt
+﻿# InfiniShoot — Master Prompt
 
 Use this as the standing brief for any AI/dev session working on the project. Paste it at the start of a session, or keep it as `CLAUDE.md` once the repo is scaffolded.
 
 ---
 
-You are building **InfiniShoot**, a browser-based **twin-stick survivors-style roguelike** (think Vampire Survivors with an aimed gun) with an endless run structure and a **colourful, cartoony late-90s 3D look inspired by Mega Man Legends**: chunky anime characters on PS1-era hardware limits.
+You are building **InfiniShoot**, a desktop (web-tech) **twin-stick survivors-style roguelike** (think Vampire Survivors with an aimed gun) with an endless run structure and a **colourful, cartoony late-90s 3D look inspired by Mega Man Legends**: chunky anime characters on PS1-era hardware limits.
 
 ## Core fantasy
 A plucky, anime-styled hero survives timed stages on big open fields while swarms of goofy robots and monsters close in from every side. You aim and fire your arm cannon while a growing arsenal of automatic weapons (drones, lightning, discs, missiles, mines, frost, fire) fires on its own. Enemies drop XP gems; levelling up mid-fight lets you add a weapon or level one you have, and every level is a visible change. Survive the timer, beat the boss, take the portal to a harder stage. Runs end on death, but Bolts earned carry over to the Workshop for permanent upgrades, and achievements unlock new weapons, so you get stronger between runs too. It keeps its arcade heart: score, combo multiplier and high scores.
 
 ## Hard constraints
-- **Runs in the browser**: no install, no plugins. Target latest Chrome, Firefox, Edge and Safari on desktop. Keyboard + mouse and gamepad are both first-class.
+- **Ships as a Windows desktop app**: a single portable exe (Electron wrapping the web build), double-click to play, no install. The game itself stays plain web code. Keyboard + mouse and gamepad are both first-class.
 - **Performance**: steady 60 fps on a mid-range laptop iGPU with 150+ enemies and 500+ projectiles on screen. Initial load under 5 MB, under 3 s on broadband.
 - **Stack**: TypeScript, Vite, Three.js (WebGL2). No heavy engine. Keep dependencies minimal: Three.js, WebAudio (or Howler), and optionally `lil-gui` for debug tweaking.
-- **No backend for v1**: saves in `localStorage`, with an export/import save code for backup and moving devices. Hosted on **itch.io** as an HTML5 game.
+- **No backend for v1**: saves in `localStorage`, with an export/import save code for backup and moving devices. Distributed as `InfiniShoot.exe` on GitHub Releases.
 
 ## Art direction: Mega Man Legends-style
 The aim is *cheerful, saturated, toy-like*, not gritty. PS1 limitations are used for charm, not horror.
@@ -51,7 +51,7 @@ The aim is *cheerful, saturated, toy-like*, not gritty. PS1 limitations are used
 - Spatial hash grid for collision. Circles for entities and bullets, AABBs for walls. No physics engine.
 
 ## Working style
-- Build in small, playable increments. Every milestone ends with something you can play in the browser.
+- Build in small, playable increments. Every milestone ends with something you can play.
 - Prefer simple, readable code over clever abstractions. Make it work, make it feel good, then make it fast.
 - When unsure about a design decision, propose two options with tradeoffs and a recommendation.
 - Keep `PLAN.md` updated: tick off tasks and note decisions.

@@ -1,10 +1,18 @@
 # InfiniShoot
 
-A colorful twin-stick survivors-style roguelike that runs in the browser. You aim an arm cannon while automatic weapons build up around you, survive timed stages against swarms, beat the boss, and dive through the portal to a harder stage. Bolts earned in each run buy permanent upgrades in the Workshop.
+A colorful twin-stick survivors-style roguelike for Windows. You aim an arm cannon while automatic weapons build up around you, survive timed stages against swarms, beat the boss, and dive through the portal to a harder stage. Bolts earned in each run buy permanent upgrades in the Workshop.
 
 Built with TypeScript, Vite and Three.js, with a Mega Man Legends-inspired low-poly look and subtle PS1-style effects.
 
-## Run it
+## Play it
+
+Download `InfiniShoot.exe` from the [Releases page](https://github.com/Mansouralmadi/Infinishoot/releases) and double-click it. No install needed. The first launch takes a few seconds while it unpacks.
+
+The exe isn't code-signed yet, so Windows may show "Windows protected your PC". Click **More info**, then **Run anyway**.
+
+Press F11 for fullscreen. Progress saves automatically on your PC.
+
+## Build it
 
 Requires Node.js 20+.
 
@@ -20,11 +28,12 @@ Then open http://localhost:5173.
 | `npm run dev` | Dev server with hot reload |
 | `npm run typecheck` | Strict TypeScript check |
 | `npm run build` | Typecheck + production build to `dist/` |
-| `npm run package` | Build + zip for itch.io (see [ITCH.md](ITCH.md)) |
+| `npm run app` | Build and open the desktop app |
+| `npm run dist` | Build `release/InfiniShoot.exe` (single portable exe) |
 
 ## Online co-op
 
-Title screen > PLAY ONLINE. One player hosts and shares the 5-letter code; up to 3 friends join with it. Each player has their own weapons, gold, Mods and shop; XP and score are shared. Stand next to a downed teammate to revive them. The host should keep their game window visible.
+Title screen > PLAY ONLINE. One player hosts and shares the 5-letter code; up to 3 friends join with it. Each player has their own weapons, gold, Mods and shop; XP and score are shared. Stand next to a downed teammate to revive them.
 
 ## Controls
 

@@ -1,24 +1,50 @@
 {
   "name": "infinishoot",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0",
+  "description": "A colorful twin-stick survivors-style roguelike",
+  "author": "Mansour Almadi",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,css}\"",
-    "package": "npm run build && node scripts/package-itch.mjs"
+    "app": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win portable"
   },
-  "dependencies": {
-    "lil-gui": "^0.21.0",
-    "peerjs": "^1.5.5",
-    "three": "^0.186.1"
+  "allowScripts": {
+    "electron@44.7.2": true,
+    "electron-winstaller@5.4.0": true
+  },
+  "build": {
+    "appId": "com.mansouralmadi.infinishoot",
+    "productName": "InfiniShoot",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**"
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "portable": {
+      "artifactName": "InfiniShoot.exe"
+    }
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "lil-gui": "^0.21.0",
+    "peerjs": "^1.5.5",
     "prettier": "^3.9.9",
+    "three": "^0.186.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.2"
   }
