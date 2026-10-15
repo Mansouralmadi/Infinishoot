@@ -14,7 +14,7 @@ import { packBullets, packEnemies, packPickups, unpackBullets, unpackEnemies, un
 import { disposeObject } from '../render/dispose';
 import { DamageNumbers } from '../ui/damageNumbers';
 import { Hud, type LoadoutItem } from '../ui/hud';
-import { Screens, type Offer, type RunSummary, type ShopView } from '../ui/screens';
+import { Screens, type Offer, type RunSummary, type ShopFx, type ShopView } from '../ui/screens';
 import { createFieldArena, type Arena } from '../world/fieldArena';
 import { biomeForStage } from '../data/biomes';
 import { applyBiomeLook } from '../render/biomeLook';
@@ -79,6 +79,14 @@ const AIM_HEIGHT = BULLET_Y;
 const TITLE_SEED = 1234;
 const RECYCLE_DIST = 36;
 const CHARGE_TAGS: Tag[] = ['projectile'];
+/** Player bullet `kind` -> damage source and tags (see BulletSpawn.kind). */
+const BULLET_KINDS: { source: string; tags?: Tag[] }[] = [
+  { source: 'buster' },
+  { source: 'charge', tags: CHARGE_TAGS },
+  { source: 'scatter' },
+  { source: 'scatter', tags: ['projectile', 'fire'] },
+  { source: 'shield', tags: ['projectile'] },
+];
 const SNAP_EVERY = 3; // host snapshot every N sim steps (20 Hz)
 const INPUT_EVERY = 2; // client input every N sim steps (30 Hz)
 const INTEREST = 34; // only send entities this close to each client's hero
@@ -363,6 +371,12 @@ export class Game implements HeroWorld {
       owner: hero.index,
       firing: false,
       charging: false,
+      get armPrimary() {
+        return hero.weapons.some((w) => w.def.slot === 'primary');
+      },
+      get armSecondary() {
+        return hero.weapons.some((w) => w.def.slot === 'secondary');
+      },
       damage: (e, base, o) => this.damage(e, base, o, hero),
       nearest: (x, z, r, skip) => this.nearestEnemy(x, z, r, skip),
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),
@@ -378,6 +392,12 @@ export class Game implements HeroWorld {
       targetAlive: true,
       hash: this.hash,
       colliders: this.arena.colliders,
+      onEnrage: (e) => {
+        this.vfx.num(e.x, 4, e.z, 'ENRAGED!', 'crit');
+        this.vfx.ring(e.x, e.z, e.radius, 8, '#ff3d5e', 0.5);
+        this.vfx.shake(e.x, e.z, 0.8);
+        this.vfx.sound('boss', e.x, e.z);
+      },
       onWindup: (e) => {
         if (e.def.boss) this.vfx.sound('bossWindup', e.x, e.z);
         else if (e.def.behavior !== 'spawner') this.vfx.sound('telegraph', e.x, e.z);
@@ -627,6 +647,10 @@ export class Game implements HeroWorld {
       this.enemies.kill(e);
     }
     this.bullets.clear();
+    // Leftover chests vanish with the stage (clients mirror via 'chestsgone').
+    for (const c of this.chests.list) this.vfx.burst(c.x, 0.4, c.z, { count: 10, color: '#ffd23f', color2: '#b8653a', speed: [2, 6], size: [0.15, 0.3], life: [0.3, 0.6], up: 5, gravity: 12 });
+    this.chests.list = [];
+    if (this.role === 'host') this.host!.broadcast({ t: 'chestsgone' });
     this.pickups.vacuum = true;
     const noHit = this.damagedThisStage ? 0 : scoreTuning.noHitBonus * this.stage;
     this.score += noHit;
@@ -652,8 +676,14 @@ export class Game implements HeroWorld {
       if (h.left) continue;
       h.openShop();
       this.presentShop(h);
+      this.shopFx(h, 'open');
     }
-    this.vfx.sound('chest', NaN, NaN);
+  }
+
+  /** Shop sound and particles on the screen of the player who acted. */
+  private shopFx(h: Hero, kind: ShopFx, i = 0): void {
+    if (h === this.hero) this.screens.shopFx(kind, i);
+    else this.tell(h, { t: 'shopfx', kind, i });
   }
 
   private closeShop(): void {
@@ -837,9 +867,12 @@ export class Game implements HeroWorld {
       if (err) {
         if (h === this.hero) this.hud.toast(err);
         else this.tell(h, { t: 'toast', msg: err });
+        this.shopFx(h, 'deny');
         return;
       }
       this.presentShop(h, a === 'buy' ? i : undefined);
+      const fx = ({ buy: 'buy', sell: 'sell', sreroll: 'reroll', heal: 'heal' } as Record<string, ShopFx>)[a];
+      if (fx) this.shopFx(h, fx, i);
     }
   }
 
@@ -968,8 +1001,7 @@ export class Game implements HeroWorld {
     for (const h of this.heroes) {
       if (h.player.dead || h.left) continue;
       for (const w of h.weapons) w.update(dt, h.ctx);
-      const buster = h.weapons[0] as Buster;
-      if (h === this.hero && buster.muzzleT > 0.045) this.juice.kick(-h.player.aim.x, -h.player.aim.z, 2);
+      if (h === this.hero && h.weapons.some((w) => w.muzzleT > 0.045)) this.juice.kick(-h.player.aim.x, -h.player.aim.z, 2);
     }
     for (const h of this.heroes) this.updateBomb(h, dt);
 
@@ -1709,8 +1741,8 @@ export class Game implements HeroWorld {
       if (hit) {
         const sp = Math.hypot(b.vx[i], b.vz[i]) || 1;
         const by = this.heroes[b.owner[i]] ?? this.hero;
-        const source = b.kind[i] === 1 ? 'charge' : 'buster';
-        this.damage(hit, b.damage[i], { source, tags: b.kind[i] === 1 ? CHARGE_TAGS : undefined, dirX: b.vx[i] / sp, dirZ: b.vz[i] / sp, knockback: b.knockback[i], hx: x, hz: z, canCrit: true, loud: true }, by);
+        const kind = BULLET_KINDS[b.kind[i]] ?? BULLET_KINDS[0];
+        this.damage(hit, b.damage[i], { source: kind.source, tags: kind.tags, dirX: b.vx[i] / sp, dirZ: b.vz[i] / sp, knockback: b.knockback[i], hx: x, hz: z, canCrit: true, loud: true }, by);
         if (b.pierce[i] > 0) {
           b.pierce[i]--;
           b.lastHit[i] = hit.uid;
@@ -2032,6 +2064,12 @@ export class Game implements HeroWorld {
         break;
       case 'wchest':
         this.chests.open(Number(m.i));
+        break;
+      case 'shopfx':
+        this.screens.shopFx(m.kind as ShopFx, Number(m.i));
+        break;
+      case 'chestsgone':
+        this.chests.list = [];
         break;
       case 'barrel': {
         const b = this.barrels.remove(Number(m.i));
@@ -2414,8 +2452,7 @@ export class Game implements HeroWorld {
     }
     this.flashes.forEach((m, i) => {
       const h = this.heroes[i];
-      const buster = h?.weapons[0] as Buster | undefined;
-      m.visible = !!h && !h.left && !!buster && buster.def.id === 'buster' && buster.muzzleT > 0 && !h.player.dead;
+      m.visible = !!h && !h.left && h.weapons.some((w) => w.muzzleT > 0) && !h.player.dead;
       if (!m.visible) return;
       h.player.muzzle(this.mz);
       m.position.set(this.mz.x, BULLET_Y, this.mz.z);

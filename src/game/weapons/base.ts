@@ -55,6 +55,9 @@ export interface WeaponCtx {
   firing: boolean;
   /** Charge shot held (right mouse / X). */
   charging: boolean;
+  /** An arm weapon has taken over the Buster's rapid fire / charge shot. */
+  readonly armPrimary: boolean;
+  readonly armSecondary: boolean;
   /** Summed Mod flags (Hair Trigger, Pacifist Core, Lightning Rod...). */
   readonly flags: ModFlags;
   /** Apply base damage (scaled by stats, crits, shatter). Returns the dealt amount. */
@@ -70,6 +73,8 @@ export interface WeaponCtx {
 export abstract class Weapon {
   level = 1;
   protected cd = 0.5;
+  /** Muzzle flash timer (arm weapons; drives the flash and camera kick). */
+  muzzleT = 0;
 
   constructor(readonly def: WeaponDef) {}
 
@@ -80,6 +85,24 @@ export abstract class Weapon {
 
   get maxed(): boolean {
     return this.level >= this.def.levels.length;
+  }
+
+  /** Reached the evolution level (the def's last level). */
+  get evolved(): boolean {
+    return !!this.def.evo && this.maxed;
+  }
+
+  get name(): string {
+    return this.evolved ? this.def.evo!.name : this.def.name;
+  }
+
+  get color(): string {
+    return this.evolved ? this.def.evo!.color : this.def.color;
+  }
+
+  /** Pixel icon id (evolved weapons get their own icon). */
+  get iconId(): string {
+    return this.evolved ? this.def.id + '_evo' : this.def.id;
   }
 
   levelUp(): void {

@@ -32,7 +32,7 @@ export interface BulletSpawn {
   homing?: number;
   /** Index of the hero who fired it (damage credit and Mod triggers). */
   owner?: number;
-  /** 1 = charged Buster shot (credited to 'charge'). */
+  /** Damage source: 0 Buster, 1 charge shot, 2 Scattergun, 3 Dragon's Breath, 4 reflected by Mirror Aegis. */
   kind?: number;
   /** Explodes with this radius when it dies (0 = no blast). */
   blast?: number;
@@ -153,6 +153,10 @@ export class Bullets {
 
   clear(): void {
     this.count = 0;
+  }
+
+  setColor(i: number, color: THREE.ColorRepresentation): void {
+    this.colors[i].set(color);
   }
 
   /** Bullet colour (for network snapshots). */

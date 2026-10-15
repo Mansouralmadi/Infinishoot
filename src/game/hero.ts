@@ -186,7 +186,7 @@ export class Hero implements SynergyHost {
 
   loadout(): LoadoutItem[] {
     return [
-      ...this.weapons.map((w) => ({ id: w.def.id, icon: w.def.icon, color: w.def.color, level: w.level, max: w.maxed, name: w.def.name, kind: 'weapon' as const })),
+      ...this.weapons.map((w) => ({ id: w.iconId, icon: w.def.icon, color: w.color, level: w.level, max: w.maxed, evo: w.evolved, name: w.name, kind: 'weapon' as const })),
       ...Object.entries(this.passives).map(([id, lv]) => {
         const d = PASSIVES[id];
         return { id, icon: d.icon, color: d.color, level: lv, max: lv >= d.maxLevel, name: d.name, kind: 'passive' as const };
@@ -211,17 +211,26 @@ export class Hero implements SynergyHost {
   buildOffers(): Offer[] {
     type Cand = Offer & { w: number };
     const cands: Cand[] = [];
+    const armTaken = (slot: string) => this.weapons.some((w) => w.def.slot === slot);
+    // With both arm slots taken the Buster no longer fires, so stop offering it.
+    const busterIdle = armTaken('primary') && armTaken('secondary');
     for (const w of this.weapons) {
-      if (w.maxed) continue;
+      if (w.maxed || (busterIdle && w.def.id === 'buster')) continue;
       const next = w.def.levels[w.level];
+      if (w.def.evo && w.level + 1 === w.def.levels.length) {
+        const evo = w.def.evo;
+        cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, w: 4 });
+        continue;
+      }
       cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, w: 3 });
     }
-    if (this.weapons.length < MAX_WEAPONS) {
-      for (const id of this.unlocked) {
-        if (this.weapons.some((w) => w.def.id === id) || !WEAPONS[id]) continue;
-        const d = WEAPONS[id];
-        cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, w: 2.4 });
-      }
+    // Arm weapons don't use auto-weapon slots; one per arm slot.
+    const autoCount = this.weapons.filter((w) => !w.def.slot).length;
+    for (const id of this.unlocked) {
+      const d = WEAPONS[id];
+      if (!d || this.weapons.some((w) => w.def.id === id)) continue;
+      if (d.slot ? armTaken(d.slot) : autoCount >= MAX_WEAPONS) continue;
+      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, w: 2.4 });
     }
     const owned = Object.keys(this.passives).length;
     for (const [id, d] of Object.entries(PASSIVES)) {
@@ -249,9 +258,10 @@ export class Hero implements SynergyHost {
   /** Apply a level-up card. Returns its color (for the pickup burst). */
   applyOffer(o: Offer): string {
     if (o.kind === 'weapon') {
-      const w = this.weapons.find((x) => x.def.id === o.id);
+      const id = o.id.replace(/_evo$/, '');
+      const w = this.weapons.find((x) => x.def.id === id);
       if (w) w.levelUp();
-      else this.weapons.push(createWeapon(o.id, this.world.scene));
+      else this.weapons.push(createWeapon(id, this.world.scene));
     } else if (o.kind === 'passive') {
       this.passives[o.id] = (this.passives[o.id] ?? 0) + 1;
       this.recomputeStats();
@@ -286,12 +296,13 @@ export class Hero implements SynergyHost {
       this.applyOffer({ kind: 'passive', id: d.id, name: d.name, icon: d.icon, color: d.color, tag: '', text: d.desc });
       return { id: d.id, name: d.name, color: d.color, icon: d.icon, text: lv > 1 ? `LV ${lv}` : 'NEW' };
     }
-    const weapons = this.weapons.filter((w) => !w.maxed);
+    // Evolutions are always a level-up choice, never a chest surprise.
+    const weapons = this.weapons.filter((w) => !w.maxed && !(w.def.evo && w.level + 1 === w.def.levels.length));
     if (weapons.length) {
       const w = weapons[Math.floor(this.rng.next() * weapons.length)];
       w.levelUp();
       this.loadoutDirty = true;
-      return { id: w.def.id, name: w.def.name, color: w.def.color, icon: w.def.icon, text: `LV ${w.level}` };
+      return { id: w.iconId, name: w.name, color: w.color, icon: w.def.icon, text: w.evolved ? 'EVOLVED' : `LV ${w.level}` };
     }
     this.gold += 10;
     return { id: 'gold', name: 'Gold', color: '#ffb627', icon: '●', text: '+10' };

@@ -12,6 +12,16 @@ export type EnemyState = 'spawning' | 'move' | 'windup' | 'attack' | 'recover';
 export type BossAction = 'ring' | 'summon' | 'slam' | 'charge' | 'spiral' | 'waves' | 'volley' | 'rain';
 export const BOSS_ACTIONS: BossAction[] = ['ring', 'summon', 'slam', 'charge', 'spiral', 'waves', 'volley', 'rain'];
 
+export const bossTuning = {
+  hp: 1.8, // boss HP multiplier on top of stage scaling
+  speed: 1.2, // move speed multiplier
+  pace: 0.65, // multiplier on pauses between attacks and recovery times
+  firstAttack: 1.5, // seconds before the first attack
+  enrageAt: 0.5, // HP fraction where the boss enrages
+  enrageSpeed: 1.2, // extra speed once enraged
+  enragePace: 0.7, // extra pace multiplier once enraged (also bigger attacks)
+};
+
 const SPAWN_TIME = 0.45;
 const BATCH_CAP = 700; // max simultaneous enemies of one type
 const DARK = '#2b2f4a';
@@ -222,6 +232,8 @@ export class Enemy {
   lungeZ = 0;
   facing = 0;
   hitPlayer = false;
+  /** Boss below bossTuning.enrageAt HP: faster, bigger attacks. */
+  enraged = false;
   timerA = 0;
   action: BossAction = 'ring';
   hopY = 0;
@@ -260,7 +272,8 @@ export class Enemy {
     this.flash = this.frozen = this.slowT = this.shatter = 0;
     this.burnT = this.burnDps = this.burnAcc = this.shockT = this.burnOwner = 0;
     this.sq = this.sqV = this.hopY = 0;
-    this.timerA = this.def.boss ? 3 : 1 + Math.random() * 2;
+    this.timerA = this.def.boss ? bossTuning.firstAttack : 1 + Math.random() * 2;
+    this.enraged = false;
     this.burst = this.spin = this.timerB = this.step = 0;
     this.action = 'ring';
     this.strafe = Math.random() < 0.5 ? -1 : 1;
@@ -290,6 +303,7 @@ export interface EnemyCtx {
   hash: SpatialHash<Enemy>;
   colliders: AABB[];
   onWindup(e: Enemy): void;
+  onEnrage(e: Enemy): void;
   fireBullet(e: Enemy, dirX: number, dirZ: number, speed: number, damage: number): void;
   spawnChild(defId: string, x: number, z: number, parent: Enemy): void;
   detonate(e: Enemy): void;
@@ -584,17 +598,17 @@ export class Enemies {
         }
 
         case 'boss':
-          rigid = this.updateBoss(e, dt, ctx, nx, nz, dist, speed);
+          rigid = this.updateBoss(e, dt, ctx, nx, nz, dist, this.bossSpeed(e, ctx, speed));
           wantX = e.vx;
           wantZ = e.vz;
           break;
         case 'rex':
-          rigid = this.updateRex(e, dt, ctx, nx, nz, dist, speed);
+          rigid = this.updateRex(e, dt, ctx, nx, nz, dist, this.bossSpeed(e, ctx, speed));
           wantX = e.vx;
           wantZ = e.vz;
           break;
         case 'queen':
-          this.updateQueen(e, dt, ctx, nx, nz, dist, speed);
+          this.updateQueen(e, dt, ctx, nx, nz, dist, this.bossSpeed(e, ctx, speed));
           wantX = e.vx;
           wantZ = e.vz;
           break;
@@ -644,6 +658,21 @@ export class Enemies {
     if (s === 'windup' && ctx) ctx.onWindup(e);
   }
 
+  /** Boss move speed; also flips the boss into its enraged phase at low HP. */
+  private bossSpeed(e: Enemy, ctx: EnemyCtx, speed: number): number {
+    if (!e.enraged && e.hp < e.maxHp * bossTuning.enrageAt) {
+      e.enraged = true;
+      e.squash(-10);
+      ctx.onEnrage(e);
+    }
+    return speed * bossTuning.speed * (e.enraged ? bossTuning.enrageSpeed : 1);
+  }
+
+  /** Multiplier on boss pauses and recovery (smaller = more aggressive). */
+  private pace(e: Enemy): number {
+    return bossTuning.pace * (e.enraged ? bossTuning.enragePace : 1);
+  }
+
   private lockOn(e: Enemy, nx: number, nz: number, dx: number, dz: number): void {
     e.lungeX = nx;
     e.lungeZ = nz;
@@ -679,7 +708,7 @@ export class Enemies {
       }
       if (e.t > 0) return false;
       if (e.action === 'ring') {
-        const n = 18;
+        const n = e.enraged ? 26 : 18;
         const off = Math.random() * Math.PI;
         for (let i = 0; i < n; i++) {
           const a = off + (i / n) * Math.PI * 2;
@@ -689,13 +718,13 @@ export class Enemies {
           const a = Math.atan2(nz, nx) + i * 0.12;
           ctx.fireBullet(e, Math.cos(a), Math.sin(a), 10, 14);
         }
-        this.enter(e, 'recover', 0.8, 8);
+        this.enter(e, 'recover', 0.8 * this.pace(e), 8);
       } else if (e.action === 'summon') {
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2;
           ctx.spawnChild('swarmer', e.x + Math.cos(a) * 3, e.z + Math.sin(a) * 3, e);
         }
-        this.enter(e, 'recover', 0.8, 8);
+        this.enter(e, 'recover', 0.8 * this.pace(e), 8);
       } else {
         e.fromX = e.x;
         e.fromZ = e.z;
@@ -713,7 +742,7 @@ export class Enemies {
       if (e.t <= 0) {
         e.hopY = 0;
         ctx.slam(e);
-        this.enter(e, 'recover', 1.0, -10);
+        this.enter(e, 'recover', 1.0 * this.pace(e), -10);
       }
       return true;
     }
@@ -721,7 +750,7 @@ export class Enemies {
     e.vx = e.vz = 0;
     if (e.t <= 0) {
       e.state = 'move';
-      e.timerA = 2.2;
+      e.timerA = 2.2 * this.pace(e);
     }
     return false;
   }
@@ -744,7 +773,7 @@ export class Enemies {
         e.action = dist > 13 ? 'charge' : order[e.step++ % order.length];
         e.vx = e.vz = 0;
         if (e.action === 'charge') {
-          e.burst = 3;
+          e.burst = e.enraged ? 4 : 3;
           this.lockOn(e, nx, nz, nx, nz);
           this.enter(e, 'windup', 0.85, -6, ctx);
         } else this.enter(e, 'windup', 0.7, -5, ctx);
@@ -762,7 +791,7 @@ export class Enemies {
         e.timerB = 0;
         this.enter(e, 'attack', 2.6, 6);
       } else {
-        e.burst = 3;
+        e.burst = e.enraged ? 4 : 3;
         e.timerB = 0;
         this.enter(e, 'attack', 1.5, 6);
       }
@@ -777,7 +806,7 @@ export class Enemies {
           if (--e.burst > 0) {
             this.lockOn(e, nx, nz, nx, nz);
             this.enter(e, 'windup', 0.45, -5, ctx);
-          } else this.enter(e, 'recover', 1.1, -8);
+          } else this.enter(e, 'recover', 1.1 * this.pace(e), -8);
         }
         return true;
       }
@@ -805,13 +834,13 @@ export class Enemies {
           ctx.fireBullet(e, Math.cos(a), Math.sin(a), 6.5, 14);
         }
       }
-      if (e.t <= 0) this.enter(e, 'recover', 0.9, 6);
+      if (e.t <= 0) this.enter(e, 'recover', 0.9 * this.pace(e), 6);
       return false;
     }
     e.vx = e.vz = 0;
     if (e.t <= 0) {
       e.state = 'move';
-      e.timerA = 1.8;
+      e.timerA = 1.8 * this.pace(e);
     }
     return false;
   }
@@ -843,23 +872,24 @@ export class Enemies {
     if (e.state === 'windup') {
       if (e.t > 0) return;
       if (e.action === 'volley') {
-        e.burst = 3;
+        e.burst = e.enraged ? 4 : 3;
         e.spin = 0;
         this.enter(e, 'attack', 1.2, 4);
       } else if (e.action === 'rain') {
         ctx.strike(tgt.x, tgt.z, 2.2, 1.1, 18);
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2 + Math.random();
+        const strikes = e.enraged ? 9 : 6;
+        for (let i = 0; i < strikes; i++) {
+          const a = (i / strikes) * Math.PI * 2 + Math.random();
           const d = 3.5 + Math.random() * 3;
           ctx.strike(tgt.x + Math.cos(a) * d, tgt.z + Math.sin(a) * d, 2.2, 1.1 + i * 0.12, 18);
         }
-        this.enter(e, 'recover', 1.0, 6);
+        this.enter(e, 'recover', 1.0 * this.pace(e), 6);
       } else {
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
           ctx.spawnChild('zippy', e.x + Math.cos(a) * 2.5, e.z + Math.sin(a) * 2.5, e);
         }
-        this.enter(e, 'recover', 0.8, 8);
+        this.enter(e, 'recover', 0.8 * this.pace(e), 8);
       }
       return;
     }
@@ -875,12 +905,12 @@ export class Enemies {
         }
         e.squash(5);
       }
-      if (e.t <= 0) this.enter(e, 'recover', 0.6, 4);
+      if (e.t <= 0) this.enter(e, 'recover', 0.6 * this.pace(e), 4);
       return;
     }
     if (e.t <= 0) {
       e.state = 'move';
-      e.timerA = 1.6;
+      e.timerA = 1.6 * this.pace(e);
     }
   }
 

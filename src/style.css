@@ -1476,6 +1476,11 @@ input[type='range']::-moz-range-thumb {
   animation: flash 0.6s steps(1) infinite;
 }
 
+.card .tag.evo {
+  color: var(--cyan);
+  animation: flash 0.3s steps(1) infinite;
+}
+
 .card .icon,
 .mod-card .icon {
   --bg: var(--navy);
@@ -1812,6 +1817,13 @@ div.mod-card.sold {
   gap: 4px;
   padding: 10px 8px 8px;
   min-height: 96px;
+}
+
+.owned-mod .desc {
+  font-size: 14px;
+  line-height: 1.05;
+  color: var(--mist);
+  text-align: center;
 }
 
 .owned-mod.cursed {
@@ -2191,5 +2203,146 @@ h1.ko {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* Shop juice: pixel bits, coins and popups (src/ui/screens.ts shopFx). */
+.px-bit {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: calc(2 * var(--p));
+  height: calc(2 * var(--p));
+  margin: calc(-1 * var(--p)) 0 0 calc(-1 * var(--p));
+  background: var(--c);
+  pointer-events: none;
+  z-index: 100;
+  animation: bitfly 0.55s steps(10) both;
+}
+
+.px-bit.coin {
+  width: calc(3 * var(--p));
+  height: calc(3 * var(--p));
+  background: var(--yellow);
+  box-shadow:
+    inset calc(-1 * var(--p)) calc(-1 * var(--p)) 0 var(--orange),
+    0 0 0 var(--o) var(--ink);
+}
+
+@keyframes bitfly {
+  0% {
+    transform: translate(var(--x0), var(--y0));
+  }
+  50% {
+    transform: translate(var(--xm), var(--ym));
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--x1), var(--y1));
+    opacity: 0;
+  }
+}
+
+.px-float {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  font: 36px var(--display);
+  text-shadow: var(--o) var(--o) 0 var(--ink);
+  pointer-events: none;
+  z-index: 100;
+  animation: floatup 0.8s steps(8) both;
+}
+
+@keyframes floatup {
+  to {
+    transform: translate(-50%, calc(-50% - 16 * var(--p)));
+    opacity: 0;
+  }
+}
+
+#scr-shop h1.slam-in {
+  animation: slam 0.35s steps(4);
+}
+
+#scr-shop .gold-big.bump {
+  animation: bump 0.2s steps(2) 2;
+}
+
+@keyframes bump {
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+#scr-shop .shop-offers > .reroll-in {
+  animation: flipin 0.3s steps(4) both;
+}
+
+@keyframes flipin {
+  from {
+    transform: scaleX(0);
+  }
+  50% {
+    transform: scaleX(0.3);
+    filter: brightness(2);
+  }
+}
+
+#scr-shop .owned-mod.fresh {
+  animation:
+    popin 0.25s steps(3),
+    flash 0.3s steps(2) 3;
+}
+
+#scr-shop.heal-flash {
+  animation: healflash 0.4s steps(2);
+}
+
+@keyframes healflash {
+  50% {
+    box-shadow: inset 0 0 0 100vmax rgba(56, 183, 100, 0.3);
+  }
+}
+
+#scr-shop .deny {
+  animation: shake 0.24s steps(4);
+}
+
+#scr-shop .gold-big.deny {
+  color: var(--red);
+}
+
+/* Uncommon and rare offers twinkle with a pixel sparkle. */
+.screen button.mod-card.uncommon,
+.screen button.mod-card.rare {
+  position: relative;
+}
+
+.screen button.mod-card.uncommon::after,
+.screen button.mod-card.rare::after {
+  content: '';
+  position: absolute;
+  top: calc(12 * var(--p));
+  right: calc(5 * var(--p));
+  width: var(--p);
+  height: var(--p);
+  background: var(--white);
+  box-shadow:
+    0 calc(-1 * var(--p)) 0 var(--white),
+    0 var(--p) 0 var(--white),
+    calc(-1 * var(--p)) 0 0 var(--white),
+    var(--p) 0 0 var(--white);
+  animation: twinkle 1.2s steps(1) infinite;
+}
+
+.screen button.mod-card.rare::after {
+  animation-duration: 0.6s;
+}
+
+@keyframes twinkle {
+  50% {
+    opacity: 0;
   }
 }

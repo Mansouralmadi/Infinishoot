@@ -43,6 +43,8 @@ export interface LobbyView {
   status: string;
 }
 
+export type ShopFx = 'open' | 'buy' | 'sell' | 'reroll' | 'heal' | 'deny';
+
 export interface ShopView {
   gold: number;
   interest: number;
@@ -90,7 +92,7 @@ function logoWord(word: string, start: number): string {
 }
 
 function badge(i: LoadoutItem): string {
-  return `<span class="badge" style="--c:${i.color}" title="${i.name}">${iconHtml(i.id, i.color, i.icon)}<i>${i.max ? 'M' : i.level}</i></span>`;
+  return `<span class="badge" style="--c:${i.color}" title="${i.name}">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'E' : i.max ? 'M' : i.level}</i></span>`;
 }
 
 function modChip(m: ModDef): string {
@@ -105,6 +107,8 @@ export class Screens {
   private navs = {} as Record<Named, MenuNav>;
   private settingsReturn: ScreenName = 'title';
   private wipeArmed = false;
+  /** Gold last shown in the shop, for the +/- popups. */
+  private shopGold = -1;
 
   private root: HTMLElement;
 
@@ -426,7 +430,7 @@ export class Screens {
     el.querySelector('.cards')!.innerHTML = offers
       .map(
         (o, i) => `<button class="card ${o.kind}" data-nav data-act="pick" data-index="${i}">
-          <div class="tag ${o.tag === 'NEW!' ? 'new' : ''}">${o.tag}</div>
+          <div class="tag ${o.tag === 'NEW!' ? 'new' : o.tag === 'EVOLVE!' ? 'evo' : ''}">${o.tag}</div>
           <div class="icon" style="--c:${o.color}">${iconHtml(o.id, o.color, o.icon)}</div>
           <div class="name">${o.name}</div>
           <div class="desc">${o.text}</div>
@@ -453,6 +457,7 @@ export class Screens {
 
   showShop(v: ShopView, focus?: number): void {
     const el = this.els.shop;
+    const wasOpen = this.current === 'shop';
     el.querySelector('h1')!.textContent = `STAGE ${v.stage} SHOP`;
     el.querySelector('.shop-top')!.innerHTML =
       `<span class="gold-big"><span class="gold-dot"></span> ${v.gold} GOLD</span>` +
@@ -486,6 +491,7 @@ export class Screens {
           <div class="slot-no">${i + 1}</div>
           <div class="icon" style="--c:${o.def.color}">${iconHtml(o.def.id, o.def.color, o.def.icon)}</div>
           <div class="name">${o.def.name}</div>
+          <div class="desc">${o.def.desc}</div>
           ${o.readout ? `<div class="readout">${o.readout}</div>` : ''}
           <div class="ctrl">
             <button data-nav data-act="mod-left" data-index="${i}" ${i === 0 ? 'disabled' : ''}>&#9664;</button>
@@ -496,6 +502,67 @@ export class Screens {
         )
         .join('') + '<div class="owned-mod empty"></div>'.repeat(empty);
     this.show('shop', focus);
+    // Gold changes pop a +/- number over the counter.
+    const delta = wasOpen && this.shopGold >= 0 ? v.gold - this.shopGold : 0;
+    this.shopGold = v.gold;
+    if (delta) {
+      const gold = el.querySelector<HTMLElement>('.gold-big')!;
+      replay(gold, 'bump');
+      floatText(gold, `${delta > 0 ? '+' : ''}${delta}`, delta > 0 ? 'var(--yellow)' : 'var(--orange)');
+    }
+  }
+
+  /** Shop juice: a sound plus pixel particles for each shop action. */
+  shopFx(kind: ShopFx, i = 0): void {
+    const el = this.els.shop;
+    const gold = el.querySelector<HTMLElement>('.gold-big');
+    switch (kind) {
+      case 'open': {
+        sfx.shopOpen();
+        replay(el.querySelector('h1')!, 'slam-in');
+        // Coin shower across the top of the screen.
+        for (let k = 0; k < 28; k++) {
+          const x = Math.random() * innerWidth;
+          bit(x, -20, x + (Math.random() - 0.5) * 60, innerHeight * (0.35 + Math.random() * 0.4), true, Math.random() * 0.5, 0.9);
+        }
+        break;
+      }
+      case 'buy': {
+        sfx.buy();
+        const card = el.querySelector('.shop-offers')!.children[i] as HTMLElement | undefined;
+        if (card && gold) coinsBetween(gold, card, 14);
+        if (card) burstAt(card, ['var(--white)', 'var(--yellow)', 'var(--cyan)'], 18);
+        const owned = el.querySelectorAll<HTMLElement>('.owned-mod:not(.empty)');
+        const fresh = owned[owned.length - 1];
+        if (fresh) replay(fresh, 'fresh');
+        break;
+      }
+      case 'sell':
+        sfx.sell();
+        if (gold) burstAt(gold, ['var(--yellow)', 'var(--orange)'], 16, true);
+        break;
+      case 'reroll':
+        sfx.reroll();
+        el.querySelectorAll<HTMLElement>('.shop-offers > *').forEach((c, k) => {
+          c.style.animationDelay = `${k * 0.06}s`;
+          replay(c, 'reroll-in');
+        });
+        break;
+      case 'heal': {
+        sfx.heal();
+        const btn = el.querySelector<HTMLElement>('[data-act="shop-heal"]');
+        if (btn) burstAt(btn, ['var(--green)', 'var(--lime)', 'var(--white)'], 20);
+        replay(el, 'heal-flash');
+        break;
+      }
+      case 'deny': {
+        sfx.deny();
+        const f = el.querySelector<HTMLElement>('.focused');
+        if (f) replay(f, 'deny');
+        if (gold) replay(gold, 'deny');
+        break;
+      }
+    }
   }
 
   // ---------------------------------------------------------------- unlocks
@@ -589,4 +656,69 @@ export class Screens {
     this.setHighScores(list, rank);
     this.show('gameover');
   }
+}
+
+// ---------------------------------------------------------------- shop particles
+
+/** Restart a CSS animation class on an element. */
+function replay(el: HTMLElement, cls: string): void {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+}
+
+/** One pixel bit (or coin) flying from (x0, y0) to (x1, y1) with a little hop. */
+function bit(x0: number, y0: number, x1: number, y1: number, coin: boolean, delay = 0, dur = 0.55, color = 'var(--yellow)'): void {
+  const b = document.createElement('i');
+  b.className = coin ? 'px-bit coin' : 'px-bit';
+  const s = b.style;
+  s.setProperty('--x0', `${x0}px`);
+  s.setProperty('--y0', `${y0}px`);
+  s.setProperty('--x1', `${x1}px`);
+  s.setProperty('--y1', `${y1}px`);
+  s.setProperty('--xm', `${(x0 + x1) / 2}px`);
+  s.setProperty('--ym', `${Math.min(y0, y1) - 30 - Math.random() * 40}px`);
+  s.setProperty('--c', color);
+  s.animationDelay = `${delay}s`;
+  s.animationDuration = `${dur}s`;
+  b.addEventListener('animationend', () => b.remove(), { once: true });
+  document.body.appendChild(b);
+}
+
+function centre(el: HTMLElement): [number, number] {
+  const r = el.getBoundingClientRect();
+  return [r.left + r.width / 2, r.top + r.height / 2];
+}
+
+/** Pixels bursting out of an element. `fountain` arcs them up and lets them fall. */
+function burstAt(el: HTMLElement, colors: string[], n: number, fountain = false): void {
+  const [x, y] = centre(el);
+  for (let k = 0; k < n; k++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = 40 + Math.random() * 70;
+    const tx = x + Math.cos(a) * d;
+    const ty = fountain ? y + 30 + Math.random() * 60 : y + Math.sin(a) * d;
+    bit(x, y, tx, ty, fountain, Math.random() * 0.08, 0.45 + Math.random() * 0.25, colors[k % colors.length]);
+  }
+}
+
+/** Coins streaming from one element to another (gold spent on a card). */
+function coinsBetween(from: HTMLElement, to: HTMLElement, n: number): void {
+  const [x0, y0] = centre(from);
+  const [x1, y1] = centre(to);
+  for (let k = 0; k < n; k++) bit(x0, y0, x1 + (Math.random() - 0.5) * 60, y1 + (Math.random() - 0.5) * 60, true, k * 0.025, 0.45);
+}
+
+/** A number that rises and fades over an element. */
+function floatText(el: HTMLElement, text: string, color: string): void {
+  const [x, y] = centre(el);
+  const t = document.createElement('i');
+  t.className = 'px-float';
+  t.textContent = text;
+  t.style.left = `${x}px`;
+  t.style.top = `${y}px`;
+  t.style.color = color;
+  t.addEventListener('animationend', () => t.remove(), { once: true });
+  document.body.appendChild(t);
 }

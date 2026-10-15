@@ -19,7 +19,6 @@ export class Buster extends Weapon {
   private shotCd = 0;
   private shotCount = 0;
   private mz = { x: 0, z: 0 };
-  muzzleT = 0;
   /** 0..1 = first charge level, 1..2 = overcharge (with the Overcharge Mod). */
   charge = 0;
   private sparkT = 0;
@@ -37,7 +36,9 @@ export class Buster extends Weapon {
     this.shotCd -= dt;
     const p = this.p;
     const blocked = ctx.player.dead || ctx.flags.busterDisabled;
-    if (ctx.charging && !blocked) {
+    // Arm weapons take over the rapid fire (left) or charge shot (right).
+    const charging = ctx.charging && !ctx.armSecondary;
+    if (charging && !blocked) {
       this.updateCharge(dt, ctx);
       this.shotCd = Math.max(this.shotCd, 0);
       return; // no rapid fire while charging
@@ -46,7 +47,7 @@ export class Buster extends Weapon {
       if (this.charge >= chargeTuning.minCharge && !blocked) this.fireCharged(ctx);
       this.charge = 0;
     }
-    if (!ctx.firing || blocked || ctx.player.dashing) {
+    if (!ctx.firing || ctx.armPrimary || blocked || ctx.player.dashing) {
       this.shotCd = Math.max(this.shotCd, 0);
       return;
     }

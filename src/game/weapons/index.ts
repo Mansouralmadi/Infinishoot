@@ -10,6 +10,12 @@ import { Lightning } from './lightning';
 import { Mines } from './mines';
 import { Missiles } from './missiles';
 import { Nova } from './nova';
+import { PlasmaOrb } from './orb';
+import { Grenade } from './grenade';
+import { GravityWell } from './well';
+import { Laser } from './laser';
+import { Scatter } from './scatter';
+import { Shield } from './shield';
 
 export { Weapon } from './base';
 export type { WeaponCtx, DamageOpts } from './base';
@@ -37,6 +43,18 @@ export function createWeapon(id: string, scene: THREE.Scene): Weapon {
       return new Nova(def);
     case 'fire':
       return new Fire(def, scene);
+    case 'scatter':
+      return new Scatter(def);
+    case 'laser':
+      return new Laser(def, scene);
+    case 'orb':
+      return new PlasmaOrb(def, scene);
+    case 'grenade':
+      return new Grenade(def, scene);
+    case 'well':
+      return new GravityWell(def, scene);
+    case 'shield':
+      return new Shield(def, scene);
     default:
       throw new Error(`Unknown weapon: ${id}`);
   }

@@ -1,5 +1,6 @@
 import type { Rng } from '../core/rng';
 import { ENEMIES, bossForStage, type EnemyDef } from '../data/enemies';
+import { bossTuning } from './enemies';
 
 /**
  * Survival director. Each stage is a timed fight: the number of enemies kept
@@ -14,9 +15,12 @@ export const directorTuning = {
   alivePerStage: 60, // extra target alive per later stage
   aliveCap: 450,
   spawnPerSecond: 14, // max spawn rate when below target
-  hpPerStage: 0.7, // enemy HP multiplier growth per stage
+  // Stage scaling is 1 + per * (stage - 1) + per2 * (stage - 1)^2, so each stage hits harder than the last.
+  hpPerStage: 0.9, // enemy HP multiplier growth per stage
+  hpPerStage2: 0.15,
   hpPerMinute: 0.12, // and within a stage
-  dmgPerStage: 0.2,
+  dmgPerStage: 0.3,
+  dmgPerStage2: 0.03,
   speedPerStage: 0.04,
   eliteEvery: 48, // seconds
   ringEvery: 36, // seconds between encircling swarm rings
@@ -65,18 +69,23 @@ export class Director {
     return Math.max(0, this.duration - this.time);
   }
 
+  private curve(per: number, per2: number): number {
+    const s = this.stage - 1;
+    return 1 + per * s + per2 * s * s;
+  }
+
   get hpMul(): number {
     const t = directorTuning;
-    return (1 + t.hpPerStage * (this.stage - 1)) * (1 + t.hpPerMinute * this.paceMinute) * (1 + 0.45 * (this.players - 1));
+    return this.curve(t.hpPerStage, t.hpPerStage2) * (1 + t.hpPerMinute * this.paceMinute) * (1 + 0.45 * (this.players - 1));
   }
 
   /** Bosses scale per stage only (not by minute), so they stay beatable. */
   get bossHpMul(): number {
-    return (1 + directorTuning.hpPerStage * (this.stage - 1)) * (1 + 0.6 * (this.players - 1));
+    return bossTuning.hp * this.curve(directorTuning.hpPerStage, directorTuning.hpPerStage2) * (1 + 0.6 * (this.players - 1));
   }
 
   get dmgMul(): number {
-    return 1 + directorTuning.dmgPerStage * (this.stage - 1);
+    return this.curve(directorTuning.dmgPerStage, directorTuning.dmgPerStage2);
   }
 
   get speedMul(): number {

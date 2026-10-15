@@ -10,8 +10,15 @@ export interface WeaponLevel {
   p: Record<string, number>;
 }
 
+/** Arm weapons replace the Buster's rapid fire (primary) or charge shot (secondary). */
+export type ArmSlot = 'primary' | 'secondary';
+
 export interface WeaponDef {
   id: string;
+  /** Arm weapon slot; arm weapons don't take an auto-weapon slot. */
+  slot?: ArmSlot;
+  /** The last level is an evolution: new name, colour and look. */
+  evo?: { name: string; color: string };
   tags: Tag[];
   name: string;
   icon: string;
@@ -165,6 +172,122 @@ export const WEAPONS: Record<string, WeaponDef> = {
       { text: 'Hotter, wider flames.', p: { life: 2.4, radius: 1.0, dps: 24, dash: 0 } },
       { text: 'Dashing leaves a firewall.', p: { life: 2.6, radius: 1.05, dps: 26, dash: 1 } },
       { text: 'Inferno!', p: { life: 3.2, radius: 1.25, dps: 36, dash: 1 } },
+    ],
+  },
+
+  // ---------------------------------------------------------------- arm weapons
+  scatter: {
+    id: 'scatter',
+    slot: 'primary',
+    evo: { name: "Dragon's Breath", color: '#ff5e3a' },
+    tags: ['projectile'],
+    name: 'Scattergun',
+    icon: '⁂',
+    color: '#ffe9a8',
+    desc: 'LEFT CLICK: a close-range blast of pellets.',
+    starter: true,
+    levels: [
+      { text: 'Blasts 5 pellets where you aim.', p: { dmg: 7, rate: 1.8, pellets: 5, spread: 40, life: 0.32, speed: 26, pierce: 0 } },
+      { text: '+1 pellet, fires faster.', p: { dmg: 8, rate: 2.0, pellets: 6, spread: 40, life: 0.32, speed: 26, pierce: 0 } },
+      { text: 'Pellets pierce 1 enemy.', p: { dmg: 9, rate: 2.0, pellets: 7, spread: 42, life: 0.34, speed: 27, pierce: 1 } },
+      { text: 'Wider, harder blasts.', p: { dmg: 11, rate: 2.3, pellets: 8, spread: 46, life: 0.34, speed: 28, pierce: 1 } },
+      { text: '10 pellets!', p: { dmg: 13, rate: 2.6, pellets: 10, spread: 50, life: 0.36, speed: 28, pierce: 1 } },
+      { text: 'EVOLVE: breathes fire that sets enemies ablaze.', p: { dmg: 15, rate: 3.0, pellets: 12, spread: 50, life: 0.42, speed: 30, pierce: 2 } },
+    ],
+  },
+  laser: {
+    id: 'laser',
+    slot: 'primary',
+    evo: { name: 'Prism Lance', color: '#ff7af0' },
+    tags: ['projectile', 'area'],
+    name: 'Pulse Laser',
+    icon: '═',
+    color: '#5cf2ff',
+    desc: 'LEFT CLICK: a held beam that burns through lines of enemies.',
+    starter: true,
+    levels: [
+      { text: 'Hold to fire a piercing beam.', p: { dps: 60, range: 9, width: 0.35, beams: 1 } },
+      { text: 'Longer beam.', p: { dps: 70, range: 10, width: 0.35, beams: 1 } },
+      { text: 'Hotter, wider beam.', p: { dps: 85, range: 10, width: 0.45, beams: 1 } },
+      { text: 'Longer, stronger beam.', p: { dps: 100, range: 11.5, width: 0.45, beams: 1 } },
+      { text: 'Overclocked beam!', p: { dps: 120, range: 12.5, width: 0.55, beams: 1 } },
+      { text: 'EVOLVE: splits into a 3-way rainbow lance.', p: { dps: 135, range: 14, width: 0.6, beams: 3 } },
+    ],
+  },
+  orb: {
+    id: 'orb',
+    slot: 'primary',
+    evo: { name: 'Storm Sphere', color: '#b48cff' },
+    tags: ['projectile', 'area'],
+    name: 'Plasma Orb',
+    icon: '◉',
+    color: '#7dff9a',
+    desc: 'LEFT CLICK: slow orbs that zap everything they pass.',
+    starter: true,
+    levels: [
+      { text: 'Fires orbs that zap nearby enemies.', p: { dmg: 8, rate: 1.6, speed: 9, radius: 2.2, tick: 0.25, life: 1.6 } },
+      { text: 'Bigger zap radius.', p: { dmg: 9, rate: 1.8, speed: 9, radius: 2.5, tick: 0.25, life: 1.6 } },
+      { text: 'Stronger zaps.', p: { dmg: 12, rate: 2.0, speed: 9, radius: 2.6, tick: 0.25, life: 1.6 } },
+      { text: 'Orbs last longer.', p: { dmg: 13, rate: 2.2, speed: 9, radius: 2.9, tick: 0.22, life: 1.9 } },
+      { text: 'Supercharged orbs!', p: { dmg: 16, rate: 2.5, speed: 9.5, radius: 3.2, tick: 0.2, life: 1.9 } },
+      { text: 'EVOLVE: storm orbs shock enemies and burst at the end.', p: { dmg: 18, rate: 2.5, speed: 9.5, radius: 3.6, tick: 0.2, life: 2.1 } },
+    ],
+  },
+  grenade: {
+    id: 'grenade',
+    slot: 'secondary',
+    evo: { name: 'Cluster Mortar', color: '#ff3d5e' },
+    tags: ['explosive'],
+    name: 'Grenade Lobber',
+    icon: '●',
+    color: '#9be35a',
+    desc: 'RIGHT CLICK: lob grenades over the crowd.',
+    starter: true,
+    levels: [
+      { text: 'Lobs a grenade where you aim.', p: { cd: 1.2, dmg: 50, radius: 2.6, range: 8, bomblets: 0 } },
+      { text: 'Bigger boom.', p: { cd: 1.1, dmg: 60, radius: 2.8, range: 8.5, bomblets: 0 } },
+      { text: 'Faster reload.', p: { cd: 0.95, dmg: 72, radius: 3.0, range: 9, bomblets: 0 } },
+      { text: 'Heavier grenades.', p: { cd: 0.9, dmg: 85, radius: 3.3, range: 9, bomblets: 0 } },
+      { text: 'Huge blasts!', p: { cd: 0.8, dmg: 100, radius: 3.6, range: 9.5, bomblets: 0 } },
+      { text: 'EVOLVE: each shell scatters 6 bomblets.', p: { cd: 0.8, dmg: 110, radius: 3.8, range: 10, bomblets: 6 } },
+    ],
+  },
+  well: {
+    id: 'well',
+    slot: 'secondary',
+    evo: { name: 'Event Horizon', color: '#c23dff' },
+    tags: ['area'],
+    name: 'Gravity Well',
+    icon: '◌',
+    color: '#7a8cff',
+    desc: 'RIGHT CLICK: throw a vortex that drags enemies in.',
+    starter: true,
+    levels: [
+      { text: 'Throws a vortex that pulls and grinds.', p: { cd: 6, radius: 4, pull: 6, dps: 15, life: 2.5, implode: 0 } },
+      { text: 'Bigger vortex.', p: { cd: 5.5, radius: 4.5, pull: 6.5, dps: 18, life: 2.5, implode: 0 } },
+      { text: 'Lasts longer, grinds harder.', p: { cd: 5.5, radius: 4.6, pull: 7, dps: 25, life: 3, implode: 0 } },
+      { text: 'Stronger pull.', p: { cd: 5, radius: 5, pull: 8.5, dps: 28, life: 3, implode: 0 } },
+      { text: 'Massive vortex!', p: { cd: 4.5, radius: 5.5, pull: 9, dps: 35, life: 3.5, implode: 0 } },
+      { text: 'EVOLVE: a black hole that implodes at the end.', p: { cd: 4.5, radius: 6.5, pull: 11, dps: 45, life: 3.5, implode: 120 } },
+    ],
+  },
+  shield: {
+    id: 'shield',
+    slot: 'secondary',
+    evo: { name: 'Mirror Aegis', color: '#ffd23f' },
+    tags: ['area'],
+    name: 'Aegis Shield',
+    icon: '◗',
+    color: '#5ce1ff',
+    desc: 'RIGHT CLICK: hold up a shield that eats bullets and shoves enemies.',
+    starter: true,
+    levels: [
+      { text: 'Hold to raise a shield in front of you.', p: { dmg: 12, arc: 100, radius: 1.6, knock: 10, dur: 2.5 } },
+      { text: 'Lasts longer.', p: { dmg: 14, arc: 110, radius: 1.6, knock: 11, dur: 3 } },
+      { text: 'Wider, harder shield.', p: { dmg: 18, arc: 125, radius: 1.8, knock: 12, dur: 3.5 } },
+      { text: 'Lasts longer.', p: { dmg: 22, arc: 140, radius: 1.8, knock: 13, dur: 4 } },
+      { text: 'Wide bulwark!', p: { dmg: 28, arc: 160, radius: 2.0, knock: 14, dur: 5 } },
+      { text: 'EVOLVE: a full mirror dome that reflects bullets.', p: { dmg: 34, arc: 360, radius: 2.2, knock: 15, dur: 6 } },
     ],
   },
 };

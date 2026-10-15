@@ -62,8 +62,8 @@ class Sfx {
     o.stop(t + dur + 0.02);
   }
 
-  private noise(ctx: AudioContext, dur: number, vol: number, filterHz: number, filterEnd = filterHz, q = 1) {
-    const t = ctx.currentTime;
+  private noise(ctx: AudioContext, dur: number, vol: number, filterHz: number, filterEnd = filterHz, q = 1, delay = 0) {
+    const t = ctx.currentTime + delay;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuf;
     const f = ctx.createBiquadFilter();
@@ -149,6 +149,45 @@ class Sfx {
     const ctx = this.begin('powerUp', 0.2);
     if (!ctx) return;
     [523, 659, 784, 1047].forEach((f, i) => this.tone(ctx, 'square', f, f, 0.09, 0.1, i * 0.06));
+  }
+
+  // Shop: cash-register jingles.
+  shopOpen(): void {
+    const ctx = this.begin('shopOpen', 0.5);
+    if (!ctx) return;
+    [784, 988, 1175, 1568].forEach((f, i) => this.tone(ctx, 'square', f, f, 0.07, 0.08, i * 0.05));
+    this.tone(ctx, 'triangle', 2093, 2093, 0.5, 0.12, 0.22);
+    this.tone(ctx, 'triangle', 2637, 2637, 0.4, 0.06, 0.24);
+  }
+
+  buy(): void {
+    const ctx = this.begin('buy', 0.08);
+    if (!ctx) return;
+    this.noise(ctx, 0.04, 0.3, 3500);
+    this.tone(ctx, 'square', 1319, 1319, 0.06, 0.1, 0.04);
+    this.tone(ctx, 'triangle', 1760, 1760, 0.35, 0.14, 0.1);
+    this.tone(ctx, 'triangle', 2637, 2637, 0.3, 0.06, 0.12);
+  }
+
+  sell(): void {
+    const ctx = this.begin('sell', 0.08);
+    if (!ctx) return;
+    [1568, 1175, 880].forEach((f, i) => this.tone(ctx, 'square', f, f, 0.06, 0.09, i * 0.05));
+    this.noise(ctx, 0.08, 0.2, 2500, 1200, 2, 0.15);
+  }
+
+  reroll(): void {
+    const ctx = this.begin('reroll', 0.1);
+    if (!ctx) return;
+    for (let i = 0; i < 4; i++) this.noise(ctx, 0.05, 0.25, 2400 - i * 300, 900, 2, i * 0.045);
+    this.tone(ctx, 'square', 440, 1320, 0.2, 0.07, 0.05);
+  }
+
+  deny(): void {
+    const ctx = this.begin('deny', 0.15);
+    if (!ctx) return;
+    this.tone(ctx, 'square', 150, 140, 0.08, 0.12);
+    this.tone(ctx, 'square', 150, 120, 0.12, 0.12, 0.1);
   }
 
   stageClear(): void {

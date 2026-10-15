@@ -1,0 +1,134 @@
+import * as THREE from 'three';
+import type { WeaponDef } from '../../data/weapons';
+import { BULLET_Y } from '../bullets';
+import type { Enemy } from '../enemies';
+import { Weapon, type WeaponCtx } from './base';
+
+const TICK = 0.15;
+const FAN = 0.24; // radians between evolved side beams
+const PRISM = ['#ff7af0', '#5cf2ff', '#fff35c'];
+
+/**
+ * Primary arm weapon: a held beam that damages everything along it.
+ * Evolved (Prism Lance) it fans into three rainbow beams.
+ */
+export class Laser extends Weapon {
+  private on = 0;
+  private tickT = 0;
+  private soundT = 0;
+  private mz = { x: 0, z: 0 };
+  private hits: Enemy[] = [];
+  private group = new THREE.Group();
+  private beams: { core: THREE.Mesh; glow: THREE.Mesh; mat: THREE.MeshBasicMaterial; glowMat: THREE.MeshBasicMaterial }[] = [];
+  private geo = new THREE.BoxGeometry(1, 0.12, 1).translate(0, 0, 0.5);
+
+  constructor(def: WeaponDef, private scene: THREE.Scene) {
+    super(def);
+    const additive = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false } as const;
+    for (let i = 0; i < 3; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color: '#ffffff', ...additive });
+      const glowMat = new THREE.MeshBasicMaterial({ color: def.color, opacity: 0.55, ...additive });
+      const core = new THREE.Mesh(this.geo, mat);
+      const glow = new THREE.Mesh(this.geo, glowMat);
+      core.renderOrder = glow.renderOrder = 2;
+      this.group.add(core, glow);
+      this.beams.push({ core, glow, mat, glowMat });
+    }
+    this.group.visible = false;
+    scene.add(this.group);
+  }
+
+  net(): number[] {
+    return [this.on, this.muzzleT];
+  }
+  setNet(a: number[]): void {
+    this.on = a[0] ?? 0;
+    this.muzzleT = a[1] ?? 0;
+  }
+
+  private get range(): number {
+    return this.p.range;
+  }
+
+  update(dt: number, ctx: WeaponCtx): void {
+    this.muzzleT = Math.max(0, this.muzzleT - dt);
+    const pl = ctx.player;
+    this.on = ctx.firing && !pl.dead && !pl.dashing ? 1 : 0;
+    if (!this.on) {
+      this.tickT = 0;
+      return;
+    }
+    this.muzzleT = 0.03;
+    this.tickT -= dt;
+    this.soundT -= dt;
+    if (this.tickT > 0) return;
+    this.tickT += TICK * ctx.stats.cooldownMul;
+    if (this.soundT <= 0) {
+      ctx.sound('zap');
+      this.soundT = 0.3;
+    }
+    const p = this.p;
+    pl.muzzle(this.mz);
+    const base = Math.atan2(pl.aim.z, pl.aim.x);
+    const width = p.width * Math.sqrt(ctx.stats.areaMul);
+    for (let b = 0; b < p.beams; b++) {
+      const a = base + (b === 0 ? 0 : b === 1 ? -FAN : FAN);
+      const dmg = p.dps * TICK * (b === 0 ? 1 : 0.6);
+      this.burn(ctx, Math.cos(a), Math.sin(a), width, dmg);
+    }
+  }
+
+  /** Damage every enemy within `width` of the beam segment. */
+  private burn(ctx: WeaponCtx, dx: number, dz: number, width: number, dmg: number): void {
+    const r = this.range;
+    const cx = this.mz.x + dx * r * 0.5;
+    const cz = this.mz.z + dz * r * 0.5;
+    for (const e of ctx.inRadius(cx, cz, r * 0.5 + 1.5, this.hits)) {
+      const ex = e.x - this.mz.x;
+      const ez = e.z - this.mz.z;
+      const t = ex * dx + ez * dz;
+      if (t < -e.radius || t > r + e.radius) continue;
+      const off = Math.abs(ex * dz - ez * dx);
+      if (off > e.radius + width * 0.5) continue;
+      ctx.damage(e, dmg, { source: 'laser', dirX: dx, dirZ: dz, knockback: 0.6, hx: this.mz.x + dx * t, hz: this.mz.z + dz * t, canCrit: true, loud: true });
+    }
+  }
+
+  render(_alpha: number, ctx: WeaponCtx): void {
+    const pl = ctx.player;
+    this.group.visible = this.on > 0 && !pl.dead;
+    if (!this.group.visible) return;
+    const evo = this.evolved;
+    const p = this.p;
+    pl.muzzle(this.mz);
+    // Interpolated hero position is what's drawn; offset the muzzle to match.
+    const ox = pl.rig.root.position.x - pl.x;
+    const oz = pl.rig.root.position.z - pl.z;
+    const base = Math.atan2(pl.aim.x, pl.aim.z); // three.js yaw: +Z forward
+    const flicker = 0.85 + Math.random() * 0.3;
+    const width = p.width * Math.sqrt(ctx.stats.areaMul) * flicker;
+    this.beams.forEach((bm, i) => {
+      const shown = i < p.beams;
+      bm.core.visible = bm.glow.visible = shown;
+      if (!shown) return;
+      const yaw = base + (i === 0 ? 0 : i === 1 ? FAN : -FAN);
+      const len = this.range * (i === 0 ? 1 : 0.85);
+      for (const m of [bm.core, bm.glow]) {
+        m.position.set(this.mz.x + ox, BULLET_Y, this.mz.z + oz);
+        m.rotation.set(0, yaw, 0);
+      }
+      bm.core.scale.set(width * 0.35, 1, len);
+      bm.glow.scale.set(width * (evo ? 1.6 : 1.2), 2, len);
+      bm.glowMat.color.set(evo ? PRISM[(i + Math.floor(ctx.time * 8)) % 3] : this.def.color);
+    });
+  }
+
+  dispose(): void {
+    this.scene.remove(this.group);
+    this.geo.dispose();
+    for (const b of this.beams) {
+      b.mat.dispose();
+      b.glowMat.dispose();
+    }
+  }
+}
