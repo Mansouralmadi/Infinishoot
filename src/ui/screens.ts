@@ -46,6 +46,7 @@ export interface ShopView {
   gold: number;
   interest: number;
   interestCap: number;
+  interestPer: number;
   offers: ({ def: ModDef; price: number; hint: string } | null)[];
   owned: { def: ModDef; sell: number; readout: string }[];
   slots: number;
@@ -118,7 +119,7 @@ export class Screens {
   </div>
   <div class="wallet"></div>
   <div class="hiscores"></div>
-  <div class="controls">WASD / L-stick move &middot; Mouse / R-stick aim &amp; shoot &middot; Space / LB dash &middot; Q / RB bomb &middot; Esc / Start pause</div>
+  <div class="controls">WASD / L-stick move &middot; Mouse / R-stick aim &amp; shoot &middot; Hold right click / X charge shot &middot; Space / LB dash &middot; Q / RB bomb &middot; Esc / Start pause</div>
 </div>
 <div id="scr-pause" class="screen dim" hidden>
   <h1>PAUSED</h1>
@@ -458,7 +459,7 @@ export class Screens {
     el.querySelector('h1')!.textContent = `STAGE ${v.stage} SHOP`;
     el.querySelector('.shop-top')!.innerHTML =
       `<span class="gold-big"><span class="gold-dot"></span> ${v.gold} GOLD</span>` +
-      `<span class="interest">Interest next clear: +${v.interest} (1 per 5 held, max ${v.interestCap})</span>`;
+      `<span class="interest">Interest next clear: +${v.interest} (1 per ${v.interestPer} held, max ${v.interestCap})</span>`;
     el.querySelector('.shop-offers')!.innerHTML = v.offers
       .map((o, i) => {
         if (!o) return `<div class="mod-card sold">SOLD</div>`;

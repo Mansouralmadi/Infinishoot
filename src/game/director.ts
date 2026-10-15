@@ -8,7 +8,7 @@ import { ENEMIES, type EnemyDef } from '../data/enemies';
  * boss appears when the timer runs out. Later stages scale everything up.
  */
 export const directorTuning = {
-  stageSeconds: 300,
+  stageSeconds: 240,
   aliveStart: 15, // target enemies alive at 0:00
   aliveEnd: 230, // target alive at the end of stage 1
   alivePerStage: 60, // extra target alive per later stage
@@ -18,8 +18,8 @@ export const directorTuning = {
   hpPerMinute: 0.12, // and within a stage
   dmgPerStage: 0.2,
   speedPerStage: 0.04,
-  eliteEvery: 60, // seconds
-  ringEvery: 45, // seconds between encircling swarm rings
+  eliteEvery: 48, // seconds
+  ringEvery: 36, // seconds between encircling swarm rings
   minuteHead: 1.5, // later stages unlock enemy types this many minutes earlier per stage
 };
 
@@ -53,13 +53,21 @@ export class Director {
     return directorTuning.stageSeconds;
   }
 
+  /**
+   * Stage progress in "content minutes": enemy types, HP growth and rings were
+   * tuned for 5-minute stages, so shorter stages run through them faster.
+   */
+  get paceMinute(): number {
+    return (this.time / 60) * (300 / this.duration);
+  }
+
   get remaining(): number {
     return Math.max(0, this.duration - this.time);
   }
 
   get hpMul(): number {
     const t = directorTuning;
-    return (1 + t.hpPerStage * (this.stage - 1)) * (1 + t.hpPerMinute * (this.time / 60)) * (1 + 0.45 * (this.players - 1));
+    return (1 + t.hpPerStage * (this.stage - 1)) * (1 + t.hpPerMinute * this.paceMinute) * (1 + 0.45 * (this.players - 1));
   }
 
   /** Bosses scale per stage only (not by minute), so they stay beatable. */
@@ -84,7 +92,7 @@ export class Director {
   }
 
   private pool(): EnemyDef[] {
-    const minute = this.time / 60 + (this.stage - 1) * directorTuning.minuteHead;
+    const minute = this.paceMinute + (this.stage - 1) * directorTuning.minuteHead;
     return Object.values(ENEMIES).filter((d) => d.minMinute >= 0 && d.minMinute <= minute && d.weight > 0);
   }
 
@@ -117,7 +125,7 @@ export class Director {
 
     if (this.time >= this.nextRing && !this.bossSpawned) {
       this.nextRing += t.ringEvery * rng.range(0.8, 1.2);
-      const minute = this.time / 60;
+      const minute = this.paceMinute;
       this.queue.push({ kind: 'ring', def: minute > 2.5 && rng.chance(0.4) ? ENEMIES.zippy : ENEMIES.swarmer, count: Math.round(18 + minute * 6 + this.stage * 6) });
     }
 

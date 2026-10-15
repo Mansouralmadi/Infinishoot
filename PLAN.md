@@ -88,8 +88,17 @@ Known limits: some strict networks block direct WebRTC connections (would need a
 - [ ] 2 more bosses with distinct patterns, boss every stage rotates
 - [ ] Weapon evolutions: max weapon + matching passive becomes a stronger evolved form
 - [ ] Bullet-pattern system for shooter variants (spiral, burst, sniper)
-- [ ] Hazards (explosive barrels, conveyor floors)
+- [x] Explosive barrels: shoot them (3 hits) or catch them in a blast; fiery blast that chains to nearby barrels
+- [ ] More hazards (conveyor floors)
 - **Playable:** each stage looks and plays differently.
+
+## Milestone 4c: Charge shot, economy and UI pass (done)
+- [x] Buster charge shot on right click / X: hold to charge, release to fire; damage, size and pierce grow with hold time, full charge explodes on impact; crosshair charge ring
+- [x] Charge cards (Capacitor, Plasma Core) and Mods (Quick Draw, Patience, Thunder Shot, Mega Buster, Overcharge)
+- [x] Economy Mods: Bounty Hunter, Tip Jar, Lucky Coin, Investor, Golden Ticket, Pawn Shop, Gold Plating
+- [x] Stages shortened to 4:00 (enemy types, HP growth and rings keep their 5-minute pacing, compressed)
+- [x] UI pass: glossy icons, floating and wiggling card icons, sheen on focused and rare buttons, pop-in menus, dealt shop cards, spinning coins, striped XP bar, on-screen pause button
+- [x] Fixes: shop CONTINUE now closes the shop; Esc pause no longer closes itself on the same press
 
 ## Milestone 5: Heroes and content
 - [ ] 2-3 heroes with different starting weapons and stat quirks, unlocked in the Workshop; hero art with painted faces
@@ -165,3 +174,4 @@ public/assets/         # models (glb), textures (png), audio
 - 2026-10-15: Mods live in a shop rather than in level-ups so level-ups stay about weapons, and gold creates its own spend/save/interest decisions. In-run gold replaced the Bolt pickups; Bolts are now only earned at run end (kills, stages, minutes, left-over gold). Echo shares state with the Mod it copies, so echoed counters (Bloodlust) also stack twice as fast.
 - 2026-10-15: Online co-op design (user): separate gold and own shop per player; XP shared as a team (assumed, Vampire Survivors style). Host-authoritative simulation with client-owned movement, chosen over lockstep because JS floating point isn't guaranteed identical across browsers and lockstep adds input delay. Refactored Game into team state plus per-player Hero (src/game/hero.ts); solo is simply one hero. Gameplay timing must never depend on render (the portal used to), because hosts may not render every frame.
 - 2026-10-15: Dropped the itch.io build (user: downloads should be plug and play, no command lines). The game now ships as a single portable Windows exe built with Electron + electron-builder (`npm run dist`, about 100 MB). Electron's `backgroundThrottling: false` also fixes the co-op host pausing when its window is in the background. Vite's `base: './'` stays because the app loads dist/index.html from disk. three, peerjs and lil-gui moved to devDependencies since Vite bundles them, so the exe ships no node_modules.
+- 2026-10-15: Right click moved from dash to the charge shot (dash keeps Space/Shift/LB/LT/A). Charging suppresses rapid fire, Mega Man style. Charged hits are credited to source 'charge' so Mods key off it. Stages went from 5:00 to 4:00; the director's 'pace minute' scales content so 4 minutes covers what 5 did. Barrels are no longer merged props: they live in Barrels (src/game/barrels.ts) with their own collider that is removed (and the wall grid rebuilt) when they blow; hosts broadcast `barrel` events to clients. Mods gained `addGold`, `freeSlots` and an `onStageClear` hook.

@@ -16,6 +16,8 @@ export interface Arena {
   group: THREE.Group;
   colliders: AABB[];
   halfSize: number;
+  /** Explosive barrels: drawn and destroyed by the game, not merged into the static props. */
+  barrels: { x: number; z: number; box: AABB }[];
 }
 
 const HALF = 55;
@@ -26,6 +28,7 @@ export function createFieldArena(seed: number): Arena {
   const rng = new Rng(seed);
   const group = new THREE.Group();
   const colliders: AABB[] = [];
+  const barrels: Arena['barrels'] = [];
   const tex = {
     grass: textures.grass(),
     path: textures.path(),
@@ -146,12 +149,11 @@ export function createFieldArena(seed: number): Arena {
   const crateGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
   const trunkMat = createRetroMaterial({ color: '#a86a3c' });
   const leafMat = createRetroMaterial({ map: tex.leaves });
-  const barrelGeo = mergeGeometries([
-    paint(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 8), '#ff4d5e'),
-    paint(new THREE.CylinderGeometry(0.47, 0.47, 0.18, 8), '#ffd23f').translate(0, 0.28, 0),
-    paint(new THREE.CylinderGeometry(0.47, 0.47, 0.18, 8), '#ffd23f').translate(0, -0.28, 0),
-  ]);
-  const barrelMat = createRetroMaterial({ vertexColors: true });
+  const barrel = (p: [number, number]) => {
+    const box = aabbFromCenter(p[0], p[1], 0.9, 0.9);
+    colliders.push(box);
+    barrels.push({ x: p[0], z: p[1], box });
+  };
 
   const ruin = (cx: number, cz: number) => {
     // An L or U of short walls plus a pillar or two.
@@ -198,12 +200,9 @@ export function createFieldArena(seed: number): Arena {
       }
       solid(c, p[0], p[1], 1.2, 1.2);
     }
-    for (let i = rng.int(0, 2); i > 0; i--) {
+    for (let i = rng.int(1, 3); i > 0; i--) {
       const p = spot(0.9, 0.9, 0.2, cx, cz, 2.5);
-      if (!p) continue;
-      const b = new THREE.Mesh(barrelGeo, barrelMat);
-      b.position.set(p[0], 0.55, p[1]);
-      solid(b, p[0], p[1], 0.9, 0.9);
+      if (p) barrel(p);
     }
   };
   const grove = (cx: number, cz: number) => {
@@ -238,7 +237,18 @@ export function createFieldArena(seed: number): Arena {
     else grove(cx, cz);
   }
 
+  // Loose barrel groups out in the open, so there's always one worth shooting.
+  for (let i = 0; i < 10; i++) {
+    const c = spot(0.9, 0.9, 0.4);
+    if (!c) continue;
+    barrel(c);
+    for (let k = rng.int(1, 3); k > 0; k--) {
+      const p = spot(0.9, 0.9, 0.15, c[0], c[1], 1.6);
+      if (p) barrel(p);
+    }
+  }
+
   // Hundreds of props -> one draw call per material.
   mergeStatic(group);
-  return { group, colliders, halfSize: HALF };
+  return { group, colliders, halfSize: HALF, barrels };
 }

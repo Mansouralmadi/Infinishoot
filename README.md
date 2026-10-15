@@ -41,9 +41,10 @@ Title screen > PLAY ONLINE. One player hosts and shares the 5-letter code; up to
 |---|---|---|
 | Move | WASD | Left stick |
 | Aim and shoot | Mouse, hold left click | Right stick / RT |
-| Dash | Space, Shift, right click | LB / LT / A |
+| Charge shot (hold, release to fire) | Right click | X |
+| Dash | Space, Shift | LB / LT / A |
 | Bomb | Q, E, middle click | RB / Y |
-| Pause | Esc / P | Start |
+| Pause | Esc / P / pause button | Start |
 | Auto-fire | F | |
 | Debug panel (dev) | ` | |
 

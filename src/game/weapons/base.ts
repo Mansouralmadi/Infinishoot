@@ -53,6 +53,8 @@ export interface WeaponCtx {
   owner: number;
   /** Manual fire held (mouse / trigger / auto-fire). */
   firing: boolean;
+  /** Charge shot held (right mouse / X). */
+  charging: boolean;
   /** Summed Mod flags (Hair Trigger, Pacifist Core, Lightning Rod...). */
   readonly flags: ModFlags;
   /** Apply base damage (scaled by stats, crits, shatter). Returns the dealt amount. */
@@ -61,7 +63,7 @@ export interface WeaponCtx {
   inRadius(x: number, z: number, r: number, out: Enemy[]): Enemy[];
   /** Area blast that damages enemies (never the player). */
   blast(x: number, z: number, r: number, base: number, color: string, source: string): void;
-  sound(name: 'zap' | 'disc' | 'missile' | 'mine' | 'freeze' | 'explode' | 'shoot' | 'flame'): void;
+  sound(name: 'zap' | 'disc' | 'missile' | 'mine' | 'freeze' | 'explode' | 'shoot' | 'flame' | 'charge' | 'chargeFull' | 'chargeShot'): void;
 }
 
 /** Base class for an owned weapon. Levels are 1-based. */

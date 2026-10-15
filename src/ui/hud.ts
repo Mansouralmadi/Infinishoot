@@ -57,6 +57,7 @@ export class Hud {
          <div id="hp"><div class="bar"><div class="fill"></div></div><div class="num"></div></div>
          <div id="runinfo"><span class="kills"></span><span class="bolts"></span></div>
          <div id="timer"><div class="clock"></div><div class="stage"></div></div>
+         <button id="pausebtn" title="Pause (Esc)" aria-label="Pause">II</button>
          <div id="bossbar" hidden><div class="name"></div><div class="bar"><div class="fill"></div></div></div>
          <div id="toast"></div>
          <div id="score">0</div>
@@ -77,7 +78,14 @@ export class Hud {
     );
     this.q = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!;
     this.root = this.q('#ingame');
+    const pause = this.q('#pausebtn');
+    pause.addEventListener('mousedown', (e) => e.stopPropagation());
+    pause.addEventListener('click', () => this.onPause?.());
   }
+
+  /** Called when the on-screen pause button is clicked. */
+  onPause: (() => void) | null = null;
+  private lastGold = -1;
 
   private el(sel: string): HTMLElement {
     return (this.els[sel] ??= this.q(sel));
@@ -234,6 +242,15 @@ export class Hud {
     }
     this.text('#runinfo .kills', `☠ ${s.kills}`);
     this.text('#runinfo .bolts', `● ${s.gold}`);
+    if (s.gold !== this.lastGold) {
+      if (s.gold > this.lastGold && this.lastGold >= 0) {
+        const g = this.el('#runinfo .bolts');
+        g.classList.remove('bump');
+        void g.offsetWidth;
+        g.classList.add('bump');
+      }
+      this.lastGold = s.gold;
+    }
 
     // Timer / boss
     this.text('#timer .clock', s.timeLeft >= 0 ? fmtClock(s.timeLeft) : s.timeLeft === -1 ? 'BOSS!' : 'CLEAR!');

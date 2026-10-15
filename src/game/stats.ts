@@ -22,6 +22,8 @@ export interface Stats {
   boltMul: number;
   rerolls: number;
   revives: number;
+  chargeSpeed: number; // Buster charge rate multiplier
+  chargeDmg: number; // charged shot damage multiplier
 }
 
 export function baseStats(): Stats {
@@ -42,6 +44,8 @@ export function baseStats(): Stats {
     boltMul: 1,
     rerolls: 0,
     revives: 0,
+    chargeSpeed: 1,
+    chargeDmg: 1,
   };
 }
 

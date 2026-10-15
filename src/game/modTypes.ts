@@ -40,6 +40,10 @@ export interface ModApi {
   zap(from: Enemy, hops: number, dmg: number): void;
   ignite(e: Enemy, dps: number): void;
   shock(e: Enemy): void;
+  /** Pay this hero gold (with a +N popup). */
+  addGold(n: number): void;
+  /** Empty Mod slots right now. */
+  readonly freeSlots: number;
 }
 
 /** Flags are summed (numbers) or OR'd (booleans) across owned Mods. */
@@ -57,6 +61,11 @@ export interface ModFlags {
   interestCap: number;
   shopDiscount: number;
   freeRerolls: number;
+  chargeSpeed: number; // extra Buster charge rate
+  chargeSplit: number; // extra shots on a full charge
+  overcharge: boolean; // charge can build to a second level
+  interestPer: number; // gold needed per 1 interest is reduced by this
+  sellFull: boolean; // Mods sell for their full price
 }
 
 export function emptyFlags(): ModFlags {
@@ -74,6 +83,11 @@ export function emptyFlags(): ModFlags {
     interestCap: 0,
     shopDiscount: 0,
     freeRerolls: 0,
+    chargeSpeed: 0,
+    chargeSplit: 0,
+    overcharge: false,
+    interestPer: 0,
+    sellFull: false,
   };
 }
 
@@ -105,6 +119,8 @@ export interface ModDef {
   onHurt?(api: ModApi, st: ModState): void;
   onGem?(value: number, api: ModApi, st: ModState): void;
   onLevelUp?(api: ModApi, st: ModState): void;
+  /** Stage cleared (before the shop opens). */
+  onStageClear?(api: ModApi, st: ModState): void;
   tick?(dt: number, api: ModApi, st: ModState): void;
   /** Live readout for the HUD/shop, e.g. "x1.42". */
   readout?(api: ModApi, st: ModState): string;

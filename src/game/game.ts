@@ -16,6 +16,7 @@ import { DamageNumbers } from '../ui/damageNumbers';
 import { Hud, type LoadoutItem } from '../ui/hud';
 import { Screens, type Offer, type RunSummary, type ShopView } from '../ui/screens';
 import { createFieldArena, type Arena } from '../world/fieldArena';
+import { Barrels, barrelTuning, type Barrel } from './barrels';
 import { BULLET_Y, Bullets, Team } from './bullets';
 import { CameraRig, cameraTuning } from './cameraRig';
 import { Director } from './director';
@@ -73,6 +74,7 @@ export type Role = 'solo' | 'host' | 'client';
 const AIM_HEIGHT = BULLET_Y;
 const TITLE_SEED = 1234;
 const RECYCLE_DIST = 36;
+const CHARGE_TAGS: Tag[] = ['projectile'];
 const SNAP_EVERY = 3; // host snapshot every N sim steps (20 Hz)
 const INPUT_EVERY = 2; // client input every N sim steps (30 Hz)
 const INTEREST = 34; // only send entities this close to each client's hero
@@ -97,6 +99,7 @@ interface NetShop {
   gold: number;
   interest: number;
   interestCap: number;
+  interestPer: number;
   offers: ({ id: string; price: number; hint: string } | null)[];
   owned: { id: string; sell: number; readout: string }[];
   slots: number;
@@ -126,6 +129,7 @@ export class Game implements HeroWorld {
   readonly particles: Particles;
   readonly fx: Fx;
   readonly portal: Portal;
+  readonly barrels: Barrels;
   readonly pickups: Pickups;
   readonly juice = new Juice();
   readonly cam: CameraRig;
@@ -201,6 +205,7 @@ export class Game implements HeroWorld {
   private mz = { x: 0, z: 0 };
   private tmp = new THREE.Vector3();
   private scratch: Enemy[] = [];
+  private shownCharge = 0;
 
   constructor(
     private input: Input,
@@ -216,6 +221,8 @@ export class Game implements HeroWorld {
     this.particles = new Particles(this.scene);
     this.fx = new Fx(this.scene);
     this.portal = new Portal(this.scene);
+    this.barrels = new Barrels(this.scene);
+    this.barrels.load(this.arena);
     this.pickups = new Pickups(this.scene);
     this.cam = new CameraRig(aspect);
     this.dmg = new DamageNumbers(hudRoot);
@@ -256,6 +263,7 @@ export class Game implements HeroWorld {
         this.hud.toast(settings.autoFire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF');
       }
     });
+    this.hud.onPause = () => this.pause();
     this.enemyCtx = this.makeEnemyCtx();
     this.heroes = [this.makeHero(0, playerName(), save.workshop, unlockedWeapons())];
     this.goTitle();
@@ -345,6 +353,7 @@ export class Game implements HeroWorld {
       fx: this.vfx,
       owner: hero.index,
       firing: false,
+      charging: false,
       damage: (e, base, o) => this.damage(e, base, o, hero),
       nearest: (x, z, r, skip) => this.nearestEnemy(x, z, r, skip),
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),
@@ -422,6 +431,7 @@ export class Game implements HeroWorld {
     this.scene.add(this.arena.group);
     this.walls = new StaticBoxGrid(this.arena.colliders);
     this.enemyCtx.colliders = this.arena.colliders;
+    this.barrels.load(this.arena);
   }
 
   private spawnSpot(i: number): { x: number; z: number } {
@@ -587,6 +597,11 @@ export class Game implements HeroWorld {
 
   // ------------------------------------------------------------------ stage end, shop, portal
 
+  goldFx(h: Hero, n: number): void {
+    this.vfx.num(h.player.x, 2.6, h.player.z, `+${n}●`, 'score');
+    this.vfx.sound('coin', h.player.x, h.player.z);
+  }
+
   private stageClear(): void {
     this.mode = 'cleared';
     this.modeT = 0;
@@ -605,6 +620,7 @@ export class Game implements HeroWorld {
       if (h.left) continue;
       // Gold: flat reward plus interest on what you're holding (capped).
       h.gold += economyTuning.clearGold + h.interest;
+      h.synergy.stageClear();
       if (h.player.dead) this.reviveHero(h, 0.3, false);
       h.player.heal(h.player.maxHp * 0.3);
     }
@@ -627,6 +643,7 @@ export class Game implements HeroWorld {
   }
 
   private closeShop(): void {
+    if (['shop', 'wait'].includes(this.screens.current)) this.screens.show('none');
     for (const h of this.heroes) this.tell(h, { t: 'go' });
     this.openPortal();
   }
@@ -894,6 +911,9 @@ export class Game implements HeroWorld {
       (input.keyPressed('Escape') || input.keyPressed('KeyP') || input.padButtonPressed(9))
     ) {
       this.pause();
+      input.endStep();
+      this.hostTick(true);
+      return;
     }
     // Menus get the input first; if one switched screens, swallow this step's presses.
     const before = this.screens.current;
@@ -958,6 +978,7 @@ export class Game implements HeroWorld {
     this.recycleFarEnemies(dt);
 
     this.updateBullets(dt);
+    this.barrels.update(dt, (i, b) => this.explodeBarrel(i, b));
     this.collectors.length = 0;
     for (const h of this.heroes) this.collectors.push({ x: h.player.x, z: h.player.z, magnet: h.stats.magnet, alive: !h.player.dead && !h.left });
     this.pickups.update(dt, this.collectors, (t, v, who) => this.collect(this.heroes[who], t, v));
@@ -1024,10 +1045,11 @@ export class Game implements HeroWorld {
       }
       const wantDash =
         control &&
-        (input.keyPressed('Space') || input.keyPressed('ShiftLeft') || input.mousePressed(2) || input.padButtonPressed(4) || input.padButtonPressed(6) || input.padButtonPressed(0));
+        (input.keyPressed('Space') || input.keyPressed('ShiftLeft') || input.padButtonPressed(4) || input.padButtonPressed(6) || input.padButtonPressed(0));
       if (p.update(dt, control ? input : null, this.arena.colliders, wantDash)) this.onDash(h);
       const padFiring = input.padAim.x !== 0 || input.padAim.y !== 0 || input.padButton(7);
       h.ctx.firing = control && (input.mouseDown(0) || padFiring || (settings.autoFire && input.device === 'kbm'));
+      h.ctx.charging = control && (input.mouseDown(2) || input.padButton(2));
       const wantBomb =
         control && (input.keyPressed('KeyQ') || input.keyPressed('KeyE') || input.mousePressed(1) || input.padButtonPressed(3) || input.padButtonPressed(5));
       if (wantBomb) this.tryBomb(h);
@@ -1049,6 +1071,7 @@ export class Game implements HeroWorld {
         }
       }
       h.ctx.firing = r.firing && !p.dead;
+      h.ctx.charging = r.charging && !p.dead;
     }
     h.synergy.moving = p.speed > 1.2;
     if (!p.dead) h.synergy.tick(dt);
@@ -1367,7 +1390,7 @@ export class Game implements HeroWorld {
   }
 
   private sourceName(id: string): string {
-    const named: Record<string, string> = { bomb: 'Bomb', burn: 'Burning', shatter: 'Shatter', overload: 'Overload', zap: 'Crit Zaps', exploder: 'Enemy blasts' };
+    const named: Record<string, string> = { bomb: 'Bomb', burn: 'Burning', shatter: 'Shatter', overload: 'Overload', zap: 'Crit Zaps', exploder: 'Enemy blasts', charge: 'Charge Shot', barrel: 'Barrels' };
     return WEAPONS[id]?.name ?? MOD_BY_ID[id]?.name ?? named[id] ?? 'Other';
   }
 
@@ -1435,6 +1458,7 @@ export class Game implements HeroWorld {
     this.vfx.ring(x, z, 1, r * 2, color, 0.25);
     this.vfx.star(x, 1, z, r, color, 0.12);
     this.vfx.burst(x, 0.6, z, { count: 8, color, color2: '#fff35c', speed: [3, 8], size: [0.15, 0.3], life: [0.2, 0.45], up: 4, gravity: 12 });
+    if (this.authority) this.barrels.igniteNear(x, z, r, by.index);
     const targets = this.enemiesInRadius(x, z, r, this.scratch).slice();
     // Napalm: an explosion that catches a burning enemy sets the whole blast alight.
     const napalm = explosive && !noStatus && targets.some((e) => e.burnT > 0);
@@ -1446,6 +1470,29 @@ export class Game implements HeroWorld {
     }
   }
 
+  /** A barrel blows up: big fiery blast credited to whoever lit it; neighbours follow. */
+  private explodeBarrel(i: number, b: Barrel): void {
+    this.removeBarrelCollider(b);
+    this.host?.broadcast({ t: 'barrel', i });
+    const by = this.heroes[b.by] ?? this.hero;
+    const R = barrelTuning.radius;
+    this.vfx.shake(b.x, b.z, 0.45);
+    this.vfx.ring(b.x, b.z, 1, R * 2.3, '#ffb627', 0.35);
+    this.vfx.burst(b.x, 0.8, b.z, { count: 26, color: '#ff4d5e', color2: '#ffd23f', speed: [5, 12], size: [0.2, 0.45], life: [0.35, 0.7], up: 7, gravity: 14 });
+    this.vfx.burst(b.x, 1.2, b.z, { count: 10, color: '#3a3d5c', color2: '#8a90c8', speed: [1, 3], size: [0.4, 0.7], life: [0.6, 1.0], up: 3, drag: 2 });
+    this.vfx.num(b.x, 2.4, b.z, 'KABOOM!', 'crit');
+    if (by === this.hero) this.juice.freeze(0.04);
+    this.blast(b.x, b.z, R, barrelTuning.damage * (1 + 0.6 * (this.stage - 1)), '#ff7a2f', 'barrel', ['explosive', 'fire'], false, by);
+    // Everything caught in it is set on fire.
+    for (const e of this.enemiesInRadius(b.x, b.z, R, this.scratch).slice()) this.ignite(e, 10, by);
+  }
+
+  private removeBarrelCollider(b: Barrel): void {
+    const k = this.arena.colliders.indexOf(b.box);
+    if (k >= 0) this.arena.colliders.splice(k, 1);
+    this.walls = new StaticBoxGrid(this.arena.colliders);
+  }
+
   /** Exploder enemy goes off: hurts heroes and other enemies nearby. */
   private detonate(e: Enemy): void {
     const F = e.def.fuse!;
@@ -1455,6 +1502,7 @@ export class Game implements HeroWorld {
     this.vfx.burst(e.x, 0.6, e.z, { count: 14, color: '#ff9f3d', color2: '#3a3d5c', speed: [4, 9], size: [0.15, 0.35], life: [0.3, 0.6], up: 5, gravity: 14 });
     this.vfx.sound('explode', e.x, e.z);
     this.vfx.shake(e.x, e.z, 0.3);
+    this.barrels.igniteNear(e.x, e.z, R, 0);
     for (const h of this.aliveHeroes) {
       if (Math.hypot(h.player.x - e.x, h.player.z - e.z) < R + h.player.radius) this.hurtHero(h, F.damage * e.dmgMul, e.x, e.z);
     }
@@ -1594,11 +1642,23 @@ export class Game implements HeroWorld {
       const x = b.x[i];
       const z = b.z[i];
       if (b.life[i] <= 0) {
+        this.bulletBlast(i);
         b.kill(i--);
         continue;
       }
+      if (b.team[i] === Team.Player) {
+        const bi = this.barrels.hitTest(x, z, b.radius[i]);
+        if (bi >= 0) {
+          this.barrels.hit(bi, b.damage[i], b.owner[i]);
+          this.vfx.star(x, BULLET_Y, z, 0.9, '#ffd23f', 0.08);
+          this.vfx.sound('hit', x, z, 0.8);
+          b.kill(i--);
+          continue;
+        }
+      }
       if (this.walls.hitCircle(x, z, b.radius[i])) {
         this.vfx.burst(b.px[i], BULLET_Y, b.pz[i], { count: 3, color: '#ffffff', color2: b.team[i] === Team.Enemy ? '#ff3df0' : '#fff36b', speed: [2, 6], size: [0.08, 0.15], life: [0.1, 0.25], up: 2, gravity: 10 });
+        this.bulletBlast(i);
         b.kill(i--);
         continue;
       }
@@ -1626,13 +1686,26 @@ export class Game implements HeroWorld {
       if (hit) {
         const sp = Math.hypot(b.vx[i], b.vz[i]) || 1;
         const by = this.heroes[b.owner[i]] ?? this.hero;
-        this.damage(hit, b.damage[i], { source: 'buster', dirX: b.vx[i] / sp, dirZ: b.vz[i] / sp, knockback: b.knockback[i], hx: x, hz: z, canCrit: true, loud: true }, by);
+        const source = b.kind[i] === 1 ? 'charge' : 'buster';
+        this.damage(hit, b.damage[i], { source, tags: b.kind[i] === 1 ? CHARGE_TAGS : undefined, dirX: b.vx[i] / sp, dirZ: b.vz[i] / sp, knockback: b.knockback[i], hx: x, hz: z, canCrit: true, loud: true }, by);
         if (b.pierce[i] > 0) {
           b.pierce[i]--;
           b.lastHit[i] = hit.uid;
-        } else b.kill(i--);
+        } else {
+          this.bulletBlast(i);
+          b.kill(i--);
+        }
       }
     }
+  }
+
+  /** Full-charge shots explode where they end. */
+  private bulletBlast(i: number): void {
+    const b = this.bullets;
+    if (b.team[i] !== Team.Player || b.blast[i] <= 0) return;
+    const by = this.heroes[b.owner[i]] ?? this.hero;
+    this.vfx.shake(b.x[i], b.z[i], 0.25);
+    this.blast(b.x[i], b.z[i], b.blast[i], b.damage[i] * 0.6, this.bullets.colorOf(i), 'charge', ['projectile', 'explosive'], false, by);
   }
 
   private tryBomb(h: Hero): void {
@@ -1779,6 +1852,7 @@ export class Game implements HeroWorld {
         ax: Number(m.ax),
         az: Number(m.az),
         firing: !!m.f,
+        charging: !!m.c,
         dashing: !!m.d,
       };
     } else if (m.t === 'dash') {
@@ -1903,6 +1977,11 @@ export class Game implements HeroWorld {
       case 'start':
         this.clientStart(Number(m.seed), Number(m.you), (m.players as { name: string }[]) ?? []);
         break;
+      case 'barrel': {
+        const b = this.barrels.remove(Number(m.i));
+        if (b) this.removeBarrelCollider(b);
+        break;
+      }
       case 'stage':
         this.clientStage(Number(m.stage), Number(m.seed));
         break;
@@ -1985,6 +2064,8 @@ export class Game implements HeroWorld {
     const input = this.input;
     if (this.isCombatMode && this.screens.current === 'none' && (input.keyPressed('Escape') || input.keyPressed('KeyP') || input.padButtonPressed(9))) {
       this.pause();
+      input.endStep();
+      return;
     }
     const before = this.screens.current;
     this.screens.update(input, dt);
@@ -2005,7 +2086,7 @@ export class Game implements HeroWorld {
     }
     const wantDash =
       control &&
-      (input.keyPressed('Space') || input.keyPressed('ShiftLeft') || input.mousePressed(2) || input.padButtonPressed(4) || input.padButtonPressed(6) || input.padButtonPressed(0));
+      (input.keyPressed('Space') || input.keyPressed('ShiftLeft') || input.padButtonPressed(4) || input.padButtonPressed(6) || input.padButtonPressed(0));
     const moving = this.isCombatMode && this.mode !== 'levelup';
     if (moving && p.update(dt, control ? input : null, this.arena.colliders, wantDash)) {
       this.client?.send({ t: 'dash' });
@@ -2015,9 +2096,10 @@ export class Game implements HeroWorld {
     if (wantBomb) this.client?.send({ t: 'bomb' });
     const padFiring = input.padAim.x !== 0 || input.padAim.y !== 0 || input.padButton(7);
     const firing = control && (input.mouseDown(0) || padFiring || (settings.autoFire && input.device === 'kbm'));
+    const charging = control && (input.mouseDown(2) || input.padButton(2));
     if (this.stepN % INPUT_EVERY === 0 && this.client) {
       const r2 = (v: number) => Math.round(v * 100) / 100;
-      this.client.send({ t: 'i', x: r2(p.x), z: r2(p.z), vx: r2(p.vel.x), vz: r2(p.vel.z), ax: r2(p.aim.x), az: r2(p.aim.z), f: firing, d: p.dashing });
+      this.client.send({ t: 'i', x: r2(p.x), z: r2(p.z), vx: r2(p.vel.x), vz: r2(p.vel.z), ax: r2(p.aim.x), az: r2(p.aim.z), f: firing, c: charging, d: p.dashing });
     }
     if (this.mode !== 'levelup' && this.mode !== 'shop') {
       this.bullets.integrate(dt);
@@ -2183,6 +2265,7 @@ export class Game implements HeroWorld {
     p.renderPos(a, this.playerPos);
     this.enemies.render(client ? netA : a, this.animTime);
     this.bullets.render(a);
+    this.barrels.render(this.animTime);
     this.particles.render();
     this.pickups.render(this.animTime);
     for (const h of this.heroes) for (const w of h.weapons) w.render(a, h.ctx);
@@ -2210,6 +2293,13 @@ export class Game implements HeroWorld {
     } else {
       this.reticle.style.transform = `translate(${input.mouse.x}px, ${input.mouse.y}px)`;
       this.reticle.style.display = input.mouse.inside ? '' : 'none';
+    }
+    // Charge meter: a ring that fills around the crosshair.
+    const charge = (local.weapons[0] as Buster | undefined)?.charge ?? 0;
+    if (charge !== this.shownCharge) {
+      this.shownCharge = charge;
+      this.reticle.style.setProperty('--charge', String(Math.min(1, charge)));
+      this.reticle.dataset.charge = charge >= 2 ? 'over' : charge >= 1 ? 'full' : charge > 0 ? 'on' : '';
     }
 
     // Client-side stage fade (the host fades itself in updateTransition).

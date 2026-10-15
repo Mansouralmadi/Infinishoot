@@ -360,6 +360,147 @@ export const MODS: ModDef[] = [
     flags: { shopDiscount: 0.25, freeRerolls: 1 },
   },
 
+  {
+    id: 'bounty_hunter',
+    name: 'Bounty Hunter',
+    icon: '⚑',
+    color: '#ffb627',
+    rarity: 'common',
+    price: 4,
+    desc: 'Elites pay 4 gold. Bosses pay 15.',
+    onKill: (e, _s, api) => {
+      if (e.def.behavior === 'boss') api.addGold(15);
+      else if (e.elite) api.addGold(4);
+    },
+  },
+  {
+    id: 'tip_jar',
+    name: 'Tip Jar',
+    icon: '♪',
+    color: '#ffd23f',
+    rarity: 'common',
+    price: 3,
+    desc: '+1 gold every time you level up.',
+    onLevelUp: (api) => api.addGold(1),
+  },
+  {
+    id: 'lucky_coin',
+    name: 'Lucky Coin',
+    icon: '✪',
+    color: '#ffe14d',
+    rarity: 'uncommon',
+    price: 5,
+    desc: 'Kills have a 1% chance to pay 1 gold.',
+    onKill: (_e, _s, api) => {
+      if (api.chance(0.01)) api.addGold(1);
+    },
+  },
+  {
+    id: 'investor',
+    name: 'Investor',
+    icon: '↗',
+    color: '#4fd36a',
+    rarity: 'uncommon',
+    price: 6,
+    desc: 'Interest pays 1 gold per 3 held instead of per 5.',
+    flags: { interestPer: 2 },
+  },
+  {
+    id: 'golden_ticket',
+    name: 'Golden Ticket',
+    icon: '▤',
+    color: '#ffb627',
+    rarity: 'uncommon',
+    price: 5,
+    desc: 'Stage clear: +3 gold for each empty Mod slot.',
+    onStageClear: (api) => api.addGold(3 * api.freeSlots),
+    readout: (api) => `+${3 * api.freeSlots}`,
+  },
+  {
+    id: 'pawn_shop',
+    name: 'Pawn Shop',
+    icon: '⇄',
+    color: '#c8a2ff',
+    rarity: 'common',
+    price: 3,
+    desc: 'Mods sell back for their full price.',
+    flags: { sellFull: true },
+  },
+  {
+    id: 'gold_plating',
+    name: 'Gold Plating',
+    icon: '⛨',
+    color: '#ffd23f',
+    rarity: 'uncommon',
+    price: 6,
+    desc: '+1 armor for every 8 gold you hold (max +5).',
+    live: (s, api) => {
+      s.armor += Math.min(5, Math.floor(api.gold / 8));
+    },
+    readout: (api) => `+${Math.min(5, Math.floor(api.gold / 8))}`,
+  },
+
+  // ---------------------------------------------------------------- charge shot (hold right mouse / X)
+  {
+    id: 'quick_draw',
+    name: 'Quick Draw',
+    icon: '⚡',
+    color: '#7df9ff',
+    rarity: 'common',
+    price: 4,
+    desc: 'Charge shots charge 50% faster.',
+    synergy: ['projectile'],
+    flags: { chargeSpeed: 0.5 },
+  },
+  {
+    id: 'patience',
+    name: 'Patience',
+    icon: '⌛',
+    color: '#3dffb0',
+    rarity: 'common',
+    price: 5,
+    desc: 'Charge shots deal x1.8.',
+    synergy: ['projectile'],
+    dmg: (ev) => (ev.source === 'charge' ? { mult: 1.8 } : undefined),
+  },
+  {
+    id: 'thunder_shot',
+    name: 'Thunder Shot',
+    icon: '↯',
+    color: '#ffe14d',
+    rarity: 'uncommon',
+    price: 6,
+    desc: 'Charge shot hits Shock and arc lightning to 3 nearby enemies.',
+    synergy: ['projectile', 'shock', 'chain'],
+    onHit: (ev, api) => {
+      if (ev.source !== 'charge') return;
+      api.shock(ev.e);
+      api.zap(ev.e, 3, 22);
+    },
+  },
+  {
+    id: 'mega_buster',
+    name: 'Mega Buster',
+    icon: '⁂',
+    color: '#3dffb0',
+    rarity: 'rare',
+    price: 9,
+    desc: 'Full-charge shots fire 3 at once.',
+    synergy: ['projectile'],
+    flags: { chargeSplit: 2 },
+  },
+  {
+    id: 'overcharge',
+    name: 'Overcharge',
+    icon: '✺',
+    color: '#ff3df0',
+    rarity: 'rare',
+    price: 8,
+    desc: 'Keep holding past full for a second charge level: x2 damage, huge pierce and a bigger blast.',
+    synergy: ['projectile', 'explosive'],
+    flags: { overcharge: true },
+  },
+
   // ---------------------------------------------------------------- cursed: big upside, real cost
   {
     id: 'glass_cannon',

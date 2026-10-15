@@ -196,6 +196,17 @@ class Sfx {
       case 'explode':
         this.explode();
         break;
+      case 'charge':
+        this.tone(ctx, 'triangle', 500 * p, 900 * p, 0.06, 0.04);
+        break;
+      case 'chargeFull':
+        this.tone(ctx, 'square', 1320, 1320, 0.08, 0.07);
+        this.tone(ctx, 'square', 1760, 1760, 0.12, 0.06, 0.07);
+        break;
+      case 'chargeShot':
+        this.tone(ctx, 'sawtooth', 220 * p, 60, 0.3, 0.16);
+        this.noise(ctx, 0.25, 0.25, 900, 3000, 2);
+        break;
     }
   }
 

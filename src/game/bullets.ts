@@ -32,6 +32,10 @@ export interface BulletSpawn {
   homing?: number;
   /** Index of the hero who fired it (damage credit and Mod triggers). */
   owner?: number;
+  /** 1 = charged Buster shot (credited to 'charge'). */
+  kind?: number;
+  /** Explodes with this radius when it dies (0 = no blast). */
+  blast?: number;
 }
 
 export class Bullets {
@@ -58,6 +62,8 @@ export class Bullets {
   /** uid of the last enemy hit, so piercing shots don't hit it twice. */
   readonly lastHit = new Int32Array(MAX);
   readonly owner = new Uint8Array(MAX);
+  readonly kind = new Uint8Array(MAX);
+  readonly blast = new Float32Array(MAX);
   private colors: THREE.Color[] = [];
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -112,6 +118,8 @@ export class Bullets {
     this.homing[i] = b.homing ?? 0;
     this.lastHit[i] = -1;
     this.owner[i] = b.owner ?? 0;
+    this.kind[i] = b.kind ?? 0;
+    this.blast[i] = b.blast ?? 0;
     this.colors[i].set(b.color);
   }
 
@@ -138,6 +146,8 @@ export class Bullets {
     this.homing[i] = this.homing[j];
     this.lastHit[i] = this.lastHit[j];
     this.owner[i] = this.owner[j];
+    this.kind[i] = this.kind[j];
+    this.blast[i] = this.blast[j];
     this.colors[i].copy(this.colors[j]);
   }
 

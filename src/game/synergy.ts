@@ -17,6 +17,7 @@ export interface SynergyHost {
   zap(from: Enemy, hops: number, dmg: number): void;
   ignite(e: Enemy, dps: number): void;
   shock(e: Enemy): void;
+  addGold(n: number): void;
 }
 
 export interface Slot {
@@ -89,6 +90,12 @@ export class Synergy implements ModApi {
   }
   shock(e: Enemy): void {
     this.host.shock(e);
+  }
+  addGold(n: number): void {
+    if (n > 0) this.host.addGold(n);
+  }
+  get freeSlots(): number {
+    return MAX_MOD_SLOTS - this.slots.length;
   }
 
   // ---------------------------------------------------------------- slots
@@ -194,6 +201,9 @@ export class Synergy implements ModApi {
   }
   levelUp(): void {
     for (const e of this.eff) e.def.onLevelUp?.(this, e.st);
+  }
+  stageClear(): void {
+    for (const e of this.eff) e.def.onStageClear?.(this, e.st);
   }
   tick(dt: number): void {
     for (const e of this.eff) e.def.tick?.(dt, this, e.st);

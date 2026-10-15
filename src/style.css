@@ -1775,3 +1775,321 @@ div.mod-card.sold {
   padding-bottom: 6px;
   background: linear-gradient(90deg, #7dffb0 calc(var(--rv) * 100%), transparent 0) bottom / 100% 4px no-repeat;
 }
+/* ====================================================================
+   Pizzazz pass: glossy toy-like icons, gentle idle motion, punchy
+   presses and entrances. Everything here is decoration; it all switches
+   off under prefers-reduced-motion.
+   ==================================================================== */
+
+/* Glossy icon badges: colour gradient, top-left shine, inner rim. */
+.card .icon,
+.mod-card .icon,
+.owned-mod .icon,
+.ws-item .icon,
+#loadout .slot,
+#mods .mod,
+.badge {
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.75) 0 13%, rgba(255, 255, 255, 0) 14%),
+    radial-gradient(120% 90% at 30% 20%, color-mix(in srgb, var(--c) 55%, #fff) 0%, var(--c) 48%, color-mix(in srgb, var(--c) 65%, #1b1f4a) 100%);
+  box-shadow:
+    inset 0 -4px 0 rgba(27, 31, 74, 0.28),
+    inset 0 3px 0 rgba(255, 255, 255, 0.35),
+    3px 3px 0 var(--ink);
+}
+
+.card .icon,
+.mod-card .icon,
+.owned-mod .icon,
+.ws-item .icon {
+  text-shadow:
+    var(--outline),
+    0 3px 0 var(--ink);
+}
+
+/* Level-up and shop cards: icons float, focused icons do a happy wiggle. */
+.card .icon,
+.mod-card .icon {
+  animation: bob 1.8s ease-in-out infinite;
+}
+.card:nth-child(2) .icon,
+.mod-card:nth-child(2) .icon {
+  animation-delay: -0.6s;
+}
+.card:nth-child(3) .icon,
+.mod-card:nth-child(3) .icon {
+  animation-delay: -1.2s;
+}
+.screen button.card.focused .icon,
+.screen button.mod-card.focused .icon {
+  animation: wiggle 0.5s ease-in-out infinite;
+}
+
+@keyframes bob {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes wiggle {
+  25% {
+    transform: rotate(-9deg) scale(1.1);
+  }
+  75% {
+    transform: rotate(9deg) scale(1.1);
+  }
+}
+
+/* A light sheen sweeps across focused buttons and rare cards. */
+.screen button {
+  position: relative;
+}
+.screen button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0.5) 50%, rgba(255, 255, 255, 0) 60%) no-repeat;
+  background-size: 300% 100%;
+  background-position: 150% 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.screen button.focused::after,
+.screen button.card.rare::after,
+.screen button.card.epic::after,
+.screen button.mod-card.rare::after {
+  opacity: 1;
+  animation: sheen 2.2s ease-in-out infinite;
+}
+.screen button.focused::after {
+  animation-duration: 1.2s;
+}
+
+@keyframes sheen {
+  0% {
+    background-position: 150% 0;
+  }
+  60%,
+  100% {
+    background-position: -50% 0;
+  }
+}
+
+/* Presses squash, focus breathes. */
+.screen button:active {
+  transform: scale(0.94) !important;
+  transition-duration: 0.04s;
+}
+.screen .menu button.focused,
+.screen button.continue.focused {
+  animation: breathe 0.9s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  50% {
+    transform: scale(1.09) rotate(-1deg);
+    box-shadow:
+      4px 4px 0 var(--ink),
+      0 0 0 4px var(--yellow);
+  }
+}
+
+/* Menus pop in: title drops, buttons slide up one after another. */
+.screen:not([hidden]) > h1 {
+  animation: drop 0.45s cubic-bezier(0.3, 1.7, 0.5, 1) both;
+}
+.screen:not([hidden]) .menu > * {
+  animation: rise 0.35s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.screen:not([hidden]) .menu > :nth-child(2) {
+  animation-delay: 0.05s;
+}
+.screen:not([hidden]) .menu > :nth-child(3) {
+  animation-delay: 0.1s;
+}
+.screen:not([hidden]) .menu > :nth-child(4) {
+  animation-delay: 0.15s;
+}
+.screen:not([hidden]) .menu > :nth-child(5) {
+  animation-delay: 0.2s;
+}
+.screen:not([hidden]) .menu > :nth-child(n + 6) {
+  animation-delay: 0.25s;
+}
+
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateY(-50px) scale(1.3);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+/* Shop cards deal in like the level-up cards. */
+.shop-offers > * {
+  animation: deal 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+.shop-offers > :nth-child(2) {
+  animation-delay: 0.06s;
+}
+.shop-offers > :nth-child(3) {
+  animation-delay: 0.12s;
+}
+.shop-offers > :nth-child(4) {
+  animation-delay: 0.18s;
+}
+div.mod-card.sold {
+  animation: stamp 0.3s cubic-bezier(0.3, 1.8, 0.5, 1) both;
+  transform: rotate(-6deg);
+}
+
+@keyframes stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.8) rotate(-6deg);
+  }
+}
+
+/* Spinning coins. */
+.gold-dot,
+.coin {
+  display: inline-block;
+  animation: coinspin 2.4s ease-in-out infinite;
+}
+
+@keyframes coinspin {
+  0%,
+  70% {
+    transform: scaleX(1);
+  }
+  80% {
+    transform: scaleX(0.1);
+  }
+  90% {
+    transform: scaleX(1);
+  }
+}
+
+/* HUD: loadout and Mod icons pop when they change; the XP bar shimmers. */
+#loadout .slot,
+#mods .mod {
+  animation: pop 0.3s cubic-bezier(0.3, 1.8, 0.5, 1) both;
+}
+#loadout .slot.max {
+  animation:
+    pop 0.3s cubic-bezier(0.3, 1.8, 0.5, 1) both,
+    maxglow 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.3);
+  }
+}
+
+@keyframes maxglow {
+  to {
+    box-shadow:
+      inset 0 -4px 0 rgba(27, 31, 74, 0.28),
+      0 0 10px 2px var(--yellow),
+      3px 3px 0 var(--ink);
+  }
+}
+
+#xpbar .fill {
+  background-image:
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.22) 0 8px, rgba(255, 255, 255, 0) 8px 16px),
+    linear-gradient(#8ff0ff, var(--cyan) 60%, var(--blue));
+  background-size:
+    22px 22px,
+    100% 100%;
+  animation: stripes 0.8s linear infinite;
+}
+
+@keyframes stripes {
+  to {
+    background-position:
+      22px 0,
+      0 0;
+  }
+}
+
+#runinfo .bolts.bump {
+  display: inline-block;
+  animation: bump 0.25s ease-out;
+}
+
+/* Pause button (top centre, next to the timer). */
+#pausebtn {
+  position: absolute;
+  top: 26px;
+  left: calc(50% + 78px);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 3px solid #fff;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-size: 18px;
+  letter-spacing: 1px;
+  box-shadow: 3px 3px 0 var(--ink);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.08s;
+}
+#pausebtn:hover {
+  background: var(--pink);
+  transform: scale(1.1) rotate(-4deg);
+}
+#pausebtn:active {
+  transform: scale(0.9);
+}
+
+/* Charge meter around the crosshair. */
+#reticle::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: conic-gradient(var(--rc, #7df9ff) calc(var(--charge, 0) * 360deg), rgba(0, 0, 0, 0) 0);
+  -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
+  mask: radial-gradient(circle, transparent 58%, #000 60%);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+#reticle[data-charge='on']::before,
+#reticle[data-charge='full']::before,
+#reticle[data-charge='over']::before {
+  opacity: 1;
+}
+#reticle[data-charge='full'] {
+  --rc: #3dffb0;
+  animation: chargepulse 0.3s ease-in-out infinite alternate;
+}
+#reticle[data-charge='over'] {
+  --rc: #ff3df0;
+  animation: chargepulse 0.18s ease-in-out infinite alternate;
+}
+
+@keyframes chargepulse {
+  to {
+    scale: 1.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

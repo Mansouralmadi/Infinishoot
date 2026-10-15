@@ -36,6 +36,7 @@ export interface HeroWorld {
   ignite(e: Enemy, dps: number, by: Hero): void;
   shock(e: Enemy, by: Hero): void;
   makeCtx(hero: Hero): WeaponCtx;
+  goldFx(hero: Hero, n: number): void;
 }
 
 /** Latest input from a remote player (host side). */
@@ -47,6 +48,7 @@ export interface RemoteInput {
   ax: number;
   az: number;
   firing: boolean;
+  charging: boolean;
   dashing: boolean;
 }
 
@@ -125,6 +127,10 @@ export class Hero implements SynergyHost {
   }
   shock(e: Enemy): void {
     this.world.shock(e, this);
+  }
+  addGold(n: number): void {
+    this.gold += n;
+    this.world.goldFx(this, n);
   }
 
   get alive(): boolean {
@@ -288,6 +294,11 @@ export class Hero implements SynergyHost {
     return Math.max(1, Math.round(m.price * (1 - this.synergy.flags.shopDiscount)));
   }
 
+  /** Half price back, or full price with Pawn Shop. */
+  sellPrice(m: ModDef): number {
+    return this.synergy.flags.sellFull ? m.price : Math.floor(this.price(m) / 2);
+  }
+
   get rerollCost(): number {
     if (this.shopRerolls < this.synergy.flags.freeRerolls) return 0;
     return economyTuning.rerollBase + this.shopRerolls - this.synergy.flags.freeRerolls;
@@ -298,7 +309,11 @@ export class Hero implements SynergyHost {
   }
 
   get interest(): number {
-    return Math.min(this.interestCap, Math.floor(this.gold / economyTuning.interestPer));
+    return Math.min(this.interestCap, Math.floor(this.gold / this.interestPer));
+  }
+
+  get interestPer(): number {
+    return Math.max(2, economyTuning.interestPer - this.synergy.flags.interestPer);
   }
 
   shopView(stage: number): ShopView {
@@ -306,8 +321,9 @@ export class Hero implements SynergyHost {
       gold: this.gold,
       interest: this.interest,
       interestCap: this.interestCap,
+      interestPer: this.interestPer,
       offers: this.shopOffers.map((m) => (m ? { def: m, price: this.price(m), hint: this.synergyHint(m) } : null)),
-      owned: this.synergy.slots.map((sl, i) => ({ def: sl.def, sell: Math.floor(this.price(sl.def) / 2), readout: this.synergy.readout(i) })),
+      owned: this.synergy.slots.map((sl, i) => ({ def: sl.def, sell: this.sellPrice(sl.def), readout: this.synergy.readout(i) })),
       slots: MAX_MOD_SLOTS,
       rerollCost: this.rerollCost,
       healCost: economyTuning.healCost,
@@ -344,7 +360,7 @@ export class Hero implements SynergyHost {
   sell(i: number): string {
     const sl = this.synergy.slots[i];
     if (!sl) return 'NOTHING TO SELL';
-    this.gold += Math.floor(this.price(sl.def) / 2);
+    this.gold += this.sellPrice(sl.def);
     this.synergy.remove(i);
     this.recomputeStats();
     return '';
