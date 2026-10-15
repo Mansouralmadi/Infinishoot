@@ -28,4 +28,6 @@ Roadmap and decision log: @PLAN.md
 - New weapons must implement `net()`/`setNet()` for anything clients need to draw.
 - `Game` (src/game/game.ts) owns the session: menus, run state and every system. Its modes are title, fight, levelup, cleared, portal, transition and dead. Juice goes through `game.juice.freeze()` / `.shake()` / `.kick()`.
 - UI is plain DOM: HUD in src/ui/hud.ts, menus in src/ui/screens.ts. Anything navigable gets `data-nav` so `MenuNav` handles keyboard and gamepad.
+- UI style is pixel art: only the Sweetie 16 colour variables in style.css, sizes in `--p` (one UI pixel), frames from the shared box-shadow recipe (set `--bg`, `--hi`, `--lo`, `--ring`), no border-radius, blur or gradients-as-shading, and `steps()` animations. Fonts: Jersey 15 (text), Jersey 10 (big numbers, headings), Silkscreen (small labels), Pixelify Sans (logo only).
+- Item icons come from game-icons.net (CC BY 3.0, credited in README and on the title screen): map an item id to an icon name in scripts/icons.mjs, run `npm run icons`, and render with `iconHtml(id, color, glyph)` from src/ui/pixelIcons.ts.
 - Persistence goes through src/core/storage.ts, which never throws. Settings and high scores live in localStorage under the `infinishoot.` prefix.

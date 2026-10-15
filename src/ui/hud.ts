@@ -3,6 +3,8 @@
  * kills and gold, boss bar, weapon/item loadout, dash and bomb meters,
  * banners, toasts, hurt vignette, screen flash and fade. Plain DOM.
  */
+import { iconHtml } from './pixelIcons';
+
 export interface HudState {
   hp: number;
   maxHp: number;
@@ -23,6 +25,8 @@ export interface HudState {
 }
 
 export interface LoadoutItem {
+  /** Item id (picks its pixel icon). */
+  id: string;
   icon: string;
   color: string;
   level: number;
@@ -146,7 +150,7 @@ export class Hud {
         .filter((i) => i.kind === kind)
         .map(
           (i) =>
-            `<div class="slot ${i.max ? 'max' : ''}" style="--c:${i.color}" title="${i.name}"><span>${i.icon}</span><i>${i.max ? 'MAX' : i.level}</i></div>`,
+            `<div class="slot ${i.max ? 'max' : ''}" style="--c:${i.color}" title="${i.name}">${iconHtml(i.id, i.color, i.icon)}<i>${i.max ? 'MAX' : i.level}</i></div>`,
         )
         .join('');
     this.el('#loadout .weapons').innerHTML = html('weapon');
@@ -199,11 +203,11 @@ export class Hud {
   }
 
   /** Owned Mods, bottom-right, with live readouts (only rebuilt when the markup changes). */
-  setMods(mods: { icon: string; color: string; name: string; readout: string; cursed: boolean }[]): void {
+  setMods(mods: { id: string; icon: string; color: string; name: string; readout: string; cursed: boolean }[]): void {
     const html = mods
       .map(
         (m) =>
-          `<div class="mod ${m.cursed ? 'cursed' : ''}" style="--c:${m.color}" title="${m.name}"><span>${m.icon}</span>${m.readout ? `<i>${m.readout}</i>` : ''}</div>`,
+          `<div class="mod ${m.cursed ? 'cursed' : ''}" style="--c:${m.color}" title="${m.name}">${iconHtml(m.id, m.color, m.icon)}${m.readout ? `<i>${m.readout}</i>` : ''}</div>`,
       )
       .join('');
     if (html === this.lastMods) return;

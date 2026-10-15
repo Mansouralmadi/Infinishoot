@@ -34,6 +34,8 @@ export class Pickups {
   readonly value = new Float32Array(MAX);
   readonly type = new Uint8Array(MAX);
   readonly pulled = new Uint8Array(MAX);
+  /** Seconds since the magnet grabbed it. */
+  readonly pullT = new Float32Array(MAX);
   readonly age = new Float32Array(MAX);
   /** When true every gem flies to the player (magnet pickup, stage clear). */
   vacuum = false;
@@ -98,6 +100,7 @@ export class Pickups {
     this.value[i] = value;
     this.type[i] = type;
     this.pulled[i] = 0;
+    this.pullT[i] = 0;
     this.age[i] = 0;
   }
 
@@ -116,10 +119,10 @@ export class Pickups {
     this.value[i] = this.value[j];
     this.type[i] = this.type[j];
     this.pulled[i] = this.pulled[j];
+    this.pullT[i] = this.pullT[j];
     this.age[i] = this.age[j];
   }
 
-  /** Move, attract and collect. `magnet` is the player's pickup-range multiplier. */
   /**
    * Move, attract and collect. Each pickup flies to the nearest living
    * collector in range (its magnet stat scales the range); `collect` gets
@@ -157,28 +160,32 @@ export class Pickups {
       const range = BASE_MAGNET * col.magnet;
       if (!this.pulled[i] && this.age[i] > 0.25 && ((magnetic && d < range) || (this.vacuum && t === PickupType.Gem))) {
         this.pulled[i] = 1;
+        this.pullT[i] = 0;
         // Small hop away first, like it's been yanked.
         this.vx[i] = (-dx / (d || 1)) * 3;
         this.vz[i] = (-dz / (d || 1)) * 3;
       }
       if (this.pulled[i]) {
-        const accel = 60;
-        this.vx[i] += (dx / (d || 1)) * accel * dt;
-        this.vz[i] += (dz / (d || 1)) * accel * dt;
-        const sp = Math.hypot(this.vx[i], this.vz[i]);
-        const max = 22 + this.age[i] * 6;
-        if (sp > max) {
-          this.vx[i] *= max / sp;
-          this.vz[i] *= max / sp;
-        }
+        // Home straight in: steer the whole velocity toward the player (no
+        // sideways speed left over to orbit with), faster the longer it flies.
+        this.pullT[i] += dt;
+        const pt = this.pullT[i];
+        const nx = dx / (d || 1);
+        const nz = dz / (d || 1);
+        const sp = Math.min(45, 12 + pt * 60);
+        const k = pt < 0.1 ? 0 : pt > 0.35 ? 1 : 1 - Math.exp(-18 * dt);
+        this.vx[i] += (nx * sp - this.vx[i]) * k;
+        this.vz[i] += (nz * sp - this.vz[i]) * k;
       } else {
         const f = Math.exp(-5 * dt);
         this.vx[i] *= f;
         this.vz[i] *= f;
       }
+      const step = Math.hypot(this.vx[i], this.vz[i]) * dt;
       this.x[i] += this.vx[i] * dt;
       this.z[i] += this.vz[i] * dt;
-      if (d < 0.75) {
+      // Collect on touch, or when this step would carry it past the player.
+      if (d < 0.75 || (this.pulled[i] && this.pullT[i] > 0.1 && d < step + 0.75)) {
         collect(t as PickupType, this.value[i], ci);
         this.remove(i--);
       }
@@ -198,6 +205,7 @@ export class Pickups {
       this.age[k] = 1;
       this.vx[k] = this.vz[k] = 0;
       this.pulled[k] = 0;
+      this.pullT[k] = 0;
     }
   }
 

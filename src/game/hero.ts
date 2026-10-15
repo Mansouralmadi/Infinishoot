@@ -185,10 +185,10 @@ export class Hero implements SynergyHost {
 
   loadout(): LoadoutItem[] {
     return [
-      ...this.weapons.map((w) => ({ icon: w.def.icon, color: w.def.color, level: w.level, max: w.maxed, name: w.def.name, kind: 'weapon' as const })),
+      ...this.weapons.map((w) => ({ id: w.def.id, icon: w.def.icon, color: w.def.color, level: w.level, max: w.maxed, name: w.def.name, kind: 'weapon' as const })),
       ...Object.entries(this.passives).map(([id, lv]) => {
         const d = PASSIVES[id];
-        return { icon: d.icon, color: d.color, level: lv, max: lv >= d.maxLevel, name: d.name, kind: 'passive' as const };
+        return { id, icon: d.icon, color: d.color, level: lv, max: lv >= d.maxLevel, name: d.name, kind: 'passive' as const };
       }),
     ];
   }

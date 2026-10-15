@@ -9,6 +9,7 @@ import { settings, saveSettings } from '../game/settings';
 import { sfx } from '../audio/sfx';
 import { fmtScore, type LoadoutItem } from './hud';
 import { MenuNav } from './menu';
+import { iconHtml } from './pixelIcons';
 
 /** Full-screen menus. Plain DOM; every navigable element has `data-nav`. */
 export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'shop' | 'gameover' | 'unlocks' | 'savedata' | 'online' | 'wait';
@@ -83,12 +84,17 @@ export interface RunSummary {
 
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
+/** Title letters as separate spans so a hop can ripple across them. */
+function logoWord(word: string, start: number): string {
+  return `<span>${[...word].map((ch, k) => `<i style="--i:${start + k}">${ch}</i>`).join('')}</span>`;
+}
+
 function badge(i: LoadoutItem): string {
-  return `<span class="badge" style="--c:${i.color}" title="${i.name}">${i.icon}<i>${i.max ? 'M' : i.level}</i></span>`;
+  return `<span class="badge" style="--c:${i.color}" title="${i.name}">${iconHtml(i.id, i.color, i.icon)}<i>${i.max ? 'M' : i.level}</i></span>`;
 }
 
 function modChip(m: ModDef): string {
-  return `<span class="mod-chip ${m.cursed ? 'cursed' : ''}" style="--c:${m.color}" title="${m.desc}">${m.icon} ${m.name}</span>`;
+  return `<span class="mod-chip ${m.cursed ? 'cursed' : ''}" style="--c:${m.color}" title="${m.desc}">${iconHtml(m.id, m.color, m.icon)}${m.name}</span>`;
 }
 
 type Named = Exclude<ScreenName, 'none'>;
@@ -108,7 +114,7 @@ export class Screens {
       'beforeend',
       `
 <div id="scr-title" class="screen" hidden>
-  <div class="logo"><span>INFINI</span><span>SHOOT</span></div>
+  <div class="logo">${logoWord('INFINI', 0)}${logoWord('SHOOT', 6)}</div>
   <div class="tagline">TWIN-STICK ARCADE ROGUELIKE</div>
   <div class="menu">
     <button data-nav data-act="start">PLAY SOLO</button>
@@ -119,6 +125,7 @@ export class Screens {
   <div class="wallet"></div>
   <div class="hiscores"></div>
   <div class="controls">WASD / L-stick move &middot; Mouse / R-stick aim &amp; shoot &middot; Hold right click / X charge shot &middot; Space / LB dash &middot; Q / RB bomb &middot; Esc / Start pause</div>
+  <div class="credits">Icons: game-icons.net by Lorc, Delapouite &amp; contributors (CC BY 3.0) &middot; Fonts: Jersey, Pixelify Sans, Silkscreen (OFL) &middot; Palette: Sweetie 16 by GrafxKid</div>
   <div class="version">v${__APP_VERSION__}</div>
 </div>
 <div id="scr-pause" class="screen dim" hidden>
@@ -420,7 +427,7 @@ export class Screens {
       .map(
         (o, i) => `<button class="card ${o.kind}" data-nav data-act="pick" data-index="${i}">
           <div class="tag ${o.tag === 'NEW!' ? 'new' : ''}">${o.tag}</div>
-          <div class="icon" style="--c:${o.color}">${o.icon}</div>
+          <div class="icon" style="--c:${o.color}">${iconHtml(o.id, o.color, o.icon)}</div>
           <div class="name">${o.name}</div>
           <div class="desc">${o.text}</div>
           ${o.tags ? `<div class="chips">${tagChips(o.tags)}</div>` : ''}
@@ -457,7 +464,7 @@ export class Screens {
         const cant = o.price > v.gold || v.owned.length >= v.slots;
         return `<button class="mod-card ${m.rarity} ${m.cursed ? 'cursed' : ''} ${cant ? 'cant' : ''}" data-nav data-act="buy" data-index="${i}">
           <div class="rarity">${m.cursed ? 'CURSED' : m.rarity.toUpperCase()}</div>
-          <div class="icon" style="--c:${m.color}">${m.icon}</div>
+          <div class="icon" style="--c:${m.color}">${iconHtml(m.id, m.color, m.icon)}</div>
           <div class="name">${m.name}</div>
           <div class="desc">${m.desc}</div>
           ${m.synergy ? `<div class="chips">${tagChips(m.synergy)}</div>` : ''}
@@ -477,7 +484,7 @@ export class Screens {
         .map(
           (o, i) => `<div class="owned-mod ${o.def.cursed ? 'cursed' : ''}" title="${o.def.desc}">
           <div class="slot-no">${i + 1}</div>
-          <div class="icon" style="--c:${o.def.color}">${o.def.icon}</div>
+          <div class="icon" style="--c:${o.def.color}">${iconHtml(o.def.id, o.def.color, o.def.icon)}</div>
           <div class="name">${o.def.name}</div>
           ${o.readout ? `<div class="readout">${o.readout}</div>` : ''}
           <div class="ctrl">

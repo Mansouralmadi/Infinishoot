@@ -53,3 +53,9 @@ Title screen > PLAY ONLINE. One player hosts and shares the 5-letter code; up to
 - [PROMPT.md](PROMPT.md): design brief and rules
 - [PLAN.md](PLAN.md): roadmap and decision log
 - [CLAUDE.md](CLAUDE.md): code conventions
+
+## Credits
+
+- Item icons: [game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). The game redraws them as pixel sprites (src/ui/pixelIcons.ts).
+- Fonts: Jersey 10 and Jersey 15 (Sarah Cadigan-Fried), Pixelify Sans (Stefie Justprince), Silkscreen (Jason Kottke), all SIL Open Font License, bundled via Fontsource.
+- Palette: Sweetie 16 by GrafxKid.

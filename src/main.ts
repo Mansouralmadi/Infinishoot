@@ -1,3 +1,7 @@
+import '@fontsource/pixelify-sans/700.css';
+import '@fontsource/jersey-10/400.css';
+import '@fontsource/jersey-15/400.css';
+import '@fontsource/silkscreen/400.css';
 import { GameLoop } from './core/loop';
 import { Input } from './core/input';
 import { RetroRenderer } from './render/renderer';
