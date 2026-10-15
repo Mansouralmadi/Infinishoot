@@ -179,6 +179,8 @@ export class Enemy {
   burnT = 0;
   burnDps = 0;
   burnAcc = 0;
+  /** Hero index credited for burn damage. */
+  burnOwner = 0;
   shockT = 0;
   lungeX = 0;
   lungeZ = 0;
@@ -214,7 +216,7 @@ export class Enemy {
     this.dmgMul = (o.dmgMul ?? 1) * (this.elite ? 1.5 : 1);
     this.bombStamp = 0;
     this.flash = this.frozen = this.slowT = this.shatter = 0;
-    this.burnT = this.burnDps = this.burnAcc = this.shockT = 0;
+    this.burnT = this.burnDps = this.burnAcc = this.shockT = this.burnOwner = 0;
     this.sq = this.sqV = this.hopY = 0;
     this.timerA = this.def.behavior === 'boss' ? 3 : 1 + Math.random() * 2;
     this.strafe = Math.random() < 0.5 ? -1 : 1;
@@ -236,6 +238,9 @@ export class Enemy {
 
 /** Side effects enemies need from the game. */
 export interface EnemyCtx {
+  /** Every player that can be chased. Each enemy picks the nearest living one. */
+  targets: { x: number; z: number; radius: number; alive: boolean }[];
+  /** Set per enemy during update: the target it is currently chasing. */
   target: { x: number; z: number; radius: number };
   targetAlive: boolean;
   hash: SpatialHash<Enemy>;
@@ -361,7 +366,7 @@ export class Enemies {
   }
 
   update(dt: number, ctx: EnemyCtx): void {
-    const tgt = ctx.target;
+    const away = { x: 1e6, z: 1e6, radius: 0 };
     for (const e of this.list) {
       if (!e.active) continue;
       e.px = e.x;
@@ -390,6 +395,20 @@ export class Enemies {
         continue;
       }
 
+      // Chase the nearest living player.
+      let best: EnemyCtx['target'] | null = null;
+      let bd = Infinity;
+      for (const t of ctx.targets) {
+        if (!t.alive) continue;
+        const d = (t.x - e.x) ** 2 + (t.z - e.z) ** 2;
+        if (d < bd) {
+          bd = d;
+          best = t;
+        }
+      }
+      ctx.target = best ?? away;
+      ctx.targetAlive = !!best;
+      const tgt = ctx.target;
       const dx = tgt.x - e.x;
       const dz = tgt.z - e.z;
       const dist = Math.hypot(dx, dz) || 1;

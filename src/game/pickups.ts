@@ -18,6 +18,13 @@ function gemTier(v: number): number {
   return v >= 20 ? 3 : v >= 5 ? 2 : v >= 2 ? 1 : 0;
 }
 
+export interface Collector {
+  x: number;
+  z: number;
+  magnet: number;
+  alive: boolean;
+}
+
 export class Pickups {
   count = 0;
   readonly x = new Float32Array(MAX);
@@ -113,16 +120,41 @@ export class Pickups {
   }
 
   /** Move, attract and collect. `magnet` is the player's pickup-range multiplier. */
-  update(dt: number, px: number, pz: number, magnet: number, collect: (type: PickupType, value: number) => void): void {
-    const range = BASE_MAGNET * magnet;
+  /**
+   * Move, attract and collect. Each pickup flies to the nearest living
+   * collector in range (its magnet stat scales the range); `collect` gets
+   * the collector's index.
+   */
+  update(dt: number, collectors: Collector[], collect: (type: PickupType, value: number, who: number) => void): void {
     for (let i = 0; i < this.count; i++) {
       this.age[i] += dt;
-      const dx = px - this.x[i];
-      const dz = pz - this.z[i];
-      const d = Math.hypot(dx, dz);
+      // Nearest living collector.
+      let ci = -1;
+      let d = Infinity;
+      for (let c = 0; c < collectors.length; c++) {
+        const k = collectors[c];
+        if (!k.alive) continue;
+        const dd = Math.hypot(k.x - this.x[i], k.z - this.z[i]);
+        if (dd < d) {
+          d = dd;
+          ci = c;
+        }
+      }
       const t = this.type[i];
+      if (ci < 0) {
+        const f = Math.exp(-5 * dt);
+        this.vx[i] *= f;
+        this.vz[i] *= f;
+        this.x[i] += this.vx[i] * dt;
+        this.z[i] += this.vz[i] * dt;
+        continue;
+      }
+      const col = collectors[ci];
+      const dx = col.x - this.x[i];
+      const dz = col.z - this.z[i];
       // Chests and hearts need you to walk over them (no magnet), except during vacuum.
       const magnetic = t === PickupType.Gem || t === PickupType.Bolt;
+      const range = BASE_MAGNET * col.magnet;
       if (!this.pulled[i] && this.age[i] > 0.25 && ((magnetic && d < range) || (this.vacuum && t === PickupType.Gem))) {
         this.pulled[i] = 1;
         // Small hop away first, like it's been yanked.
@@ -147,9 +179,25 @@ export class Pickups {
       this.x[i] += this.vx[i] * dt;
       this.z[i] += this.vz[i] * dt;
       if (d < 0.75) {
-        collect(t as PickupType, this.value[i]);
+        collect(t as PickupType, this.value[i], ci);
         this.remove(i--);
       }
+    }
+  }
+
+  /** Client: replace all pickups with a snapshot (no simulation). */
+  setFromNet(n: number, get: (i: number) => [number, number, number, number]): void {
+    this.count = 0;
+    for (let i = 0; i < n && this.count < MAX; i++) {
+      const [type, x, z, value] = get(i);
+      const k = this.count++;
+      this.type[k] = type;
+      this.x[k] = x;
+      this.z[k] = z;
+      this.value[k] = value;
+      this.age[k] = 1;
+      this.vx[k] = this.vz[k] = 0;
+      this.pulled[k] = 0;
     }
   }
 

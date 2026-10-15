@@ -6,8 +6,7 @@ import type { WeaponDef } from '../../data/weapons';
 import type { ModFlags } from '../modTypes';
 import type { Bullets } from '../bullets';
 import type { Enemy, Enemies } from '../enemies';
-import type { Fx } from '../fx';
-import type { Particles } from '../particles';
+import type { BurstOptions } from '../particles';
 import type { Player } from '../player';
 import type { Stats } from '../stats';
 
@@ -29,7 +28,16 @@ export interface DamageOpts {
   noStatus?: boolean;
 }
 
-/** Everything a weapon may touch. Implemented by Game. */
+/** Cosmetic effects (recorded for online clients). */
+export interface FxApi {
+  star(x: number, y: number, z: number, size: number, color?: string, life?: number): void;
+  ring(x: number, z: number, size: number, grow: number, color: string, life?: number): void;
+}
+export interface ParticleApi {
+  burst(x: number, y: number, z: number, o: BurstOptions): void;
+}
+
+/** Everything a weapon may touch. Implemented by Game, one per hero. */
 export interface WeaponCtx {
   scene: THREE.Scene;
   player: Player;
@@ -39,8 +47,10 @@ export interface WeaponCtx {
   enemies: Enemies;
   hash: SpatialHash<Enemy>;
   bullets: Bullets;
-  particles: Particles;
-  fx: Fx;
+  particles: ParticleApi;
+  fx: FxApi;
+  /** Index of the hero who owns this weapon. */
+  owner: number;
   /** Manual fire held (mouse / trigger / auto-fire). */
   firing: boolean;
   /** Summed Mod flags (Hair Trigger, Pacifist Core, Lightning Rod...). */
@@ -84,6 +94,12 @@ export abstract class Weapon {
   }
 
   abstract update(dt: number, ctx: WeaponCtx): void;
+  /** Visual state for online clients (positions, angles...). */
+  net(): number[] {
+    return [];
+  }
+  /** Client: apply visual state from the host. */
+  setNet(_a: number[]): void {}
   render(_alpha: number, _ctx: WeaponCtx): void {}
   dispose(): void {}
 }

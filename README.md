@@ -22,6 +22,10 @@ Then open http://localhost:5173.
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm run package` | Build + zip for itch.io (see [ITCH.md](ITCH.md)) |
 
+## Online co-op
+
+Title screen > PLAY ONLINE. One player hosts and shares the 5-letter code; up to 3 friends join with it. Each player has their own weapons, gold, Mods and shop; XP and score are shared. Stand next to a downed teammate to revive them. The host should keep their game window visible.
+
 ## Controls
 
 | Action | Keyboard / mouse | Gamepad |

@@ -30,6 +30,8 @@ export interface BulletSpawn {
   pierce?: number;
   bounce?: number;
   homing?: number;
+  /** Index of the hero who fired it (damage credit and Mod triggers). */
+  owner?: number;
 }
 
 export class Bullets {
@@ -55,6 +57,7 @@ export class Bullets {
   readonly homing = new Float32Array(MAX);
   /** uid of the last enemy hit, so piercing shots don't hit it twice. */
   readonly lastHit = new Int32Array(MAX);
+  readonly owner = new Uint8Array(MAX);
   private colors: THREE.Color[] = [];
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -108,6 +111,7 @@ export class Bullets {
     this.bounce[i] = b.bounce ?? 0;
     this.homing[i] = b.homing ?? 0;
     this.lastHit[i] = -1;
+    this.owner[i] = b.owner ?? 0;
     this.colors[i].set(b.color);
   }
 
@@ -133,11 +137,17 @@ export class Bullets {
     this.bounce[i] = this.bounce[j];
     this.homing[i] = this.homing[j];
     this.lastHit[i] = this.lastHit[j];
+    this.owner[i] = this.owner[j];
     this.colors[i].copy(this.colors[j]);
   }
 
   clear(): void {
     this.count = 0;
+  }
+
+  /** Bullet colour (for network snapshots). */
+  colorOf(i: number): string {
+    return '#' + this.colors[i].getHexString();
   }
 
   /** Integrate motion. Collision is resolved by the game (needs enemies/walls). */

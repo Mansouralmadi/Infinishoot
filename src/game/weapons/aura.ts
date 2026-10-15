@@ -31,6 +31,13 @@ export class Aura extends Weapon {
     return this.p.radius * ctx.stats.areaMul;
   }
 
+  net(): number[] {
+    return [Math.round(this.pulse * 100) / 100];
+  }
+  setNet(a: number[]): void {
+    this.pulse = a[0] ?? 0;
+  }
+
   update(dt: number, ctx: WeaponCtx): void {
     if (ctx.player.dead) return;
     this.pulse = Math.max(0, this.pulse - dt * 4);

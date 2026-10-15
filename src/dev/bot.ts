@@ -94,7 +94,7 @@ export function installBot(game: Game, input: Input): void {
     }
     inp.mouseButtons = best ? 1 : 0;
     if (bd < 1.3 && p.dashReady01 >= 1) inp.pressed.add('Space');
-    if (g.bombCharge >= 1 && Math.hypot(ax, az) > 1) inp.pressed.add('KeyQ');
+    if (g.hero.bombCharge >= 1 && Math.hypot(ax, az) > 1) inp.pressed.add('KeyQ');
     if (g.mode === 'levelup') inp.pressed.add('Digit1');
     if (g.mode === 'shop') shop();
     inp.poll();
@@ -131,8 +131,8 @@ export function installBot(game: Game, input: Input): void {
       alive: g.enemies.activeCount,
       maxAlive,
       hp: Math.round(g.player.hp),
-      weapons: g.weapons.map((w) => w.def.id + w.level).join(' '),
-      passives: JSON.stringify(g.passives),
+      weapons: g.hero.weapons.map((w) => w.def.id + w.level).join(' '),
+      passives: JSON.stringify(g.hero.passives),
       avgMs: (total / n).toFixed(2),
       worstMs: worst.toFixed(1),
     };

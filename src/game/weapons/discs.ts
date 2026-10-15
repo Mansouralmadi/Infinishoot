@@ -53,6 +53,23 @@ export class Discs extends Weapon {
     scene.add(this.mesh);
   }
 
+  net(): number[] {
+    const out: number[] = [this.discs.length];
+    for (const d of this.discs) out.push(Math.round(d.x * 100) / 100, Math.round(d.z * 100) / 100, Math.round(d.spin * 100) / 100);
+    return out;
+  }
+  setNet(a: number[]): void {
+    const n = a[0] ?? 0;
+    const old = this.discs;
+    this.discs = [];
+    for (let i = 0; i < n; i++) {
+      const x = a[1 + i * 3];
+      const z = a[2 + i * 3];
+      const o = old[i];
+      this.discs.push({ x, z, px: o ? o.x : x, pz: o ? o.z : z, dx: 0, dz: 0, dist: 0, back: false, spin: a[3 + i * 3], hits: new Map() });
+    }
+  }
+
   update(dt: number, ctx: WeaponCtx): void {
     const p = this.p;
     const pl = ctx.player;

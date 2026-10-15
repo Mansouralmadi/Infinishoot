@@ -11,7 +11,7 @@ import { fmtScore, type LoadoutItem } from './hud';
 import { MenuNav } from './menu';
 
 /** Full-screen menus. Plain DOM; every navigable element has `data-nav`. */
-export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'shop' | 'gameover' | 'workshop' | 'savedata';
+export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'shop' | 'gameover' | 'workshop' | 'savedata' | 'online' | 'wait';
 
 export interface ScreenActions {
   start(): void;
@@ -28,6 +28,18 @@ export interface ScreenActions {
   shopReroll(): void;
   shopHeal(): void;
   shopDone(): void;
+  online(): void;
+  mpHost(name: string): void;
+  mpJoin(name: string, code: string): void;
+  mpStart(): void;
+  mpLeave(): void;
+}
+
+export interface LobbyView {
+  code: string;
+  players: { name: string; color: string }[];
+  isHost: boolean;
+  status: string;
 }
 
 export interface ShopView {
@@ -99,7 +111,8 @@ export class Screens {
   <div class="logo"><span>INFINI</span><span>SHOOT</span></div>
   <div class="tagline">TWIN-STICK ARCADE ROGUELIKE</div>
   <div class="menu">
-    <button data-nav data-act="start">START</button>
+    <button data-nav data-act="start">PLAY SOLO</button>
+    <button data-nav data-act="online">PLAY ONLINE</button>
     <button data-nav data-act="workshop">WORKSHOP</button>
     <button data-nav data-act="settings">SETTINGS</button>
   </div>
@@ -132,6 +145,33 @@ export class Screens {
   <div class="cards"></div>
   <div class="reroll-row"></div>
   <div class="build"></div>
+</div>
+<div id="scr-online" class="screen dim" hidden>
+  <h1>PLAY ONLINE</h1>
+  <p class="note">Co-op for up to 4 players. One player hosts and shares a code; friends join with it.</p>
+  <label class="field">YOUR NAME <input id="mp-name" type="text" maxlength="12" spellcheck="false" autocomplete="off"></label>
+  <div class="menu row mp-choice">
+    <button data-nav data-act="mp-host">HOST GAME</button>
+  </div>
+  <div class="join-row">
+    <input id="mp-code" type="text" maxlength="5" placeholder="CODE" spellcheck="false" autocomplete="off">
+    <button data-nav data-act="mp-join">JOIN</button>
+  </div>
+  <div class="lobby" hidden>
+    <div class="code-label">GAME CODE</div>
+    <div class="code-big"></div>
+    <div class="players"></div>
+  </div>
+  <div class="msg mp-status"></div>
+  <div class="menu row">
+    <button data-nav data-act="mp-start" hidden>START GAME</button>
+    <button data-nav data-act="mp-leave">BACK</button>
+  </div>
+</div>
+<div id="scr-wait" class="screen dim" hidden>
+  <h1>WAITING</h1>
+  <p class="note">Your teammates are still choosing:</p>
+  <div class="who"></div>
 </div>
 <div id="scr-shop" class="screen dim" hidden>
   <h1>SHOP</h1>
@@ -184,7 +224,7 @@ export class Screens {
   <div class="hiscores"></div>
 </div>`,
     );
-    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'shop', 'workshop', 'savedata', 'gameover'];
+    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'shop', 'workshop', 'savedata', 'gameover', 'online', 'wait'];
     for (const n of names) this.els[n] = root.querySelector<HTMLElement>(`#scr-${n}`)!;
     this.navs = {
       title: new MenuNav(this.els.title),
@@ -195,6 +235,8 @@ export class Screens {
       workshop: new MenuNav(this.els.workshop, { columns: 3, onBack: () => actions.title() }),
       savedata: new MenuNav(this.els.savedata, { horizontal: true, onBack: () => this.show('workshop') }),
       gameover: new MenuNav(this.els.gameover, { horizontal: true }),
+      online: new MenuNav(this.els.online, { onBack: () => actions.mpLeave() }),
+      wait: new MenuNav(this.els.wait),
     };
 
     // Keep buttons from taking DOM focus on click, so Enter/Space don't fire twice.
@@ -212,6 +254,16 @@ export class Screens {
       switch (btn.dataset.act) {
         case 'start':
           return actions.start();
+        case 'online':
+          return actions.online();
+        case 'mp-host':
+          return actions.mpHost(this.nameField.value);
+        case 'mp-join':
+          return actions.mpJoin(this.nameField.value, this.els.online.querySelector<HTMLInputElement>('#mp-code')!.value);
+        case 'mp-start':
+          return actions.mpStart();
+        case 'mp-leave':
+          return actions.mpLeave();
         case 'resume':
           return actions.resume();
         case 'quit':
@@ -299,6 +351,41 @@ export class Screens {
 
   update(input: Input, dt: number): void {
     if (this.current !== 'none') this.navs[this.current].update(input, dt);
+  }
+
+  // ---------------------------------------------------------------- online
+
+  private get nameField(): HTMLInputElement {
+    return this.els.online.querySelector<HTMLInputElement>('#mp-name')!;
+  }
+
+  showOnline(name: string): void {
+    this.nameField.value = name;
+    this.setLobby({ code: '', players: [], isHost: false, status: '' });
+    this.show('online');
+  }
+
+  /** Lobby state: before connecting (code empty) or waiting for the host to start. */
+  setLobby(v: LobbyView): void {
+    const el = this.els.online;
+    const inLobby = v.code !== '' || v.players.length > 0;
+    el.querySelector<HTMLElement>('.lobby')!.hidden = !inLobby;
+    el.querySelector<HTMLElement>('.mp-choice')!.hidden = inLobby;
+    el.querySelector<HTMLElement>('.join-row')!.hidden = inLobby;
+    el.querySelector<HTMLElement>('.field')!.hidden = inLobby;
+    el.querySelector('.code-big')!.textContent = v.code;
+    el.querySelector('.players')!.innerHTML = v.players
+      .map((p, i) => `<div class="lobby-player" style="--c:${p.color}"><span class="dot"></span>${p.name}${i === 0 ? ' <small>HOST</small>' : ''}</div>`)
+      .join('');
+    el.querySelector<HTMLElement>('[data-act=mp-start]')!.hidden = !(v.isHost && v.code);
+    el.querySelector('.mp-status')!.textContent = v.status;
+    if (this.current !== 'online') this.show('online');
+    else this.navs.online.refresh(this.navs.online.focus);
+  }
+
+  showWait(who: string[]): void {
+    this.els.wait.querySelector('.who')!.innerHTML = who.map((n) => `<div class="lobby-player"><span class="dot"></span>${n}</div>`).join('');
+    this.show('wait');
   }
 
   // ---------------------------------------------------------------- settings
@@ -496,8 +583,9 @@ export class Screens {
 
   // ---------------------------------------------------------------- game over
 
-  showGameOver(sum: RunSummary, rank: number, list: ScoreEntry[]): void {
+  showGameOver(sum: RunSummary, rank: number, list: ScoreEntry[], waitingForHost = false): void {
     const el = this.els.gameover;
+    el.querySelector<HTMLElement>('[data-act=retry]')!.textContent = waitingForHost ? 'HOST RESTARTS' : 'RETRY';
     el.querySelector<HTMLElement>('.newbest')!.hidden = rank !== 0;
     el.querySelector('.summary')!.innerHTML = `
       <div class="big">${fmtScore(sum.score)}</div>

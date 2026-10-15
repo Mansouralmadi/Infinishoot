@@ -22,6 +22,9 @@ Roadmap and decision log: @PLAN.md
 - `game.stats` is the live stats object (static + per-step Mod effects); call `recomputeStats()` after passives or Mods change, never reassign it.
 - All damage goes through `ctx.damage()` / `Game.damage`, which applies stats, crits and freeze-shatter and tracks the per-weapon damage breakdown.
 - The persistent profile (Bolts, Workshop, achievements, lifetime stats) is `save` in src/game/save.ts. Bump the version and extend `normalize()` when its shape changes, so old saves keep loading.
+- Multiplayer: `Game` holds team state (stage, XP, score, director) and `heroes: Hero[]` (src/game/hero.ts) with per-player weapons, passives, Mods, gold, offers and shop; `game.hero` is this machine's hero. `role` is solo, host or client. Solo and host simulate everything; clients move their own hero and mirror host snapshots (src/net/peer.ts transport, src/net/codec.ts binary records).
+- Cosmetic effects go through `game.vfx` (src/game/vfx.ts), never fx/particles/sfx directly, so the host can replay them on clients. Anything gameplay-relevant must run in update(), not render().
+- New weapons must implement `net()`/`setNet()` for anything clients need to draw.
 - `Game` (src/game/game.ts) owns the session: menus, run state and every system. Its modes are title, fight, levelup, cleared, portal, transition and dead. Juice goes through `game.juice.freeze()` / `.shake()` / `.kick()`.
 - UI is plain DOM: HUD in src/ui/hud.ts, menus in src/ui/screens.ts. Anything navigable gets `data-nav` so `MenuNav` handles keyboard and gamepad.
 - Persistence goes through src/core/storage.ts, which never throws. Settings and high scores live in localStorage under the `infinishoot.` prefix.

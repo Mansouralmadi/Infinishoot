@@ -31,6 +31,16 @@ export class Mines extends Weapon {
     scene.add(this.dome);
   }
 
+  net(): number[] {
+    const out: number[] = [this.list.length];
+    for (const m of this.list) out.push(Math.round(m.x * 100) / 100, Math.round(m.z * 100) / 100, Math.round(m.age * 100) / 100);
+    return out;
+  }
+  setNet(a: number[]): void {
+    this.list = [];
+    for (let i = 0; i < (a[0] ?? 0); i++) this.list.push({ x: a[1 + i * 3], z: a[2 + i * 3], age: a[3 + i * 3] });
+  }
+
   update(dt: number, ctx: WeaponCtx): void {
     const p = this.p;
     const pl = ctx.player;

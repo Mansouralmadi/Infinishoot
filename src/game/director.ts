@@ -30,6 +30,8 @@ export type SpawnRequest =
 
 export class Director {
   stage = 1;
+  /** Co-op scales enemy count and toughness with the number of players. */
+  players = 1;
   time = 0;
   bossSpawned = false;
   private spawnBudget = 0;
@@ -57,12 +59,12 @@ export class Director {
 
   get hpMul(): number {
     const t = directorTuning;
-    return (1 + t.hpPerStage * (this.stage - 1)) * (1 + t.hpPerMinute * (this.time / 60));
+    return (1 + t.hpPerStage * (this.stage - 1)) * (1 + t.hpPerMinute * (this.time / 60)) * (1 + 0.45 * (this.players - 1));
   }
 
   /** Bosses scale per stage only (not by minute), so they stay beatable. */
   get bossHpMul(): number {
-    return 1 + directorTuning.hpPerStage * (this.stage - 1);
+    return (1 + directorTuning.hpPerStage * (this.stage - 1)) * (1 + 0.6 * (this.players - 1));
   }
 
   get dmgMul(): number {
@@ -78,7 +80,7 @@ export class Director {
     const t = directorTuning;
     const k = Math.min(1, this.time / this.duration);
     const n = t.aliveStart + (t.aliveEnd - t.aliveStart) * Math.pow(k, 1.3) + t.alivePerStage * (this.stage - 1);
-    return Math.min(t.aliveCap, Math.round(n));
+    return Math.min(t.aliveCap, Math.round(n * (1 + 0.5 * (this.players - 1))));
   }
 
   private pool(): EnemyDef[] {

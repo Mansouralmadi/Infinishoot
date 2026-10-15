@@ -31,6 +31,22 @@ export class Lightning extends Weapon {
     scene.add(this.lines);
   }
 
+  /** Bolts as [count, len, ...points, len, ...points]. */
+  net(): number[] {
+    const out: number[] = [this.bolts.length];
+    for (const b of this.bolts) out.push(b.pts.length, ...b.pts.map((v) => Math.round(v * 100) / 100));
+    return out;
+  }
+  setNet(a: number[]): void {
+    this.bolts = [];
+    let k = 1;
+    for (let n = 0; n < (a[0] ?? 0); n++) {
+      const len = a[k++];
+      this.bolts.push({ pts: a.slice(k, k + len), t: BOLT_LIFE });
+      k += len;
+    }
+  }
+
   update(dt: number, ctx: WeaponCtx): void {
     for (const b of this.bolts) b.t -= dt;
     this.bolts = this.bolts.filter((b) => b.t > 0);

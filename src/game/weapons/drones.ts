@@ -37,6 +37,14 @@ export class Drones extends Weapon {
   }
   private areaMul = 1;
 
+  net(): number[] {
+    return [Math.round(this.angle * 1000) / 1000, this.areaMul];
+  }
+  setNet(a: number[]): void {
+    this.angle = a[0] ?? 0;
+    this.areaMul = a[1] ?? 1;
+  }
+
   update(dt: number, ctx: WeaponCtx): void {
     const p = this.p;
     this.areaMul = ctx.stats.areaMul;

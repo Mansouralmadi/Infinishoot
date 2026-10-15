@@ -45,6 +45,19 @@ export class Fire extends Weapon {
     scene.add(this.mesh);
   }
 
+  net(): number[] {
+    const out: number[] = [this.flames.length];
+    for (const f of this.flames) out.push(Math.round(f.x * 100) / 100, Math.round(f.z * 100) / 100, Math.round(f.age * 100) / 100, f.life, Math.round(f.r * 100) / 100);
+    return out;
+  }
+  setNet(a: number[]): void {
+    this.flames = [];
+    for (let i = 0; i < (a[0] ?? 0); i++) {
+      const k = 1 + i * 5;
+      this.flames.push({ x: a[k], z: a[k + 1], age: a[k + 2], life: a[k + 3], r: a[k + 4] });
+    }
+  }
+
   update(dt: number, ctx: WeaponCtx): void {
     const p = this.p;
     const pl = ctx.player;

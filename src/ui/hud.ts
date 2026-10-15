@@ -63,6 +63,8 @@ export class Hud {
          <div id="combo"><div class="mult">x1</div><div class="num"></div><div class="cbar"><div></div></div></div>
          <div id="loadout"><div class="row weapons"></div><div class="row passives"></div></div>
          <div id="mods"></div>
+         <div id="team"></div>
+         <div id="tags"></div>
          <div id="meters">
            <div id="dashpip" class="pip"><span>DASH</span></div>
            <div id="bombpip" class="pip"><span>BOMB</span></div>
@@ -144,6 +146,49 @@ export class Hud {
   }
 
   private lastMods = '';
+  private lastTeam = '';
+  private tagEls: HTMLElement[] = [];
+
+  /** Co-op: teammate life bars (top-left) and floating name tags. */
+  setTeam(
+    team: { name: string; color: string; hp01: number; down: boolean; left: boolean }[],
+    tags: { x: number; y: number; name: string; color: string; down: boolean; revive01: number; onScreen: boolean }[],
+  ): void {
+    const html = team
+      .map(
+        (t) =>
+          `<div class="mate ${t.down ? 'down' : ''} ${t.left ? 'left' : ''}" style="--c:${t.color}"><span class="nm">${t.name}${t.left ? ' (left)' : t.down ? ' DOWN' : ''}</span><div class="bar"><div style="width:${Math.round(t.hp01 * 100)}%"></div></div></div>`,
+      )
+      .join('');
+    if (html !== this.lastTeam) {
+      this.lastTeam = html;
+      this.el('#team').innerHTML = html;
+    }
+    const root = this.el('#tags');
+    while (this.tagEls.length < tags.length) {
+      const d = document.createElement('div');
+      d.className = 'tag';
+      root.appendChild(d);
+      this.tagEls.push(d);
+    }
+    this.tagEls.forEach((d, i) => {
+      const t = tags[i];
+      if (!t || !t.onScreen) {
+        d.style.display = 'none';
+        return;
+      }
+      d.style.display = '';
+      d.style.setProperty('--c', t.color);
+      d.style.transform = `translate(${t.x}px, ${t.y}px) translate(-50%, -100%)`;
+      const label = t.down ? `${t.name} - REVIVE!` : t.name;
+      if (d.dataset.label !== label) {
+        d.dataset.label = label;
+        d.textContent = label;
+      }
+      d.classList.toggle('down', t.down);
+      d.style.setProperty('--rv', String(t.revive01));
+    });
+  }
 
   /** Owned Mods, bottom-right, with live readouts (only rebuilt when the markup changes). */
   setMods(mods: { icon: string; color: string; name: string; readout: string; cursed: boolean }[]): void {

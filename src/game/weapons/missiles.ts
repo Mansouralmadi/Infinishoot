@@ -47,6 +47,23 @@ export class Missiles extends Weapon {
     m.targetUid = m.target ? m.target.uid : -1;
   }
 
+  net(): number[] {
+    const out: number[] = [this.list.length];
+    for (const m of this.list) out.push(Math.round(m.x * 100) / 100, Math.round(m.z * 100) / 100, Math.round(m.a * 100) / 100);
+    return out;
+  }
+  setNet(a: number[]): void {
+    const n = a[0] ?? 0;
+    const old = this.list;
+    this.list = [];
+    for (let i = 0; i < n; i++) {
+      const x = a[1 + i * 3];
+      const z = a[2 + i * 3];
+      const o = old[i];
+      this.list.push({ x, z, px: o ? o.x : x, pz: o ? o.z : z, a: a[3 + i * 3], sp: 0, life: 1, target: null, targetUid: -1, smokeT: 0 });
+    }
+  }
+
   update(dt: number, ctx: WeaponCtx): void {
     const p = this.p;
     const pl = ctx.player;

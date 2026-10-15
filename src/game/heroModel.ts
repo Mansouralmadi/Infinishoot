@@ -28,7 +28,8 @@ export interface HeroRig {
   materials: RetroMaterial[];
 }
 
-export function createHero(): HeroRig {
+/** `armorColor` tints the suit so co-op players are easy to tell apart. */
+export function createHero(armorColor: string = PALETTE.armor): HeroRig {
   const materials: RetroMaterial[] = [];
   const mat = (color: string, extra: Parameters<typeof createRetroMaterial>[0] = {}) => {
     const m = createRetroMaterial({ color, ...extra });
@@ -41,8 +42,8 @@ export function createHero(): HeroRig {
     return o;
   };
 
-  const armor = mat(PALETTE.armor);
-  const armorDark = mat(PALETTE.armorDark);
+  const armor = mat(armorColor);
+  const armorDark = mat('#' + new THREE.Color(armorColor).multiplyScalar(0.68).getHexString());
   const accent = mat(PALETTE.accent);
   const skin = mat(PALETTE.skin);
   const suit = mat(PALETTE.suit);

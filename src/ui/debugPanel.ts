@@ -92,7 +92,7 @@ export function createDebugPanel(renderer: RetroRenderer, game: Game, onResize: 
   run.add({ m: () => game.debugGiveMod(giveMod.mod) }, 'm').name('Give mod');
   run.add({ g: () => game.debugAddGold(20) }, 'g').name('+20 gold');
   run.add({ boss: () => game.debugSkipToBoss() }, 'boss').name('Skip to boss');
-  run.add({ fill: () => (game.bombCharge = 1) }, 'fill').name('Fill bomb');
+  run.add({ fill: () => (game.hero.bombCharge = 1) }, 'fill').name('Fill bomb');
   run.add({ bolts: () => game.debugAddBolts(500) }, 'bolts').name('+500 Bolts (save)');
   run.add({ restart: () => game.restart() }, 'restart').name('New run');
 

@@ -32,13 +32,17 @@ Run `npm run package` again. On the itch.io edit page, delete the old zip and up
 
 Player saves are tied to the itch.io page address, so updates don't wipe them.
 
-## 4. About saves
+## 4. Online co-op
+
+Online play works from the itch.io page as well. Players connect directly browser-to-browser; PeerJS's free public server is only used to find each other. Mention in the page text that the host should keep their game tab visible.
+
+## 5. About saves
 
 - Progress (Bolts, Workshop upgrades, achievements, high scores, settings) saves automatically in the player's browser.
 - It is per browser and per device. Clearing browser data deletes it.
 - Players can back up or move their save with **Workshop > Save Data > Export / Import**.
 
-## 5. Page text (paste into the description)
+## 6. Page text (paste into the description)
 
 > **InfiniShoot** is a colorful twin-stick survivors-style roguelike that runs right in your browser.
 >

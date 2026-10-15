@@ -43,7 +43,9 @@ export class Player {
   private dashZ = 0;
   private kx = 0;
   private kz = 0;
-  private hurtFlash = 0;
+  hurtFlash = 0;
+  /** Co-op: stay visible (lying down) while downed so teammates can revive you. */
+  showWhenDead = false;
   private sq = 0;
   private sqV = 0;
 
@@ -53,8 +55,11 @@ export class Player {
   private animTime = 0;
   private blinkT = 0;
 
-  constructor(scene: THREE.Scene) {
-    this.rig = createHero();
+  constructor(
+    private scene: THREE.Scene,
+    color?: string,
+  ) {
+    this.rig = createHero(color);
     scene.add(this.rig.root);
 
     const shadowMat = new THREE.MeshBasicMaterial({
@@ -66,6 +71,48 @@ export class Player {
     this.shadow.rotation.x = -Math.PI / 2;
     this.shadow.renderOrder = 1;
     scene.add(this.shadow);
+  }
+
+  dispose(): void {
+    this.scene.remove(this.rig.root, this.shadow);
+    this.rig.root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) {
+        m.geometry.dispose();
+        (m.material as THREE.Material).dispose();
+      }
+    });
+    this.shadow.geometry.dispose();
+  }
+
+  /** Set state from the network: host applying a client's own movement, or a client mirroring a snapshot. */
+  netSet(x: number, z: number, vx: number, vz: number, ax: number, az: number, dashing: boolean): void {
+    this.prev.x = this.pos.x;
+    this.prev.z = this.pos.z;
+    this.pos.x = x;
+    this.pos.z = z;
+    this.vel.x = vx;
+    this.vel.z = vz;
+    this.setAimDir(ax, az);
+    this.dashT = dashing ? Math.max(this.dashT, 0.05) : 0;
+  }
+
+  /** Decay timers for a hero whose movement comes from the network (host side). */
+  tickTimers(dt: number): void {
+    this.invuln = Math.max(0, this.invuln - dt);
+    this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+    this.recoil *= Math.exp(-18 * dt);
+    this.dashT = Math.max(0, this.dashT - dt);
+    this.sqV += (-260 * this.sq - 16 * this.sqV) * dt;
+    this.sq += this.sqV * dt;
+  }
+
+  /** Knockback impulse (client: host told us we got hit). */
+  knock(dirX: number, dirZ: number): void {
+    this.kx = dirX * playerTuning.hurtKnockback;
+    this.kz = dirZ * playerTuning.hurtKnockback;
+    this.hurtFlash = 0.15;
+    this.sqV -= 6;
   }
 
   get radius(): number {
@@ -211,7 +258,7 @@ export class Player {
     if (this.hp <= 0) {
       this.hp = 0;
       this.dead = true;
-      this.rig.root.visible = false;
+      this.rig.root.visible = this.showWhenDead;
     }
     return true;
   }
@@ -236,8 +283,16 @@ export class Player {
     animateHero(this.rig, this.animTime, this.dashing ? 0.3 : speed01, Math.min(1, this.recoil));
     this.rig.body.scale.set(1 - this.sq * 0.5, 1 + this.sq, 1 - this.sq * 0.5);
 
+    // Downed in co-op: lie on the ground, greyed out.
+    this.rig.root.rotation.z = this.dead && this.showWhenDead ? Math.PI / 2 : 0;
+    if (this.dead) {
+      this.rig.root.visible = this.showWhenDead;
+      this.rig.root.position.y = 0.4;
+      for (const m of this.rig.materials) m.uniforms.uFlash.value.set(0.5, 0.5, 0.6, 0.55);
+      return;
+    }
+    this.rig.root.position.y = 0;
     // Blink while invulnerable after a hit (not during dash i-frames).
-    if (this.dead) return;
     const blinking = this.invuln > 0 && !this.dashing && this.hurtFlash <= 0 && this.invuln > playerTuning.dashIframesExtra;
     this.blinkT += frameDt;
     this.rig.root.visible = !blinking || Math.floor(this.blinkT * 16) % 2 === 0;

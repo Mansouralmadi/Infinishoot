@@ -9,6 +9,13 @@ export class Buster extends Weapon {
   private mz = { x: 0, z: 0 };
   muzzleT = 0;
 
+  net(): number[] {
+    return [this.muzzleT];
+  }
+  setNet(a: number[]): void {
+    this.muzzleT = a[0] ?? 0;
+  }
+
   update(dt: number, ctx: WeaponCtx): void {
     this.muzzleT = Math.max(0, this.muzzleT - dt);
     this.shotCd -= dt;
@@ -56,6 +63,7 @@ export class Buster extends Weapon {
         width: 0.32 * size,
         length: 0.8 * size,
         pierce: p.pierce + (mega ? 5 : 0),
+        owner: ctx.owner,
       });
     }
     this.muzzleT = 0.05;

@@ -72,11 +72,16 @@ Goal: Balatro-style build decisions, where the best pick depends on what you alr
 - [x] Level-up Skip for gold
 - **Playable:** builds that combo, plus a real spend-vs-save economy.
 
-## Milestone 4: Online co-op (next)
-- [ ] Host-authoritative co-op over WebRTC with invite codes (PeerJS signaling), 2-4 players
-- [ ] Shared stage, shared XP and gold or per-player picks (decide), revive downed teammates
-- [ ] Snapshot sync for enemies/pickups, client-side prediction for your own hero
-- **Playable:** two browsers on different networks clear a stage together.
+## Milestone 4: Online co-op (done)
+- [x] Host-authoritative co-op over WebRTC with 5-letter invite codes (PeerJS public broker for matchmaking), 2-4 players
+- [x] Team XP and level; separate gold, weapons, passives, Mods, level-up cards and shop per player (each player's own Workshop bonuses and unlocks apply)
+- [x] Clients move their own hero locally (instant controls) and send position/aim/fire at 30 Hz; host sends 20 Hz snapshots with interest management (only what's within ~34 m of that player): binary enemy/bullet/pickup records plus a recorded effects stream (particles, rings, numbers, sounds, banners)
+- [x] Weapons expose net()/setNet() so clients draw everyone's drones, discs, missiles, mines, flames and lightning
+- [x] Co-op rules: enemies chase the nearest player, pickups go to whoever is nearest, downed players are revived by standing next to them for 3 s, run ends when everyone is down; enemy count and HP scale with player count
+- [x] Lobby (host/join, names, player list), waiting screens while teammates pick, teammate life bars and name tags, per-player colors
+- **Playable:** two browsers clear a stage together.
+
+Known limits: the host's tab must stay visible (browsers pause hidden tabs); some strict networks block direct WebRTC connections (would need a TURN relay).
 
 ## Milestone 4b: Biomes, bosses and evolutions
 - [ ] 3-4 biomes cycling by stage (palette, fog, props, music)
@@ -158,3 +163,4 @@ public/assets/         # models (glb), textures (png), audio
 - 2026-10-15: Boss HP scales by stage only (2,400 at stage 1), and normal spawns drop to 25% during the boss, after bot runs showed the boss was unkillable with minute-scaled HP.
 - 2026-10-15: Pushed to GitHub (Mansouralmadi/Infinishoot), committing straight to main per the user. Next big features chosen: synergy perks first (shop between stages, Balatro-style), then online co-op only (no local co-op).
 - 2026-10-15: Mods live in a shop rather than in level-ups so level-ups stay about weapons, and gold creates its own spend/save/interest decisions. In-run gold replaced the Bolt pickups; Bolts are now only earned at run end (kills, stages, minutes, left-over gold). Echo shares state with the Mod it copies, so echoed counters (Bloodlust) also stack twice as fast.
+- 2026-10-15: Online co-op design (user): separate gold and own shop per player; XP shared as a team (assumed, Vampire Survivors style). Host-authoritative simulation with client-owned movement, chosen over lockstep because JS floating point isn't guaranteed identical across browsers and lockstep adds input delay. Refactored Game into team state plus per-player Hero (src/game/hero.ts); solo is simply one hero. Gameplay timing must never depend on render (the portal used to), because hosts may not render every frame.
