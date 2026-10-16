@@ -58,8 +58,6 @@ export interface WeaponCtx {
   /** An arm weapon has taken over the Buster's rapid fire / charge shot. */
   readonly armPrimary: boolean;
   readonly armSecondary: boolean;
-  /** Extra shots from Buster levels; left-click arm weapons inherit them. */
-  readonly multishot: number;
   /** Summed Mod flags (Hair Trigger, Pacifist Core, Lightning Rod...). */
   readonly flags: ModFlags;
   /** Apply base damage (scaled by stats, crits, shatter). Returns the dealt amount. */

@@ -8,7 +8,7 @@ import { exportFile, importFile, resetSave, save } from '../game/save';
 import { settings, saveSettings } from '../game/settings';
 import { sfx } from '../audio/sfx';
 import { RARITY, type Rarity } from '../data/rarity';
-import { fmtScore, type LoadoutItem } from './hud';
+import { decoys, fmtScore, reduceMotion, reelAt, reelSteps, type LoadoutItem } from './hud';
 import { MenuNav } from './menu';
 import { iconHtml } from './pixelIcons';
 
@@ -59,6 +59,8 @@ export interface ShopView {
   healed: boolean;
   loadout: LoadoutItem[];
   stage: number;
+  /** Starting shop before stage 1: free gold that isn't kept, no interest. */
+  pre?: boolean;
 }
 
 export interface Offer {
@@ -74,6 +76,8 @@ export interface Offer {
   /** Level owned now (0 = new) and the item's max, for the upgrade pips. */
   level?: number;
   maxLevel?: number;
+  /** Owned weapon this pick removes, e.g. "Plasma Orb LV 3" (arm-slot swaps). */
+  replaces?: string;
 }
 
 export interface RunSummary {
@@ -109,6 +113,12 @@ function levelPips(o: Offer): string {
   return `<div class="lvl">LV ${o.level} ▸ ${next}</div><div class="pips">${pips}</div>`;
 }
 
+/** Warning strip on cards that swap out an owned weapon. "Plasma Orb LV 3" reads "REPLACES PLASMA ORB (LV 3)". */
+function replaceStrip(what: string): string {
+  const name = what.replace(/\s+(LV\s*\d+)$/i, ' ($1)').toUpperCase();
+  return `<div class="replaces"><i>!</i><span>REPLACES ${name}<b>OLD WEAPON AND ITS UPGRADES ARE REMOVED</b></span></div>`;
+}
+
 /** Hover card: name, rarity and what it does. */
 function tip(name: string, rarity: Rarity, desc: string, extra = ''): string {
   return `<span class="tip"><b>${name}</b><em class="r-text-${rarity}">${RARITY[rarity].label}${extra}</em><span>${desc}</span></span>`;
@@ -133,6 +143,9 @@ export class Screens {
   private wipeArmed = false;
   /** Gold last shown in the shop, for the +/- popups. */
   private shopGold = -1;
+  /** Level-up card reels still spinning, and the time since they started. */
+  private reels: { card: HTMLElement; strip: HTMLElement; steps: number[]; passed: number; rarity?: Rarity }[] = [];
+  private reelT = 0;
 
   private root: HTMLElement;
 
@@ -377,6 +390,7 @@ export class Screens {
 
   update(input: Input, dt: number): void {
     if (this.current !== 'none') this.navs[this.current].update(input, dt);
+    this.tickReels(dt);
   }
 
   // ---------------------------------------------------------------- online
@@ -451,16 +465,27 @@ export class Screens {
   showLevelUp(offers: Offer[], title: string, rerolls: number, loadout: LoadoutItem[], skipGold = 0): void {
     const el = this.els.levelup;
     el.querySelector('h1')!.textContent = title;
+    // Each icon rolls like a slot reel; cards land left to right, a legendary spins longer and slows right down.
+    const still = reduceMotion();
+    const steps = offers.map((o, i) => {
+      if (still) return [];
+      const legend = o.rarity === 'legendary';
+      return reelSteps(0.45 + 0.25 * i + (legend ? 1.5 : 0), legend ? [0.06, 0.08, 0.1, 0.13, 0.17, 0.22, 0.3, 0.4] : [0.07, 0.1]);
+    });
     el.querySelector('.cards')!.innerHTML = offers
       .map(
-        (o, i) => `<button class="card ${o.kind} ${o.rarity ? 'r-' + o.rarity : ''} ${cardMode(o)}" data-nav data-act="pick" data-index="${i}">
+        (o, i) => `<button class="card rolling ${o.kind} ${o.rarity ? 'r-' + o.rarity : ''} ${cardMode(o)}" data-nav data-act="pick" data-index="${i}">
+          <i class="fx"></i>
           <div class="tag ${cardMode(o)}">${cardMode(o) === 'upgrade' ? '▲ UPGRADE' : o.tag}</div>
           ${cardMode(o) === 'new' ? '<div class="ribbon">NEW</div>' : ''}
-          <div class="icon" style="--c:${o.color}">${iconHtml(o.id, o.color, o.icon)}</div>
+          <div class="icon" style="--c:${o.color}"><div class="reel"><div class="strip">${iconHtml(o.id, o.color, o.icon)}${decoys(steps[i].length, o.id)
+            .map((d) => iconHtml(d.id, d.color, d.icon))
+            .join('')}</div></div></div>
           <div class="name">${o.name}</div>
           ${levelPips(o)}
           <div class="desc">${o.text}</div>
           ${o.tags ? `<div class="chips">${tagChips(o.tags)}</div>` : ''}
+          ${o.replaces ? replaceStrip(o.replaces) : ''}
           <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : 'BONUS'}</div>
           <div class="key">${i + 1}</div>
         </button>`,
@@ -471,11 +496,44 @@ export class Screens {
       (skipGold > 0 ? `<button data-nav data-act="skip" class="skip">SKIP +${skipGold}<span class="gold-dot"></span></button>` : '');
     el.querySelector('.build')!.innerHTML = loadout.map(badge).join('');
     this.show('levelup');
-    // A legendary on the table gets a fanfare and a golden flash.
-    if (offers.some((o) => o.rarity === 'legendary')) {
+    const cards = el.querySelectorAll<HTMLElement>('.card');
+    this.reels = offers.map((o, i) => ({ card: cards[i], strip: cards[i].querySelector<HTMLElement>('.strip')!, steps: steps[i], passed: 0, rarity: o.rarity }));
+    this.reelT = 0;
+    this.tickReels(0);
+  }
+
+  /** Advance the level-up reels: a click per item passing, then each card's landing. */
+  private tickReels(dt: number): void {
+    if (!this.reels.length) return;
+    if (this.current !== 'levelup') {
+      this.reels = [];
+      return;
+    }
+    this.reelT += dt;
+    let tick = false;
+    this.reels = this.reels.filter((r) => {
+      const { pos, passed } = reelAt(r.steps, this.reelT);
+      r.strip.style.setProperty('--k', String(pos));
+      if (passed > r.passed && passed < r.steps.length) tick = true;
+      r.passed = passed;
+      if (passed < r.steps.length) return true;
+      this.landCard(r.card, r.rarity);
+      return false;
+    });
+    if (tick) sfx.reelTick();
+  }
+
+  /** A reel stops: reveal the card and play its tier's landing (legendary gets the fanfare and gold flash). */
+  private landCard(card: HTMLElement, rarity: Rarity = 'common'): void {
+    card.classList.remove('rolling');
+    card.classList.add('land');
+    sfx.reelLand(rarity);
+    const icon = card.querySelector<HTMLElement>('.icon')!;
+    if (rarity === 'uncommon') burstAt(icon, ['var(--lime)', 'var(--white)'], 8);
+    if (rarity === 'legendary') {
       sfx.legendary();
-      replay(el, 'legend-flash');
-      el.querySelectorAll<HTMLElement>('.card.r-legendary').forEach((c) => burstAt(c, ['var(--yellow)', 'var(--orange)', 'var(--white)'], 26));
+      replay(this.els.levelup, 'legend-flash');
+      burstAt(card, ['var(--yellow)', 'var(--orange)', 'var(--white)'], 26);
     }
   }
 
@@ -490,10 +548,12 @@ export class Screens {
   showShop(v: ShopView, focus?: number): void {
     const el = this.els.shop;
     const wasOpen = this.current === 'shop';
-    el.querySelector('h1')!.textContent = `STAGE ${v.stage} SHOP`;
+    el.querySelector('h1')!.textContent = v.pre ? 'STARTING SHOP' : `STAGE ${v.stage} SHOP`;
     el.querySelector('.shop-top')!.innerHTML =
       `<span class="gold-big"><span class="gold-dot"></span> ${v.gold} GOLD</span>` +
-      `<span class="interest">Interest next clear: +${v.interest} (1 per ${v.interestPer} held, max ${v.interestCap})</span>`;
+      (v.pre
+        ? `<span class="interest pre">FREE 15 GOLD: SPEND IT NOW, IT ISN'T KEPT</span>`
+        : `<span class="interest">Interest next clear: +${v.interest} (1 per ${v.interestPer} held, max ${v.interestCap})</span>`);
     el.querySelector('.shop-offers')!.innerHTML = v.offers
       .map((o, i) => {
         if (!o) return `<div class="mod-card sold">SOLD</div>`;
@@ -702,6 +762,7 @@ function replay(el: HTMLElement, cls: string): void {
 
 /** One pixel bit (or coin) flying from (x0, y0) to (x1, y1) with a little hop. */
 function bit(x0: number, y0: number, x1: number, y1: number, coin: boolean, delay = 0, dur = 0.55, color = 'var(--yellow)'): void {
+  if (reduceMotion()) return; // without its animation a bit would never fly off or get removed
   const b = document.createElement('i');
   b.className = coin ? 'px-bit coin' : 'px-bit';
   const s = b.style;

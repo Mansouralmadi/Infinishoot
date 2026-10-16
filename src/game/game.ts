@@ -59,6 +59,17 @@ export const dropTuning = {
   heartChance: 0.004,
   magnetChance: 0.0015,
   gearChance: 0.0025, // per kill, x(1 + 0.25 per Luck of the killer)
+  nukeChance: 0.0006, // per kill: a full-screen wipe
+  // Heart, magnet, gear and nuke chances are scaled by min(1, dropRef / enemies the
+  // director wants alive), so drops per minute stay flat as hordes grow.
+  dropRef: 70,
+};
+
+/** The Nuke pickup: an expanding wave across the whole screen. */
+export const nukeTuning = {
+  radius: 48,
+  duration: 0.8,
+  bossHpFrac: 0.15, // bosses lose this share of max life instead of dying
 };
 
 /** Status effects and their combos. */
@@ -90,7 +101,7 @@ const BULLET_KINDS: { source: string; tags?: Tag[] }[] = [
 ];
 const SNAP_EVERY = 3; // host snapshot every N sim steps (20 Hz)
 const INPUT_EVERY = 2; // client input every N sim steps (30 Hz)
-const INTEREST = 34; // only send entities this close to each client's hero
+const INTEREST = 50; // only send entities this close to each client's hero (wide enough for a zoomed-out camera)
 const REVIVE_TIME = 3;
 const REVIVE_RANGE = 2.4;
 
@@ -108,6 +119,7 @@ interface LobbyEntry {
 
 /** Shop view sent over the network (Mods referenced by id). */
 interface NetShop {
+  pre?: boolean;
   gold: number;
   interest: number;
   interestCap: number;
@@ -218,6 +230,8 @@ export class Game implements HeroWorld {
   private mz = { x: 0, z: 0 };
   private tmp = new THREE.Vector3();
   private scratch: Enemy[] = [];
+  /** The free starting shop before stage 1 is open (its gold is not kept). */
+  private preShop = false;
   private shownCharge = 0;
   private lastReady = 1;
   private readyFlashT = 0;
@@ -283,6 +297,14 @@ export class Game implements HeroWorld {
         this.hud.toast(settings.autoFire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF');
       }
     });
+    // Mouse wheel zooms the camera out (in-game only; menus keep their scrolling).
+    window.addEventListener(
+      'wheel',
+      (e) => {
+        if (this.screens.current === 'none' && e.deltaY !== 0) this.cam.wheel(Math.sign(e.deltaY));
+      },
+      { passive: true },
+    );
     this.hud.onPause = () => this.pause();
     this.enemyCtx = this.makeEnemyCtx();
     this.heroes = [this.makeHero(0, playerName(), unlockedWeapons())];
@@ -379,10 +401,6 @@ export class Game implements HeroWorld {
       },
       get armSecondary() {
         return hero.weapons.some((w) => w.def.slot === 'secondary');
-      },
-      get multishot() {
-        const b = hero.weapons.find((w) => w.def.id === 'buster');
-        return b ? b.p.shots - 1 : 0;
       },
       damage: (e, base, o) => this.damage(e, base, o, hero),
       nearest: (x, z, r, skip) => this.nearestEnemy(x, z, r, skip),
@@ -555,6 +573,12 @@ export class Game implements HeroWorld {
       }
     }
     this.loadStage(1);
+    // Starting shop: free gold to spend before stage 1, not carried into the run.
+    if (this.role !== 'client') {
+      this.preShop = true;
+      for (const h of this.heroes) h.gold = economyTuning.startGold;
+      this.openShop();
+    }
   }
 
   /** Alias used by the debug panel. */
@@ -698,26 +722,47 @@ export class Game implements HeroWorld {
   private closeShop(): void {
     if (['shop', 'wait'].includes(this.screens.current)) this.screens.show('none');
     for (const h of this.heroes) this.tell(h, { t: 'go' });
+    if (this.preShop) {
+      // Leftover starting gold isn't kept; the stage starts now.
+      this.preShop = false;
+      for (const h of this.heroes) h.gold = 0;
+      this.mode = 'fight';
+      this.modeT = 0;
+      this.vfx.banner(`STAGE ${this.stage}`, `${biomeForStage(this.stage).name.toUpperCase()}<br>SURVIVE ${Math.round(this.director.duration / 60)} MINUTES`, 2.2);
+      return;
+    }
     this.openPortal();
   }
 
   private openPortal(): void {
     const p = (this.aliveHeroes[0] ?? this.hero).player;
-    const lim = this.arena.halfSize - 4;
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2;
-      const x = p.x + Math.cos(a) * 6;
-      const z = p.z + Math.sin(a) * 6;
-      if (Math.abs(x) < lim && Math.abs(z) < lim && !this.walls.hitCircle(x, z, 1.8)) {
-        this.portal.open(x, z);
-        break;
-      }
-    }
-    if (!this.portal.active) this.portal.open(p.x + 3, p.z);
+    const spot = this.portalSpot(p.x, p.z);
+    this.portal.open(spot.x, spot.z);
     this.vfx.ring(this.portal.x, this.portal.z, 1, 6, '#ff3df0', 0.5);
     this.vfx.banner('ENTER THE PORTAL', `STAGE ${this.stage + 1} AWAITS`, 1.6);
     this.mode = 'portal';
     this.modeT = 0;
+  }
+
+  /**
+   * A portal spot about 6 m from (px, pz) that is clear of walls and reachable in a straight line,
+   * trying nearer and farther rings when the 6 m one is blocked; worst case right where the player stands.
+   */
+  private portalSpot(px: number, pz: number): { x: number; z: number } {
+    const lim = this.arena.halfSize - 4;
+    for (const dist of [6, 4, 8, 2.5]) {
+      for (let i = 0; i < 16; i++) {
+        const dx = Math.cos((i / 16) * Math.PI * 2);
+        const dz = Math.sin((i / 16) * Math.PI * 2);
+        const x = px + dx * dist;
+        const z = pz + dz * dist;
+        if (Math.abs(x) > lim || Math.abs(z) > lim || this.walls.hitCircle(x, z, 1.8)) continue;
+        let clear = true;
+        for (let d = 0.5; d < dist && clear; d += 0.5) clear = !this.walls.hitCircle(px + dx * d, pz + dz * d, 0.4);
+        if (clear) return { x, z };
+      }
+    }
+    return { x: px, z: pz };
   }
 
   // ------------------------------------------------------------------ end of run
@@ -810,10 +855,10 @@ export class Game implements HeroWorld {
 
   private presentShop(h: Hero, focus?: number): void {
     if (h === this.hero) {
-      this.screens.showShop(h.shopView(this.stage), focus);
+      this.screens.showShop(h.shopView(this.stage, this.preShop), focus);
       return;
     }
-    const v = h.shopView(this.stage);
+    const v = h.shopView(this.stage, this.preShop);
     const net: NetShop = {
       ...v,
       offers: v.offers.map((o) => (o ? { id: o.def.id, price: o.price, hint: o.hint } : null)),
@@ -1454,7 +1499,7 @@ export class Game implements HeroWorld {
   }
 
   private sourceName(id: string): string {
-    const named: Record<string, string> = { bomb: 'Bomb', burn: 'Burning', shatter: 'Shatter', overload: 'Overload', zap: 'Crit Zaps', exploder: 'Enemy blasts', charge: 'Charge Shot', barrel: 'Barrels' };
+    const named: Record<string, string> = { bomb: 'Bomb', nuke: 'Nuke', burn: 'Burning', shatter: 'Shatter', overload: 'Overload', zap: 'Chain Zaps', exploder: 'Enemy blasts', charge: 'Charge Shot', barrel: 'Barrels' };
     return WEAPONS[id]?.name ?? MOD_BY_ID[id]?.name ?? named[id] ?? 'Other';
   }
 
@@ -1482,11 +1527,13 @@ export class Game implements HeroWorld {
       if (e.elite) this.elitesRun++;
     } else {
       if (this.rng.chance(dropTuning.goldChance)) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 1);
-      if (this.rng.chance(dropTuning.heartChance)) this.pickups.spawn(PickupType.Heart, e.x, e.z);
-      if (this.rng.chance(dropTuning.magnetChance)) this.pickups.spawn(PickupType.Magnet, e.x, e.z);
-      if (this.rng.chance(dropTuning.gearChance * (1 + 0.25 * (by?.stats.luck ?? 0)))) this.pickups.spawn(PickupType.Gear, e.x, e.z);
+      const thin = Math.min(1, dropTuning.dropRef / Math.max(1, this.director.targetAlive));
+      if (this.rng.chance(dropTuning.heartChance * thin)) this.pickups.spawn(PickupType.Heart, e.x, e.z);
+      if (this.rng.chance(dropTuning.magnetChance * thin)) this.pickups.spawn(PickupType.Magnet, e.x, e.z);
+      if (this.rng.chance(dropTuning.gearChance * thin * (1 + 0.25 * (by?.stats.luck ?? 0)))) this.pickups.spawn(PickupType.Gear, e.x, e.z);
+      if (this.rng.chance(dropTuning.nukeChance * thin)) this.pickups.spawn(PickupType.Nuke, e.x, e.z);
     }
-    // Vampire Fang: life per kill.
+    // Vampire Fang: life per kill (small per kill: hordes add up).
     if (by && by.stats.killHeal > 0 && !by.player.dead) by.player.heal(by.stats.killHeal);
 
     // Feedback scales with importance; swarm kills stay light so hundreds don't stutter.
@@ -1712,6 +1759,9 @@ export class Game implements HeroWorld {
         this.vfx.sound('heal', p.x, p.z);
         this.vfx.toast('MAGNET!');
         break;
+      case PickupType.Nuke:
+        this.nuke(h);
+        break;
       case PickupType.Gear:
         h.rerollsLeft = Math.min(MAX_GEARS, h.rerollsLeft + 1);
         this.vfx.sound('gear', p.x, p.z);
@@ -1812,11 +1862,10 @@ export class Game implements HeroWorld {
     this.vfx.ring(c.x, c.z, 1, 5, '#ffcd75', 0.35);
     this.vfx.burst(c.x, 0.8, c.z, { count: 22, color: '#ffcd75', color2: item.color, speed: [3, 7], size: [0.12, 0.28], life: [0.4, 0.8], up: 7, gravity: 12 });
     this.vfx.num(c.x, 2.6, c.z, `${item.name} ${item.text}`, 'crit');
-    const msg = `CHEST: ${item.name.toUpperCase()} ${item.text}`;
     if (h === this.hero) {
-      this.hud.toast(msg, 3);
+      this.hud.chestReveal(item);
       this.hud.flash(0.25);
-    } else this.tell(h, { t: 'toast', msg });
+    } else this.tell(h, { t: 'chestitem', item });
     this.checkAchievements();
   }
 
@@ -1834,6 +1883,7 @@ export class Game implements HeroWorld {
     const p = h.player;
     h.bombCharge = 0;
     h.bombT = 0;
+    h.bombNuke = false;
     h.bombId = (h.bombId + 1) % 1000;
     h.bombX = p.x;
     h.bombZ = p.z;
@@ -1851,11 +1901,36 @@ export class Game implements HeroWorld {
     }
   }
 
+  /** Nuke pickup: the bomb's wave, but screen-wide and lethal to everything but bosses. */
+  private nuke(h: Hero): void {
+    const p = h.player;
+    h.bombT = 0;
+    h.bombNuke = true;
+    h.bombId = (h.bombId + 1) % 1000;
+    h.bombX = p.x;
+    h.bombZ = p.z;
+    p.invuln = Math.max(p.invuln, 1);
+    this.vfx.banner('NUKE!', 'SCREEN WIPE', 1.4);
+    this.vfx.sound('bomb', p.x, p.z);
+    this.vfx.sound('explode', p.x, p.z);
+    this.vfx.flash(1);
+    this.vfx.shake(p.x, p.z, 1.6);
+    this.juice.freeze(0.12);
+    const R = nukeTuning.radius;
+    this.vfx.ring(p.x, p.z, 1, R * 2, '#ffffff', nukeTuning.duration + 0.2);
+    this.vfx.ring(p.x, p.z, 1, R * 1.7, '#ffcd75', nukeTuning.duration + 0.1);
+    this.vfx.ring(p.x, p.z, 1, R * 1.3, '#ef7d57', nukeTuning.duration);
+    this.vfx.star(p.x, 1.5, p.z, 9, '#ffffff', 0.3);
+    this.vfx.burst(p.x, 1, p.z, { count: 60, color: '#ffcd75', color2: '#ffffff', speed: [8, 20], size: [0.2, 0.5], life: [0.5, 1.1], up: 10, gravity: 8 });
+    for (let i = 0; i < this.bullets.count; i++) if (this.bullets.team[i] === Team.Enemy) this.bullets.kill(i--);
+  }
+
   private updateBomb(h: Hero, dt: number): void {
     if (h.bombT < 0) return;
     h.bombT += dt;
-    const k = Math.min(1, h.bombT / bombTuning.duration);
-    const r = bombTuning.radius * (1 - (1 - k) * (1 - k));
+    const nuke = h.bombNuke;
+    const k = Math.min(1, h.bombT / (nuke ? nukeTuning.duration : bombTuning.duration));
+    const r = (nuke ? nukeTuning.radius : bombTuning.radius) * (1 - (1 - k) * (1 - k));
     const stamp = h.index * 1000 + h.bombId + 1;
     for (const e of this.enemies.list) {
       if (!e.alive || e.hp <= 0 || e.bombStamp === stamp) continue;
@@ -1865,7 +1940,9 @@ export class Game implements HeroWorld {
       if (d > r + e.radius) continue;
       e.bombStamp = stamp;
       const n = d || 1;
-      this.damage(e, bombTuning.damage, { source: 'bomb', dirX: dx / n, dirZ: dz / n, knockback: bombTuning.knockback }, h);
+      // The nuke over-kills normal enemies and takes a big bite out of bosses.
+      const dmg = !nuke ? bombTuning.damage : e.def.boss ? (e.maxHp * nukeTuning.bossHpFrac) / Math.max(0.1, h.stats.damageMul) : e.maxHp * 20;
+      this.damage(e, dmg, { source: nuke ? 'nuke' : 'bomb', dirX: dx / n, dirZ: dz / n, knockback: bombTuning.knockback, noStatus: nuke }, h);
     }
     if (k >= 1) h.bombT = -1;
   }
@@ -2073,7 +2150,7 @@ export class Game implements HeroWorld {
         bomb: r2(forHero.bombCharge),
         mods: forHero.synergy.slots.map((s, i) => ({ id: s.def.id, ro: forHero.synergy.readout(i) })),
         passives: forHero.passives,
-        stats: { moveSpeedMul: forHero.stats.moveSpeedMul, dashCooldownMul: forHero.stats.dashCooldownMul, maxHp: forHero.stats.maxHp, magnet: forHero.stats.magnet, areaMul: forHero.stats.areaMul },
+        stats: { moveSpeedMul: forHero.stats.moveSpeedMul, dashCooldownMul: forHero.stats.dashCooldownMul, dashCharges: forHero.stats.dashCharges, maxHp: forHero.stats.maxHp, magnet: forHero.stats.magnet, areaMul: forHero.stats.areaMul },
       },
       portal: this.portal.active ? [r2(this.portal.x), r2(this.portal.z)] : null,
       en: packEnemies(en),
@@ -2101,6 +2178,9 @@ export class Game implements HeroWorld {
         break;
       case 'wchest':
         this.chests.open(Number(m.i));
+        break;
+      case 'chestitem':
+        this.hud.chestReveal(m.item as Parameters<Hud['chestReveal']>[0]);
         break;
       case 'shopfx':
         this.screens.shopFx(m.kind as ShopFx, Number(m.i));
@@ -2441,7 +2521,7 @@ export class Game implements HeroWorld {
       // Ping when a long reload finishes, so you know it's ready without looking.
       if (sec.ready >= 1 && this.lastReady < 1 && !p.dead && this.isCombatMode) {
         this.readyFlashT = 0.4;
-        if (sec.def.id !== 'shield' && sec.def.levels[sec.level - 1].p.cd >= 2) sfx.weapon('ready');
+        if (sec.def.levels[sec.level - 1].p.cd >= 2) sfx.weapon('ready');
       }
       this.lastReady = sec.ready;
       this.readyFlashT = Math.max(0, this.readyFlashT - frameDt);
@@ -2480,6 +2560,8 @@ export class Game implements HeroWorld {
         hp: p.hp,
         maxHp: p.maxHp,
         dash01: p.dashReady01,
+        dashStock: p.dashStock,
+        dashMax: p.dashMax,
         bomb01: local.bombCharge,
         score: this.score,
         combo: this.combo,

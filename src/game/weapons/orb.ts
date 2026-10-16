@@ -108,15 +108,9 @@ export class PlasmaOrb extends Weapon {
     if (this.shotCd > 0) return;
     this.shotCd += 1 / (p.rate / ctx.stats.cooldownMul);
     pl.muzzle(this.mz);
-    // Buster multishot levels fan out extra orbs.
-    const n = 1 + ctx.multishot;
     const mega = this.megaShot(ctx);
-    const base = Math.atan2(pl.aim.z, pl.aim.x);
-    for (let k = 0; k < n; k++) {
-      if (this.orbs.length >= MAX) this.orbs.shift();
-      const a = base + (n > 1 ? (k / (n - 1) - 0.5) * 0.35 : 0);
-      this.orbs.push({ x: this.mz.x, z: this.mz.z, vx: Math.cos(a) * p.speed, vz: Math.sin(a) * p.speed, life: p.life, tickT: 0.05, mega });
-    }
+    if (this.orbs.length >= MAX) this.orbs.shift();
+    this.orbs.push({ x: this.mz.x, z: this.mz.z, vx: pl.aim.x * p.speed, vz: pl.aim.z * p.speed, life: p.life, tickT: 0.05, mega });
     this.muzzleT = 0.06;
     pl.recoil = 1.2;
     ctx.sound('chargeShot');

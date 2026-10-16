@@ -2,6 +2,8 @@
  * Placeholder SFX synthesized with WebAudio, so there are no asset files.
  * Chunky, arcade-y blips. Replace with sampled sounds later; keep the API.
  */
+import type { Rarity } from '../data/rarity';
+
 export const audioSettings = { volume: 0.5, muted: false };
 
 type Wave = OscillatorType;
@@ -165,6 +167,30 @@ class Sfx {
     if (!ctx) return;
     [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => this.tone(ctx, 'triangle', f, f, 0.5, 0.07, i * 0.05));
     this.tone(ctx, 'sine', 2093, 2093, 0.9, 0.06, 0.3);
+  }
+
+  /** Slot reel passing an item: a soft click. */
+  reelTick(): void {
+    const ctx = this.begin('reelTick', 0.035);
+    if (!ctx) return;
+    const p = 1 + (Math.random() - 0.5) * 0.1;
+    this.noise(ctx, 0.015, 0.1, 3800 * p, 2600, 3);
+    this.tone(ctx, 'square', 1700 * p, 1500, 0.012, 0.02);
+  }
+
+  /** Slot reel landing: a thunk, plus a sparkle that grows with the tier. */
+  reelLand(rarity: Rarity = 'common'): void {
+    const ctx = this.begin('reelLand', 0.03);
+    if (!ctx) return;
+    if (rarity === 'legendary') {
+      this.tone(ctx, 'sine', 150, 45, 0.35, 0.3);
+      this.noise(ctx, 0.25, 0.3, 900, 150, 0.8);
+      return;
+    }
+    this.tone(ctx, 'triangle', 330, 200, 0.07, 0.12);
+    this.noise(ctx, 0.04, 0.12, 1400, 700, 2);
+    if (rarity === 'uncommon') [988, 1319].forEach((f, i) => this.tone(ctx, 'square', f, f, 0.06, 0.06, 0.04 + i * 0.05));
+    if (rarity === 'rare') [1319, 1760, 2637].forEach((f, i) => this.tone(ctx, 'triangle', f, f, 0.45, 0.08, 0.04 + i * 0.06));
   }
 
   /** Picking a legendary: a big fanfare. */

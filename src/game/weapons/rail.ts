@@ -7,7 +7,6 @@ import { Weapon, type WeaponCtx } from './base';
 
 const TRACES = 8;
 const FADE = 0.25; // seconds a rail trace stays visible
-const FAN = 0.12;
 const ION_STEP = 2.4; // metres between Ion Rail detonations
 
 interface Trace {
@@ -86,9 +85,7 @@ export class Rail extends Weapon {
     this.shotCd += 1 / (p.rate / ctx.stats.cooldownMul);
     pl.muzzle(this.mz);
     const mega = this.megaShot(ctx);
-    const n = 1 + ctx.multishot;
-    const base = Math.atan2(pl.aim.z, pl.aim.x);
-    for (let k = 0; k < n; k++) this.fire(ctx, base + (n > 1 ? (k / (n - 1) - 0.5) * FAN * (n - 1) : 0), mega);
+    this.fire(ctx, Math.atan2(pl.aim.z, pl.aim.x), mega);
     this.muzzleT = 0.12;
     pl.recoil = 2.4;
     ctx.sound('rail');

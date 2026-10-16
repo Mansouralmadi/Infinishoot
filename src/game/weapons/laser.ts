@@ -18,7 +18,7 @@ const PRISM = ['#fff35c', '#5cf2ff', '#a7f070'];
  */
 export class Laser extends Weapon {
   private on = 0;
-  /** Beam count (evolution + Buster multishot), synced for clients. */
+  /** Beam count (3 once evolved), synced for clients. */
   private count = 1;
   /** Hair Trigger MEGA pulse flash. */
   private megaT = 0;
@@ -64,7 +64,7 @@ export class Laser extends Weapon {
     this.muzzleT = Math.max(0, this.muzzleT - dt);
     const pl = ctx.player;
     this.megaT = Math.max(0, this.megaT - dt);
-    this.count = Math.min(MAX_BEAMS, this.p.beams + 2 * ctx.multishot);
+    this.count = Math.min(MAX_BEAMS, this.p.beams);
     this.on = ctx.firing && !pl.dead && !pl.dashing && !ctx.flags.busterDisabled ? 1 : 0;
     if (!this.on) {
       this.tickT = 0;

@@ -5,17 +5,23 @@ import type { Enemy } from '../enemies';
 import { Weapon, type WeaponCtx } from './base';
 
 const TICK = 0.2;
+/** Durability an enemy's shove costs, as a share of its contact damage. */
+const CONTACT = 0.4;
 
 /**
- * Secondary arm weapon: hold to raise an energy shield in front of you. It
- * eats enemy bullets and shoves enemies back, draining while held. Evolved
- * (Mirror Aegis) it becomes a golden dome all around you that reflects
- * bullets back at enemies.
+ * Secondary arm weapon: press to deploy an energy shield that stays up on its
+ * own for `dur` seconds, facing your aim. It eats enemy bullets (each costs
+ * durability) and slams enemies away; at 0 durability it breaks early. Either
+ * way it then recharges for `cd`. Evolved (Mirror Aegis) it becomes a golden
+ * dome all around you that reflects bullets back at enemies.
  */
 export class Shield extends Weapon {
   private up = 0;
+  /** Durability and uptime left (host). */
+  private hp = 0;
+  private upT = 0;
+  /** Durability fraction 0..1, synced for clients. */
   private energy = 1;
-  private broken = false;
   private tickT = 0;
   private hits: Enemy[] = [];
   private group = new THREE.Group();
@@ -66,39 +72,34 @@ export class Shield extends Weapon {
   update(dt: number, ctx: WeaponCtx): void {
     const p = this.p;
     const pl = ctx.player;
-    // Mega Buster widens the arc; Quick Draw / Capacitor stretch the energy.
+    // Mega Buster widens the arc.
     this.arc = Math.min(360, p.arc + 60 * ctx.flags.chargeSplit);
-    const speed = this.rightClickSpeed(ctx);
-    const want = ctx.charging && !pl.dead && !this.broken && !ctx.flags.busterDisabled;
-    if (want) this.energy -= dt / (p.dur * speed);
-    else this.energy = Math.min(1, this.energy + (dt * speed) / (p.dur * 0.75));
-    if (this.energy <= 0) {
-      this.energy = 0;
-      this.broken = true;
-      ctx.sound('freeze');
-    }
-    if (this.broken && this.energy >= 0.35) this.broken = false;
-    const wasUp = this.up;
-    this.up = want && !this.broken ? 1 : 0;
-    this.ready = this.energy;
-    if (!this.up) return;
-    if (!wasUp) {
+    if (!this.up) {
+      this.cd -= dt;
+      this.tickReady();
+      if (!ctx.charging || pl.dead || this.cd > 0 || ctx.flags.busterDisabled) return;
+      this.up = 1;
+      this.hp = p.hp;
+      this.upT = p.dur;
+      this.tickT = 0; // shove whatever is in front right away
       this.armFx(ctx, this.color, 1.2);
       ctx.fx.ring(pl.x, pl.z, 0.6, this.radius(ctx) * 4, this.color, 0.25);
       ctx.sound('shieldUp');
     }
+    this.upT -= dt;
 
     const r = this.radius(ctx);
     // Bullets: blocked, or reflected by the Mirror Aegis (or with Overcharge).
     const reflect = this.evolved || ctx.flags.overcharge;
     const dmg = p.dmg * ctx.stats.chargeDmg;
     const b = ctx.bullets;
-    for (let i = 0; i < b.count; i++) {
+    for (let i = 0; i < b.count && this.hp > 0; i++) {
       if (b.team[i] !== Team.Enemy) continue;
       const dx = b.x[i] - pl.x;
       const dz = b.z[i] - pl.z;
       const d = Math.hypot(dx, dz);
       if (d > r + 0.3 || !this.inArc(ctx, dx, dz)) continue;
+      this.hp -= b.damage[i];
       if (reflect) {
         const sp = Math.max(14, Math.hypot(b.vx[i], b.vz[i]) * 1.5);
         b.team[i] = Team.Player;
@@ -122,21 +123,51 @@ export class Shield extends Weapon {
         b.kill(i--);
       }
     }
-    // Enemies touching the shield get shoved and hurt.
+    // Enemies touching the shield get hurt and slammed away; each shove wears it down.
     this.tickT -= dt;
-    if (this.tickT > 0) return;
-    this.tickT = TICK;
-    let n = 0;
-    for (const e of ctx.inRadius(pl.x, pl.z, r + 0.6, this.hits)) {
-      const dx = e.x - pl.x;
-      const dz = e.z - pl.z;
-      if (!this.inArc(ctx, dx, dz)) continue;
-      const d = Math.hypot(dx, dz) || 1;
-      ctx.damage(e, dmg, { source: 'shield', dirX: dx / d, dirZ: dz / d, knockback: p.knock, canCrit: true, loud: true });
-      n++;
+    if (this.hp > 0 && this.tickT <= 0) {
+      this.tickT = TICK;
+      let n = 0;
+      for (const e of ctx.inRadius(pl.x, pl.z, r + 0.6, this.hits)) {
+        const dx = e.x - pl.x;
+        const dz = e.z - pl.z;
+        if (!this.inArc(ctx, dx, dz)) continue;
+        const d = Math.hypot(dx, dz) || 1;
+        const ux = dx / d;
+        const uz = dz / d;
+        ctx.damage(e, dmg, { source: 'shield', dirX: ux, dirZ: uz, knockback: p.knock, canCrit: true, loud: true });
+        this.hp -= e.contactDamage * CONTACT;
+        if (n++ < 4) {
+          const hx = pl.x + ux * Math.min(d, r);
+          const hz = pl.z + uz * Math.min(d, r);
+          ctx.fx.ring(hx, hz, 0.3, 1.8, this.color, 0.18);
+          ctx.particles.burst(hx, BULLET_Y, hz, { count: 6, color: this.color, color2: '#ffffff', speed: [4, 11], size: [0.12, 0.26], life: [0.12, 0.28], dir: { x: ux, z: uz, spread: 0.9 } });
+        }
+      }
+      if (n) {
+        ctx.sound('disc');
+        ctx.shake(pl.x, pl.z, 0.12);
+      }
+      ctx.hitBarrels(dmg, (bx, bz) => (bx - pl.x) ** 2 + (bz - pl.z) ** 2 < (r + 0.6) ** 2 && this.inArc(ctx, bx - pl.x, bz - pl.z));
     }
-    if (n) ctx.sound('disc');
-    ctx.hitBarrels(dmg, (bx, bz) => (bx - pl.x) ** 2 + (bz - pl.z) ** 2 < (r + 0.6) ** 2 && this.inArc(ctx, bx - pl.x, bz - pl.z));
+
+    if (this.hp <= 0) {
+      // Broken: shatter along the arc.
+      const a0 = Math.atan2(pl.aim.z, pl.aim.x);
+      const arc = (this.arc * Math.PI) / 180;
+      for (let k = 0; k < 6; k++) {
+        const a = a0 + (k / 5 - 0.5) * arc;
+        ctx.particles.burst(pl.x + Math.cos(a) * r, BULLET_Y, pl.z + Math.sin(a) * r, { count: 5, color: this.color, color2: '#ffffff', speed: [3, 9], size: [0.12, 0.3], life: [0.25, 0.5], up: 3, gravity: 14 });
+      }
+      ctx.fx.ring(pl.x, pl.z, r, r * 2, '#ffffff', 0.2);
+      ctx.sound('freeze');
+      ctx.shake(pl.x, pl.z, 0.25);
+    }
+    this.energy = Math.max(0, this.hp / p.hp);
+    if (this.hp <= 0 || this.upT <= 0 || pl.dead || ctx.flags.busterDisabled) {
+      this.up = 0;
+      this.startCooldown((p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx));
+    } else this.ready = Math.min(this.energy, this.upT / p.dur); // ends at whichever runs out first
   }
 
   render(_alpha: number, ctx: WeaponCtx): void {
@@ -162,7 +193,9 @@ export class Shield extends Weapon {
     this.wall.scale.y = 1 / r;
     this.arcMat.color.set(this.color);
     const pulse = 0.55 + Math.sin(ctx.time * 25) * 0.1;
-    this.arcMat.opacity = Math.min(1, pulse * 1.4 * (0.4 + 0.6 * this.energy));
+    // Flickers when nearly broken.
+    const crack = this.energy < 0.3 && Math.sin(ctx.time * 40) < 0 ? 0.4 : 1;
+    this.arcMat.opacity = Math.min(1, pulse * 1.4 * (0.4 + 0.6 * this.energy)) * crack;
     this.dome.visible = evo;
     this.dome.position.y = -BULLET_Y * 0.6;
     this.dome.rotation.y = ctx.time * 1.5;

@@ -9,7 +9,7 @@ import { commit } from '../render/instancing';
  * (level-up rerolls, capped per hero).
  * Within magnet range they fly to the player, accelerating.
  */
-export const PickupType = { Gem: 0, Bolt: 1, Heart: 2, Magnet: 3, Chest: 4, Gear: 5 } as const;
+export const PickupType = { Gem: 0, Bolt: 1, Heart: 2, Magnet: 3, Chest: 4, Gear: 5, Nuke: 6 } as const;
 export type PickupType = (typeof PickupType)[keyof typeof PickupType];
 
 const MAX = 1500;
@@ -80,6 +80,9 @@ export class Pickups {
     this.meshes[PickupType.Magnet] = make(magnetGeo, '#ff3d5a', 0.3, 32);
     this.meshes[PickupType.Chest] = make(chestGeo, '#e0a83c', 0.15, 32);
     this.meshes[PickupType.Gear] = make(gearGeo, '#d8def0', 0.6, 32);
+    // Nuke: a fat warhead with fins, glowing hot.
+    const nukeGeo = mergeGeometries([new THREE.CapsuleGeometry(0.22, 0.4, 3, 8), new THREE.BoxGeometry(0.62, 0.06, 0.12).translate(0, -0.3, 0), new THREE.BoxGeometry(0.12, 0.06, 0.62).translate(0, -0.3, 0)]).rotateZ(Math.PI / 5);
+    this.meshes[PickupType.Nuke] = make(nukeGeo, '#ffcd75', 0.8, 8);
   }
 
   spawn(type: PickupType, x: number, z: number, value = 1): void {

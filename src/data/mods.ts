@@ -449,7 +449,7 @@ export const MODS: ModDef[] = [
     color: '#7df9ff',
     rarity: 'common',
     price: 4,
-    desc: 'Right click charges 50% faster (grenades and vortexes reload faster, the shield lasts longer).',
+    desc: 'Right click charges 50% faster (right-click weapons reload 50% faster).',
     synergy: ['projectile'],
     flags: { chargeSpeed: 0.5 },
   },
@@ -504,6 +504,90 @@ export const MODS: ModDef[] = [
     flags: { overcharge: true },
   },
 
+  // ---------------------------------------------------------------- legendary: build-defining, with a catch
+  {
+    id: 'phoenix',
+    name: 'Phoenix Plume',
+    icon: '♆',
+    color: '#ef7d57',
+    rarity: 'legendary',
+    price: 12,
+    desc: 'Once per stage, lethal damage instead brings you back at full life in a huge fire nova (Fire, Explosive).',
+    synergy: ['fire', 'explosive'],
+    // Runs before the game checks for death, so the hero never goes down.
+    onHurt: (api, st) => {
+      const p = api.player;
+      if (!p.dead || st.n) return;
+      st.n = 1;
+      p.dead = false;
+      p.hp = p.maxHp;
+      p.invuln = 2;
+      p.rig.root.visible = true;
+      api.blast(p.x, p.z, 7, 120 + 8 * api.level, '#ef7d57', 'phoenix', ['fire', 'explosive']);
+    },
+    onStageClear: (_api, st) => {
+      st.n = 0;
+    },
+    readout: (_api, st) => (st.n ? 'SPENT' : 'READY'),
+  },
+  {
+    id: 'storm_crown',
+    name: 'Storm Crown',
+    icon: '♛',
+    color: '#73eff7',
+    rarity: 'legendary',
+    price: 12,
+    desc: 'Every 20th kill calls a storm: lightning chains through 10 enemies (+3 per Chain weapon) and a thunderclap Shocks everything near the kill.',
+    synergy: ['chain', 'shock'],
+    onKill: (e, _s, api, st) => {
+      if (++st.n < 20) return;
+      st.n = 0;
+      const dmg = 40 + 3 * api.level;
+      api.zap(e, 10 + 3 * api.tagCount('chain'), dmg);
+      api.blast(e.x, e.z, 3.5, dmg, '#73eff7', 'storm_crown', ['shock', 'chain']);
+    },
+    readout: (_api, st) => `${st.n}/20`,
+  },
+  {
+    id: 'supernova',
+    name: 'Supernova',
+    icon: '✹',
+    color: '#f4f4f4',
+    rarity: 'legendary',
+    price: 13,
+    desc: '+10% crit chance. Critical hits explode in a fiery blast (Explosive, Fire). Every other hit deals x0.8.',
+    synergy: ['explosive', 'fire'],
+    stat: (s) => {
+      s.critChance += 0.1;
+    },
+    dmg: (ev) => (ev.crit || ev.source === 'supernova' ? undefined : { mult: 0.8 }),
+    onCrit: (ev, api, st) => {
+      // Fast multi-hit weapons crit many times a second: at most ~8 blasts/s.
+      // Its own blasts never chain into more blasts.
+      if (ev.source === 'supernova' || st.t > 0) return;
+      st.t = 0.12;
+      api.blast(ev.e.x, ev.e.z, 2.4, 25 + 3 * api.level, '#ffcd75', 'supernova', ['explosive', 'fire']);
+    },
+    tick: (dt, _api, st) => {
+      st.t -= dt;
+    },
+  },
+  {
+    id: 'midas',
+    name: 'Midas Touch',
+    icon: '♔',
+    color: '#ffcd75',
+    rarity: 'legendary',
+    price: 11,
+    desc: 'Every hit x(1 + 0.04 per gold you hold). Kills have a 1% chance to pay 1 gold. Shop prices +50%.',
+    flags: { shopDiscount: -0.5 },
+    dmg: (_ev, api) => ({ mult: 1 + 0.04 * api.gold }),
+    onKill: (_e, _s, api) => {
+      if (api.chance(0.01)) api.addGold(1);
+    },
+    readout: (api) => `x${(1 + 0.04 * api.gold).toFixed(2)}`,
+  },
+
   // ---------------------------------------------------------------- cursed: big upside, real cost
   {
     id: 'glass_cannon',
@@ -513,9 +597,9 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 5,
     cursed: true,
-    desc: 'x2 damage. Max life x0.4.',
+    desc: 'x1.6 damage. Max life x0.4.',
     stat: (s) => {
-      s.damageMul *= 2;
+      s.damageMul *= 1.6;
       s.maxHp *= 0.4;
     },
   },

@@ -35,9 +35,9 @@ export class Scatter extends Weapon {
     const evo = this.evolved;
     pl.muzzle(this.mz);
     const base = Math.atan2(pl.aim.z, pl.aim.x);
-    // Buster multishot levels add pellets; Hair Trigger makes MEGA blasts.
-    const pellets = p.pellets + 3 * ctx.multishot;
-    const spread = ((p.spread + 10 * ctx.multishot) * Math.PI) / 180;
+    // Hair Trigger makes MEGA blasts.
+    const pellets = p.pellets;
+    const spread = (p.spread * Math.PI) / 180;
     const mega = this.megaShot(ctx);
     const size = Math.sqrt(ctx.stats.areaMul) * (evo ? 1.3 : 1) * (mega ? 1.6 : 1);
     for (let i = 0; i < pellets; i++) {

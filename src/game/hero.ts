@@ -25,6 +25,7 @@ export const economyTuning = {
   interestPer: 5, // +1 gold per this much held at stage clear
   interestCap: 5, // max interest per stage (Piggy Bank raises it)
   rerollBase: 2, // first paid reroll; +1 each reroll in the same shop
+  startGold: 15, // free gold in the starting shop (not kept)
   healCost: 3,
   shopOffers: 4,
 };
@@ -88,6 +89,8 @@ export class Hero implements SynergyHost {
   // Bomb
   bombCharge = 0;
   bombT = -1;
+  /** The current wave is a Nuke pickup, not the bomb. */
+  bombNuke = false;
   bombId = 0;
   bombX = 0;
   bombZ = 0;
@@ -190,9 +193,26 @@ export class Hero implements SynergyHost {
     this.stats.dashCooldownMul *= dashLevelMul(this.world.level);
   }
 
+  /**
+   * Taking a left-click weapon retires the Buster: its rapid fire and upgrades
+   * are gone (it stays only as the default charge shot, at level 1, unless a
+   * right-click weapon replaces that too), and it leaves the loadout.
+   */
+  get busterRetired(): boolean {
+    return this.weapons.some((w) => w.def.slot === 'primary');
+  }
+
+  /** The weapon a new arm weapon would replace, for the card's warning. */
+  private replacedBy(slot: 'primary' | 'secondary'): string {
+    const cur = this.weapons.find((w) => w.def.slot === slot);
+    if (cur) return `${cur.name} LV ${cur.level}`;
+    if (slot === 'secondary') return 'Charge Shot';
+    return `Buster LV ${this.weapons.find((w) => w.def.id === 'buster')?.level ?? 1}`;
+  }
+
   loadout(): LoadoutItem[] {
     return [
-      ...this.weapons.map((w) => ({
+      ...this.weapons.filter((w) => !(w.def.id === 'buster' && this.busterRetired)).map((w) => ({
         id: w.iconId,
         icon: w.def.icon,
         color: w.color,
@@ -228,16 +248,14 @@ export class Hero implements SynergyHost {
   buildOffers(): Offer[] {
     type Cand = Offer & { w: number };
     const cands: Cand[] = [];
-    const armTaken = (slot: string) => this.weapons.some((w) => w.def.slot === slot);
-    // New items show up at their rarity's rate. Upgrades of items you own come
-    // at least at the uncommon rate, so finding a legendary isn't followed by
-    // another long wait for its levels (they keep the legendary label).
+    // Everything, new or an upgrade, shows up at its own rarity's rate: a
+    // legendary's levels are as rare as the legendary itself (user: they maxed too fast).
     const luck = this.stats.luck;
     const fresh = (r: Rarity) => rarityWeight(r, luck);
-    const upgrade = (r: Rarity) => Math.max(fresh(r), fresh('uncommon'));
+    const upgrade = fresh;
     // The Buster's own upgrades weigh a little less than others', so runs don't all go Buster-first.
     for (const w of this.weapons) {
-      if (w.maxed) continue;
+      if (w.maxed || (w.def.id === 'buster' && this.busterRetired)) continue;
       const next = w.def.levels[w.level];
       const rarity = w.def.rarity;
       if (w.def.evo && w.level + 1 === w.def.levels.length) {
@@ -247,13 +265,16 @@ export class Hero implements SynergyHost {
       }
       cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.evo ? w.def.levels.length - 1 : w.def.levels.length, w: (w.def.id === 'buster' ? 2 : 3) * upgrade(rarity) });
     }
-    // Arm weapons don't use auto-weapon slots; one per arm slot.
+    // Arm weapons don't use auto-weapon slots. A new one replaces whatever holds
+    // its click (the Buster's rapid fire / charge shot, or another arm weapon),
+    // and the card says so.
     const autoCount = this.weapons.filter((w) => !w.def.slot).length;
     for (const id of this.unlocked) {
       const d = WEAPONS[id];
       if (!d || this.weapons.some((w) => w.def.id === id)) continue;
-      if (d.slot ? armTaken(d.slot) : autoCount >= MAX_WEAPONS) continue;
-      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, w: 2.4 * fresh(d.rarity) });
+      if (!d.slot && autoCount >= MAX_WEAPONS) continue;
+      const replaces = d.slot ? this.replacedBy(d.slot) : undefined;
+      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, replaces, w: 2.4 * fresh(d.rarity) });
     }
     const owned = Object.keys(this.passives).length;
     for (const [id, d] of Object.entries(PASSIVES)) {
@@ -284,7 +305,17 @@ export class Hero implements SynergyHost {
       const id = o.id.replace(/_evo$/, '');
       const w = this.weapons.find((x) => x.def.id === id);
       if (w) w.levelUp();
-      else this.weapons.push(createWeapon(id, this.world.scene));
+      else {
+        // A new arm weapon replaces the one holding its click, upgrades and all.
+        const slot = WEAPONS[id].slot;
+        if (slot) {
+          const old = this.weapons.findIndex((x) => x.def.slot === slot);
+          if (old >= 0) this.weapons.splice(old, 1)[0].dispose();
+          const buster = this.weapons.find((x) => x.def.id === 'buster');
+          if (slot === 'primary' && buster) buster.level = 1;
+        }
+        this.weapons.push(createWeapon(id, this.world.scene));
+      }
     } else if (o.kind === 'passive') {
       this.passives[o.id] = (this.passives[o.id] ?? 0) + 1;
       this.recomputeStats();
@@ -307,28 +338,33 @@ export class Hero implements SynergyHost {
    * A treasure chest's item, applied on the spot: a random passive this hero
    * can take, else a level for an owned weapon, else gold.
    */
-  chestItem(): { id: string; name: string; color: string; icon: string; text: string } {
+  chestItem(): { id: string; name: string; color: string; icon: string; text: string; rarity: Rarity } {
     const owned = Object.keys(this.passives).length;
     const passives = Object.values(PASSIVES).filter((d) => {
       const lv = this.passives[d.id] ?? 0;
       return lv < d.maxLevel && (lv > 0 || owned < MAX_PASSIVES);
     });
     if (passives.length) {
-      const d = passives[Math.floor(this.rng.next() * passives.length)];
+      // Rarer items come out of chests less often too (Luck helps).
+      const w = (r: Rarity) => rarityWeight(r, this.stats.luck);
+      let r = this.rng.next() * passives.reduce((a, d) => a + w(d.rarity), 0);
+      let i = 0;
+      while (i < passives.length - 1 && (r -= w(passives[i].rarity)) > 0) i++;
+      const d = passives[i];
       const lv = (this.passives[d.id] ?? 0) + 1;
       this.applyOffer({ kind: 'passive', id: d.id, name: d.name, icon: d.icon, color: d.color, tag: '', text: d.desc });
-      return { id: d.id, name: d.name, color: d.color, icon: d.icon, text: lv > 1 ? `LV ${lv}` : 'NEW' };
+      return { id: d.id, name: d.name, color: d.color, icon: d.icon, text: lv > 1 ? `LV ${lv}` : 'NEW', rarity: d.rarity };
     }
     // Evolutions are always a level-up choice, never a chest surprise.
-    const weapons = this.weapons.filter((w) => !w.maxed && !(w.def.evo && w.level + 1 === w.def.levels.length));
+    const weapons = this.weapons.filter((w) => !w.maxed && !(w.def.evo && w.level + 1 === w.def.levels.length) && !(w.def.id === 'buster' && this.busterRetired));
     if (weapons.length) {
       const w = weapons[Math.floor(this.rng.next() * weapons.length)];
       w.levelUp();
       this.loadoutDirty = true;
-      return { id: w.iconId, name: w.name, color: w.color, icon: w.def.icon, text: w.evolved ? 'EVOLVED' : `LV ${w.level}` };
+      return { id: w.iconId, name: w.name, color: w.color, icon: w.def.icon, text: w.evolved ? 'EVOLVED' : `LV ${w.level}`, rarity: w.def.rarity };
     }
     this.gold += 10;
-    return { id: 'gold', name: 'Gold', color: '#ffb627', icon: '●', text: '+10' };
+    return { id: 'gold', name: 'Gold', color: '#ffb627', icon: '●', text: '+10', rarity: 'common' };
   }
 
   // ---------------------------------------------------------------- shop
@@ -379,8 +415,9 @@ export class Hero implements SynergyHost {
     return Math.max(2, economyTuning.interestPer - this.synergy.flags.interestPer);
   }
 
-  shopView(stage: number): ShopView {
+  shopView(stage: number, pre = false): ShopView {
     return {
+      pre,
       gold: this.gold,
       interest: this.interest,
       interestCap: this.interestCap,

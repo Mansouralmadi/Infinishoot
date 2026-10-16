@@ -46,6 +46,8 @@ const ART = {
   plasma_core: 'plasma-bolt',
   nanobots: 'microchip',
   thrusters: 'rocket-thruster',
+  dash_cells: 'dodge',
+  nuke: 'nuclear-bomb',
   clover: 'clover',
   vampire: 'vampire-dracula',
   // Mods
@@ -93,6 +95,10 @@ const ART = {
   pacifist: 'peace-dove',
   overclock: 'heart-organ',
   gremlin: 'imp-laugh',
+  phoenix: 'egyptian-bird',
+  storm_crown: 'queen-crown',
+  supernova: 'explosion-rays',
+  midas: 'hand',
   // level-up bonuses
   gold: 'swap-bag',
   heal: 'health-potion',

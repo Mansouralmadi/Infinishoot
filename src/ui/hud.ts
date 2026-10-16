@@ -6,11 +6,59 @@
 import { iconHtml } from './pixelIcons';
 import type { Rarity } from '../data/rarity';
 import { MAX_GEARS } from '../game/hero';
+import { WEAPONS } from '../data/weapons';
+import { PASSIVES } from '../data/passives';
+import { sfx } from '../audio/sfx';
+
+// ---------------------------------------------------------------- slot reels
+// Shared by the level-up cards (screens.ts) and the chest reveal below. A reel
+// is a strip [real item, decoy 1..n]; it starts showing decoy n and scrolls
+// down one item per step until the real item lands at the top.
+
+export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** Step durations (s): fast 45 ms ticks for about `spin` seconds, ending with the slower `tail`. */
+export function reelSteps(spin: number, tail: number[]): number[] {
+  const rest = spin - tail.reduce((a, b) => a + b, 0);
+  return [...Array<number>(Math.max(2, Math.round(rest / 0.045))).fill(0.045), ...tail];
+}
+
+/** Reel state at time t: items still to go (snapped to thirds, so it slides in chunky steps) and items passed. */
+export function reelAt(steps: number[], t: number): { pos: number; passed: number } {
+  let passed = 0;
+  while (passed < steps.length && t >= steps[passed]) t -= steps[passed++];
+  const f = passed < steps.length ? t / steps[passed] : 0;
+  return { pos: Math.ceil((steps.length - passed - f) * 3) / 3, passed };
+}
+
+const REEL_POOL = [...Object.values(WEAPONS), ...Object.values(PASSIVES)];
+
+/** n random items for a reel strip, never `not` and never the same twice in a row. */
+export function decoys(n: number, not: string): { id: string; name: string; color: string; icon: string }[] {
+  const out: (typeof REEL_POOL)[number][] = [];
+  while (out.length < n) {
+    const d = REEL_POOL[Math.floor(Math.random() * REEL_POOL.length)];
+    if (d.id !== not && d.id !== out[out.length - 1]?.id) out.push(d);
+  }
+  return out;
+}
+
+export interface ChestItem {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  text: string;
+  rarity?: Rarity;
+}
 
 export interface HudState {
   hp: number;
   maxHp: number;
   dash01: number;
+  /** Dashes ready / max (Dash Cells). */
+  dashStock: number;
+  dashMax: number;
   bomb01: number;
   score: number;
   combo: number;
@@ -73,6 +121,7 @@ export class Hud {
          <button id="pausebtn" title="Pause (Esc)" aria-label="Pause">II</button>
          <div id="bossbar" hidden><div class="name"></div><div class="bar"><div class="fill"></div></div></div>
          <div id="toast"></div>
+         <div id="chestreveal" hidden></div>
          <div id="score">0</div>
          <div id="combo"><div class="mult">x1</div><div class="num"></div><div class="cbar"><div></div></div></div>
          <div id="loadout"><div class="row weapons"></div><div class="row passives"></div></div>
@@ -146,6 +195,50 @@ export class Hud {
     void t.offsetWidth;
     t.classList.add('show');
     this.toastT = seconds;
+  }
+
+  private chest: { item: ChestItem; rarity: Rarity; steps: number[]; end: number; t: number; passed: number; landed: boolean } | null = null;
+
+  /** Chest item reveal under the timer: the name rolls like a slot reel and lands on the item. Replaces any open one. */
+  chestReveal(item: ChestItem): void {
+    const rarity = item.rarity ?? 'common';
+    const legend = rarity === 'legendary';
+    const steps = reduceMotion() ? [] : reelSteps(legend ? 1.4 : 0.75, legend ? [0.08, 0.12, 0.18, 0.26, 0.36] : [0.08, 0.12, 0.18]);
+    const el = this.el('#chestreveal');
+    el.className = '';
+    el.innerHTML =
+      `<div class="icon">${iconHtml('world_chest', '#ffcd75', '')}</div><div class="body"><div class="lbl">TREASURE!</div>` +
+      `<div class="reel"><div class="strip">${[item, ...decoys(steps.length, item.id)].map((d) => `<div>${d.name}</div>`).join('')}</div></div>` +
+      `<div class="txt">${item.text}</div></div>`;
+    el.hidden = true;
+    void el.offsetWidth; // restart the pop-in
+    el.hidden = false;
+    this.chest = { item, rarity, steps, end: steps.reduce((a, b) => a + b, 0), t: 0, passed: 0, landed: false };
+  }
+
+  private updateChest(dt: number): void {
+    const c = this.chest;
+    if (!c) return;
+    c.t += dt;
+    const el = this.el('#chestreveal');
+    if (!c.landed) {
+      const { pos, passed } = reelAt(c.steps, c.t);
+      el.querySelector<HTMLElement>('.strip')!.style.setProperty('--k', String(pos));
+      if (passed > c.passed && passed < c.steps.length) sfx.reelTick();
+      c.passed = passed;
+      if (passed >= c.steps.length) {
+        c.landed = true;
+        el.classList.add('landed', `r-${c.rarity}`);
+        el.querySelector('.icon')!.innerHTML = iconHtml(c.item.id, c.item.color, c.item.icon);
+        sfx.reelLand(c.rarity);
+        if (c.rarity === 'legendary') sfx.legendary();
+      }
+    }
+    if (c.t > c.end + 1.9) el.classList.add('out');
+    if (c.t > c.end + 2.2) {
+      el.hidden = true;
+      this.chest = null;
+    }
   }
 
   hurt(): void {
@@ -318,6 +411,7 @@ export class Hud {
     const dash = this.el('#dashpip');
     dash.style.setProperty('--k', String(s.dash01));
     dash.classList.toggle('ready', s.dash01 >= 1);
+    this.text('#dashpip span', s.dashMax > 1 ? `DASH ${s.dashStock}` : 'DASH');
     const bomb = this.el('#bombpip');
     bomb.style.setProperty('--k', String(s.bomb01));
     bomb.classList.toggle('ready', s.bomb01 >= 1);
@@ -330,6 +424,7 @@ export class Hud {
       this.toastT -= dt;
       if (this.toastT <= 0) this.el('#toast').classList.remove('show');
     }
+    this.updateChest(dt);
 
     // Vignette: hurt pulse plus a heartbeat when low on life.
     this.hurtV = Math.max(0, this.hurtV - dt * 2.5);

@@ -24,6 +24,7 @@ export interface Stats {
   chargeDmg: number; // charged shot damage multiplier
   luck: number; // lifts rarer level-up cards, Mods and gear drops (see data/rarity.ts)
   killHeal: number; // life restored per kill
+  dashCharges: number; // dashes you can chain before waiting (Dash Cells)
 }
 
 export function baseStats(): Stats {
@@ -47,6 +48,7 @@ export function baseStats(): Stats {
     chargeDmg: 1,
     luck: 0,
     killHeal: 0,
+    dashCharges: 1,
   };
 }
 

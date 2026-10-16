@@ -118,6 +118,8 @@ img.px-icon {
 #combo .cbar,
 .pip,
 #toast,
+#chestreveal,
+.card .replaces,
 #loadout .slot,
 #mods .mod,
 #pausebtn,
@@ -225,14 +227,37 @@ div.mod-card.sold,
   animation: blink2 0.1s steps(1) infinite;
 }
 
+/* Full and overcharged: the crosshair shakes with the pent-up power. It
+ * animates `translate`, not `transform`, which holds the inline position. */
 #reticle[data-charge='full'] {
   --rc: var(--lime);
-  animation: blink2 0.3s steps(1) infinite;
+  --j: 1px;
+  animation:
+    blink2 0.3s steps(1) infinite,
+    rjitter 0.24s steps(1) infinite;
 }
 
 #reticle[data-charge='over'] {
   --rc: var(--orange);
-  animation: blink2 0.16s steps(1) infinite;
+  --j: var(--p);
+  animation:
+    blink2 0.16s steps(1) infinite,
+    rjitter 0.1s steps(1) infinite;
+}
+
+@keyframes rjitter {
+  0% {
+    translate: calc(-1 * var(--j)) 0;
+  }
+  25% {
+    translate: var(--j) calc(-1 * var(--j));
+  }
+  50% {
+    translate: 0 var(--j);
+  }
+  75% {
+    translate: var(--j) var(--j);
+  }
 }
 
 @keyframes blink2 {
@@ -2612,4 +2637,292 @@ h1.ko {
 .card .pips i.next {
   background: var(--yellow);
   animation: flash 0.4s steps(1) infinite;
+}
+
+/* ---------------------------------------------------------------- slot reels
+ * Level-up card icons roll like slot reels (screens.ts tickReels); the strip
+ * is [real, decoys...] and --k is how many items are still to pass. While
+ * .rolling the card is a plain mystery card: tier colours off, text masked
+ * with a dither. .land plays the tier's landing once. */
+.card .reel {
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+}
+
+.card .reel .strip {
+  transform: translateY(calc(var(--k, 0) * -72px));
+}
+
+.card .reel .strip > * {
+  width: 72px;
+  height: 72px;
+}
+
+.screen button.card.rolling {
+  --kc: var(--slate);
+  --hi: #ffffff;
+  --ring: transparent;
+  animation: deal 0.24s steps(4) both;
+}
+
+.screen button.card.rolling.focused {
+  --ring: var(--yellow);
+}
+
+.screen button.card.rolling::after {
+  content: none;
+}
+
+.screen button.card.rolling .icon img {
+  animation: none;
+}
+
+.screen button.card.rolling :is(.name, .desc) {
+  color: transparent;
+  background: repeating-conic-gradient(var(--mist) 0 25%, transparent 0 50%) 0 0 / calc(2 * var(--p)) calc(2 * var(--p));
+}
+
+.screen button.card.rolling :is(.lvl, .pips, .chips, .kind span) {
+  visibility: hidden;
+}
+
+/* Landing: the icon thumps, the text pops in, higher tiers flash their colour
+ * and rare / legendary throw a pixel ring outward. */
+.card .fx {
+  --fx: var(--white);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.card.r-uncommon .fx {
+  --fx: var(--lime);
+}
+.card.r-rare .fx {
+  --fx: var(--sky);
+}
+.card.r-legendary .fx {
+  --fx: var(--yellow);
+}
+
+.screen button.card.land .icon {
+  animation: landbump 0.24s steps(3);
+}
+
+.screen button.card.land :is(.name, .desc) {
+  animation: landpop 0.3s steps(3);
+}
+
+.screen button.card.land.r-uncommon .fx {
+  animation: landflash 0.24s steps(1);
+}
+
+.screen button.card.land:is(.r-rare, .r-legendary) .fx {
+  animation:
+    landflash 0.24s steps(1),
+    ringout 0.42s steps(6);
+}
+
+.screen button.card.land.r-legendary .fx {
+  animation-duration: 0.4s, 0.6s;
+}
+
+@keyframes landbump {
+  33% {
+    transform: translateY(var(--p)) scale(1.12);
+  }
+  66% {
+    transform: translateY(calc(-1 * var(--p)));
+  }
+}
+
+@keyframes landpop {
+  from {
+    transform: scale(0.3);
+  }
+  66% {
+    transform: scale(1.15);
+  }
+}
+
+@keyframes landflash {
+  0% {
+    background-color: var(--fx);
+    opacity: 0.7;
+  }
+  50% {
+    background-color: transparent;
+  }
+}
+
+@keyframes ringout {
+  from {
+    inset: 0;
+    box-shadow:
+      0 0 0 var(--p) var(--fx),
+      0 0 0 calc(2 * var(--p)) var(--ink);
+  }
+  to {
+    inset: calc(-14 * var(--p));
+    box-shadow:
+      0 0 0 var(--p) var(--fx),
+      0 0 0 calc(2 * var(--p)) var(--ink);
+  }
+}
+
+/* Arm-slot swap warning at the foot of a card. */
+.card .replaces {
+  --bg: var(--ink);
+  --hi: var(--plum);
+  --lo: var(--ink);
+  --ring: var(--orange);
+  --drop: transparent;
+  align-self: stretch;
+  margin-top: auto;
+  padding: 6px 8px 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font: 17px/1 var(--font);
+  color: var(--orange);
+}
+
+.card .replaces + .kind {
+  margin-top: 0;
+}
+
+.card .replaces i {
+  flex: none;
+  width: calc(6 * var(--p));
+  height: calc(6 * var(--p));
+  display: grid;
+  place-items: center;
+  font: 18px var(--display);
+  font-style: normal;
+  color: var(--ink);
+  background: var(--orange);
+  box-shadow: 0 0 0 var(--p) var(--ink);
+  animation: flash 0.5s steps(1) infinite;
+}
+
+.card .replaces b {
+  display: block;
+  margin-top: 4px;
+  font: 8px/1.3 var(--label);
+  letter-spacing: 1px;
+  color: var(--yellow);
+}
+
+#scr-shop .interest.pre {
+  color: var(--yellow);
+  animation: flash 0.8s steps(1) infinite;
+}
+
+/* ---------------------------------------------------------------- chest reveal
+ * hud.ts chestReveal: the item name rolls like a slot reel under the timer,
+ * lands with a bounce, then the level text pops in. */
+#chestreveal {
+  --bg: var(--ink);
+  --hi: var(--night);
+  --lo: var(--ink);
+  position: absolute;
+  top: calc(60 * var(--p));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px 8px 10px;
+  white-space: nowrap;
+  animation: toastin 0.2s steps(3) both;
+}
+
+#chestreveal[hidden] {
+  display: none;
+}
+
+#chestreveal img.px-icon {
+  animation: hop 0.6s steps(1) infinite;
+}
+
+#chestreveal .lbl {
+  font: 10px var(--label);
+  letter-spacing: 2px;
+  color: var(--yellow);
+}
+
+#chestreveal .reel {
+  --lh: 34px;
+  height: var(--lh);
+  overflow: hidden;
+}
+
+#chestreveal .strip {
+  transform: translateY(calc(var(--k, 0) * -1 * var(--lh)));
+}
+
+#chestreveal .strip > div {
+  height: var(--lh);
+  font-family: var(--display);
+  font-size: 34px;
+  line-height: var(--lh);
+}
+
+#chestreveal .txt {
+  font: 13px var(--label);
+  letter-spacing: 1px;
+  color: var(--cyan);
+  opacity: 0;
+}
+
+/* Opacity, not visibility: a visible child would show through .menu-open's hidden HUD. */
+#chestreveal.landed .txt {
+  opacity: 1;
+  animation: popin 0.25s steps(3) both;
+}
+
+#chestreveal.landed .reel {
+  animation: landpop 0.3s steps(3);
+}
+
+#chestreveal.landed .icon {
+  animation: landbump 0.24s steps(3);
+}
+
+#chestreveal.r-uncommon {
+  --ring: var(--green);
+}
+#chestreveal.r-uncommon .strip > :first-child {
+  color: var(--lime);
+}
+
+#chestreveal.r-rare {
+  --ring: var(--sky);
+  animation: rarering 0.8s steps(1) infinite;
+}
+#chestreveal.r-rare .strip > :first-child {
+  color: var(--cyan);
+}
+
+#chestreveal.r-legendary {
+  --ring: var(--yellow);
+  --hi: var(--orange);
+  animation:
+    legendring 0.36s steps(1) infinite,
+    legendglow 0.72s steps(1) infinite;
+}
+#chestreveal.r-legendary .strip > :first-child {
+  color: var(--yellow);
+}
+
+#chestreveal.out {
+  animation: chestout 0.3s steps(3) both;
+}
+
+@keyframes chestout {
+  to {
+    transform: translate(-50%, calc(-6 * var(--p)));
+    opacity: 0;
+  }
 }
