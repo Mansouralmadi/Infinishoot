@@ -1,3 +1,4 @@
+import type { Rarity } from './rarity';
 import type { Tag } from './tags';
 
 /**
@@ -15,6 +16,7 @@ export type ArmSlot = 'primary' | 'secondary';
 
 export interface WeaponDef {
   id: string;
+  rarity: Rarity;
   /** Arm weapon slot; arm weapons don't take an auto-weapon slot. */
   slot?: ArmSlot;
   /** The last level is an evolution: new name, colour and look. */
@@ -37,6 +39,7 @@ export function isRightClick(source: string): boolean {
 export const WEAPONS: Record<string, WeaponDef> = {
   buster: {
     id: 'buster',
+    rarity: 'common',
     tags: ['projectile'],
     name: 'Buster',
     icon: '▶',
@@ -53,6 +56,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   drones: {
     id: 'drones',
+    rarity: 'common',
     tags: ['orbit'],
     name: 'Orbit Drones',
     icon: '✦',
@@ -69,6 +73,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   aura: {
     id: 'aura',
+    rarity: 'common',
     tags: ['area', 'shock'],
     name: 'Zap Field',
     icon: '◎',
@@ -85,6 +90,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   lightning: {
     id: 'lightning',
+    rarity: 'common',
     tags: ['chain', 'shock'],
     name: 'Chain Zap',
     icon: 'ϟ',
@@ -101,6 +107,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   discs: {
     id: 'discs',
+    rarity: 'common',
     tags: ['projectile', 'orbit'],
     name: 'Boomer Disc',
     icon: '◐',
@@ -117,6 +124,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   missiles: {
     id: 'missiles',
+    rarity: 'uncommon',
     tags: ['projectile', 'explosive'],
     name: 'Seeker Pod',
     icon: '➶',
@@ -133,6 +141,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   mines: {
     id: 'mines',
+    rarity: 'uncommon',
     tags: ['explosive', 'trail'],
     name: 'Pop Mines',
     icon: '✷',
@@ -149,6 +158,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   nova: {
     id: 'nova',
+    rarity: 'rare',
     tags: ['area', 'frost'],
     name: 'Frost Nova',
     icon: '❄',
@@ -165,6 +175,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   fire: {
     id: 'fire',
+    rarity: 'rare',
     tags: ['trail', 'fire'],
     name: 'Blaze Boots',
     icon: '♨',
@@ -183,6 +194,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   // ---------------------------------------------------------------- arm weapons
   scatter: {
     id: 'scatter',
+    rarity: 'legendary',
     slot: 'primary',
     evo: { name: "Dragon's Breath", color: '#ff5e3a' },
     tags: ['projectile'],
@@ -202,6 +214,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   laser: {
     id: 'laser',
+    rarity: 'legendary',
     slot: 'primary',
     evo: { name: 'Prism Lance', color: '#ff7af0' },
     tags: ['projectile', 'area'],
@@ -221,6 +234,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   orb: {
     id: 'orb',
+    rarity: 'legendary',
     slot: 'primary',
     evo: { name: 'Storm Sphere', color: '#b48cff' },
     tags: ['projectile', 'area'],
@@ -240,6 +254,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   grenade: {
     id: 'grenade',
+    rarity: 'legendary',
     slot: 'secondary',
     evo: { name: 'Cluster Mortar', color: '#ff3d5e' },
     tags: ['explosive'],
@@ -259,6 +274,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   well: {
     id: 'well',
+    rarity: 'legendary',
     slot: 'secondary',
     evo: { name: 'Event Horizon', color: '#c23dff' },
     tags: ['area'],
@@ -278,6 +294,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   shield: {
     id: 'shield',
+    rarity: 'legendary',
     slot: 'secondary',
     evo: { name: 'Mirror Aegis', color: '#ffd23f' },
     tags: ['area'],
@@ -293,6 +310,46 @@ export const WEAPONS: Record<string, WeaponDef> = {
       { text: 'Lasts longer.', p: { dmg: 22, arc: 140, radius: 1.8, knock: 13, dur: 4 } },
       { text: 'Wide bulwark!', p: { dmg: 28, arc: 160, radius: 2.0, knock: 14, dur: 5 } },
       { text: 'EVOLVE: a full mirror dome that reflects bullets.', p: { dmg: 34, arc: 360, radius: 2.2, knock: 15, dur: 6 } },
+    ],
+  },
+  rail: {
+    id: 'rail',
+    rarity: 'legendary',
+    slot: 'primary',
+    evo: { name: 'Ion Rail', color: '#ff3df0' },
+    tags: ['projectile'],
+    name: 'Rail Driver',
+    icon: '⟶',
+    color: '#a0c4ff',
+    desc: 'LEFT CLICK: a hyper-velocity rail that pierces everything in a long line.',
+    starter: true,
+    levels: [
+      { text: 'Fires a rail through every enemy in line.', p: { dmg: 40, rate: 1.3, range: 18, width: 0.5, ion: 0 } },
+      { text: 'Harder, faster rails.', p: { dmg: 48, rate: 1.4, range: 18, width: 0.5, ion: 0 } },
+      { text: 'Wider rails.', p: { dmg: 58, rate: 1.5, range: 18, width: 0.6, ion: 0 } },
+      { text: 'Longer reach.', p: { dmg: 70, rate: 1.6, range: 20, width: 0.6, ion: 0 } },
+      { text: 'Overcharged coils!', p: { dmg: 85, rate: 1.8, range: 20, width: 0.7, ion: 0 } },
+      { text: 'EVOLVE: rails leave an ion trail that detonates along its length.', p: { dmg: 95, rate: 1.8, range: 22, width: 0.75, ion: 1 } },
+    ],
+  },
+  orbital: {
+    id: 'orbital',
+    rarity: 'legendary',
+    slot: 'secondary',
+    evo: { name: 'Sun Lance', color: '#ff7a2f' },
+    tags: ['area', 'explosive'],
+    name: 'Orbital Strike',
+    icon: '⇓',
+    color: '#73eff7',
+    desc: 'RIGHT CLICK: call a satellite beam down from the sky.',
+    starter: true,
+    levels: [
+      { text: 'Calls a sky beam ahead of you.', p: { cd: 3.2, dmg: 140, radius: 2.4, range: 9, delay: 0.7, linger: 0, dps: 0 } },
+      { text: 'Stronger beam.', p: { cd: 3.0, dmg: 165, radius: 2.6, range: 9, delay: 0.7, linger: 0, dps: 0 } },
+      { text: 'Wider beam.', p: { cd: 2.8, dmg: 195, radius: 2.8, range: 9, delay: 0.7, linger: 0, dps: 0 } },
+      { text: 'Faster uplink.', p: { cd: 2.6, dmg: 225, radius: 3.0, range: 9.5, delay: 0.6, linger: 0, dps: 0 } },
+      { text: 'Full satellite power!', p: { cd: 2.4, dmg: 270, radius: 3.3, range: 10, delay: 0.6, linger: 0, dps: 0 } },
+      { text: 'EVOLVE: a blazing sun beam that lingers and burns.', p: { cd: 2.4, dmg: 300, radius: 3.6, range: 10, delay: 0.6, linger: 2, dps: 90 } },
     ],
   },
 };

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { WeaponDef } from '../../data/weapons';
+import { BARREL_RADIUS } from '../barrels';
 import { BULLET_Y } from '../bullets';
 import type { Enemy } from '../enemies';
 import { Weapon, type WeaponCtx } from './base';
@@ -97,6 +98,12 @@ export class Laser extends Weapon {
     const r = this.range;
     const cx = this.mz.x + dx * r * 0.5;
     const cz = this.mz.z + dz * r * 0.5;
+    const ox = this.mz.x;
+    const oz = this.mz.z;
+    ctx.hitBarrels(dmg, (bx, bz) => {
+      const t = (bx - ox) * dx + (bz - oz) * dz;
+      return t > 0 && t < r && Math.abs((bx - ox) * dz - (bz - oz) * dx) < width * 0.5 + BARREL_RADIUS;
+    });
     for (const e of ctx.inRadius(cx, cz, r * 0.5 + 1.5, this.hits)) {
       const ex = e.x - this.mz.x;
       const ez = e.z - this.mz.z;

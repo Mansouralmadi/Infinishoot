@@ -151,6 +151,31 @@ class Sfx {
     [523, 659, 784, 1047].forEach((f, i) => this.tone(ctx, 'square', f, f, 0.09, 0.1, i * 0.06));
   }
 
+  /** Gear pickup: a quick ratchet. */
+  gear(): void {
+    const ctx = this.begin('gear', 0.08);
+    if (!ctx) return;
+    for (let i = 0; i < 3; i++) this.noise(ctx, 0.025, 0.3, 4000, 2500, 4, i * 0.04);
+    this.tone(ctx, 'square', 990, 1320, 0.08, 0.08, 0.12);
+  }
+
+  /** A legendary card appears: a rising shimmer. */
+  legendary(): void {
+    const ctx = this.begin('legendary', 0.4);
+    if (!ctx) return;
+    [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => this.tone(ctx, 'triangle', f, f, 0.5, 0.07, i * 0.05));
+    this.tone(ctx, 'sine', 2093, 2093, 0.9, 0.06, 0.3);
+  }
+
+  /** Picking a legendary: a big fanfare. */
+  legendaryPick(): void {
+    const ctx = this.begin('legendaryPick', 0.4);
+    if (!ctx) return;
+    [392, 523, 659, 784].forEach((f, i) => this.tone(ctx, 'square', f, f, 0.08, 0.1, i * 0.06));
+    [1047, 1319, 1568].forEach((f) => this.tone(ctx, 'square', f, f, 0.6, 0.07, 0.26));
+    this.noise(ctx, 0.6, 0.25, 6000, 2000, 1, 0.26);
+  }
+
   // Shop: cash-register jingles.
   shopOpen(): void {
     const ctx = this.begin('shopOpen', 0.5);

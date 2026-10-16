@@ -7,6 +7,7 @@ import type { ScoreEntry } from '../game/highscores';
 import { exportFile, importFile, resetSave, save } from '../game/save';
 import { settings, saveSettings } from '../game/settings';
 import { sfx } from '../audio/sfx';
+import { RARITY, type Rarity } from '../data/rarity';
 import { fmtScore, type LoadoutItem } from './hud';
 import { MenuNav } from './menu';
 import { iconHtml } from './pixelIcons';
@@ -69,6 +70,7 @@ export interface Offer {
   tag: string; // "NEW!" / "LV 3" / "BONUS"
   text: string;
   tags?: readonly Tag[];
+  rarity?: Rarity;
 }
 
 export interface RunSummary {
@@ -91,12 +93,18 @@ function logoWord(word: string, start: number): string {
   return `<span>${[...word].map((ch, k) => `<i style="--i:${start + k}">${ch}</i>`).join('')}</span>`;
 }
 
+/** Hover card: name, rarity and what it does. */
+function tip(name: string, rarity: Rarity, desc: string, extra = ''): string {
+  return `<span class="tip"><b>${name}</b><em class="r-text-${rarity}">${RARITY[rarity].label}${extra}</em><span>${desc}</span></span>`;
+}
+
 function badge(i: LoadoutItem): string {
-  return `<span class="badge" style="--c:${i.color}" title="${i.name}">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'E' : i.max ? 'M' : i.level}</i></span>`;
+  const level = i.evo ? ' · EVOLVED' : i.max ? ' · MAX' : ` · LV ${i.level}`;
+  return `<span class="badge r-${i.rarity ?? 'common'}" style="--c:${i.color}" tabindex="0">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'E' : i.max ? 'M' : i.level}</i>${tip(i.name, i.rarity ?? 'common', i.desc ?? '', level)}</span>`;
 }
 
 function modChip(m: ModDef): string {
-  return `<span class="mod-chip ${m.cursed ? 'cursed' : ''}" style="--c:${m.color}" title="${m.desc}">${iconHtml(m.id, m.color, m.icon)}${m.name}</span>`;
+  return `<span class="mod-chip ${m.cursed ? 'cursed' : ''} r-${m.rarity}" style="--c:${m.color}" tabindex="0">${iconHtml(m.id, m.color, m.icon)}${m.name}${tip(m.name, m.rarity, m.desc, m.cursed ? ' · CURSED' : ' · MOD')}</span>`;
 }
 
 type Named = Exclude<ScreenName, 'none'>;
@@ -429,22 +437,28 @@ export class Screens {
     el.querySelector('h1')!.textContent = title;
     el.querySelector('.cards')!.innerHTML = offers
       .map(
-        (o, i) => `<button class="card ${o.kind}" data-nav data-act="pick" data-index="${i}">
+        (o, i) => `<button class="card ${o.kind} ${o.rarity ? 'r-' + o.rarity : ''}" data-nav data-act="pick" data-index="${i}">
           <div class="tag ${o.tag === 'NEW!' ? 'new' : o.tag === 'EVOLVE!' ? 'evo' : ''}">${o.tag}</div>
           <div class="icon" style="--c:${o.color}">${iconHtml(o.id, o.color, o.icon)}</div>
           <div class="name">${o.name}</div>
           <div class="desc">${o.text}</div>
           ${o.tags ? `<div class="chips">${tagChips(o.tags)}</div>` : ''}
-          <div class="kind">${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : 'BONUS'}</div>
+          <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : 'BONUS'}</div>
           <div class="key">${i + 1}</div>
         </button>`,
       )
       .join('');
     el.querySelector('.reroll-row')!.innerHTML =
-      (rerolls > 0 ? `<button data-nav data-act="reroll">REROLL (${rerolls}) [R]</button>` : '') +
+      (rerolls > 0 ? `<button data-nav data-act="reroll">REROLL ⚙ ${rerolls} [R]</button>` : '') +
       (skipGold > 0 ? `<button data-nav data-act="skip" class="skip">SKIP +${skipGold}<span class="gold-dot"></span></button>` : '');
     el.querySelector('.build')!.innerHTML = loadout.map(badge).join('');
     this.show('levelup');
+    // A legendary on the table gets a fanfare and a golden flash.
+    if (offers.some((o) => o.rarity === 'legendary')) {
+      sfx.legendary();
+      replay(el, 'legend-flash');
+      el.querySelectorAll<HTMLElement>('.card.r-legendary').forEach((c) => burstAt(c, ['var(--yellow)', 'var(--orange)', 'var(--white)'], 26));
+    }
   }
 
   /** The pause screen shows the current build. */
@@ -467,7 +481,7 @@ export class Screens {
         if (!o) return `<div class="mod-card sold">SOLD</div>`;
         const m = o.def;
         const cant = o.price > v.gold || v.owned.length >= v.slots;
-        return `<button class="mod-card ${m.rarity} ${m.cursed ? 'cursed' : ''} ${cant ? 'cant' : ''}" data-nav data-act="buy" data-index="${i}">
+        return `<button class="mod-card ${m.rarity} r-${m.rarity} ${m.cursed ? 'cursed' : ''} ${cant ? 'cant' : ''}" data-nav data-act="buy" data-index="${i}">
           <div class="rarity">${m.cursed ? 'CURSED' : m.rarity.toUpperCase()}</div>
           <div class="icon" style="--c:${m.color}">${iconHtml(m.id, m.color, m.icon)}</div>
           <div class="name">${m.name}</div>

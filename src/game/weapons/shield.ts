@@ -126,6 +126,7 @@ export class Shield extends Weapon {
       n++;
     }
     if (n) ctx.sound('disc');
+    ctx.hitBarrels(dmg, (bx, bz) => (bx - pl.x) ** 2 + (bz - pl.z) ** 2 < (r + 0.6) ** 2 && this.inArc(ctx, bx - pl.x, bz - pl.z));
   }
 
   render(_alpha: number, ctx: WeaponCtx): void {

@@ -14,6 +14,8 @@ import { PlasmaOrb } from './orb';
 import { Grenade } from './grenade';
 import { GravityWell } from './well';
 import { Laser } from './laser';
+import { OrbitalStrike } from './orbital';
+import { Rail } from './rail';
 import { Scatter } from './scatter';
 import { Shield } from './shield';
 
@@ -55,6 +57,10 @@ export function createWeapon(id: string, scene: THREE.Scene): Weapon {
       return new GravityWell(def, scene);
     case 'shield':
       return new Shield(def, scene);
+    case 'rail':
+      return new Rail(def, scene);
+    case 'orbital':
+      return new OrbitalStrike(def, scene);
     default:
       throw new Error(`Unknown weapon: ${id}`);
   }

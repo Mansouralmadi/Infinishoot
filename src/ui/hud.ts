@@ -4,6 +4,8 @@
  * banners, toasts, hurt vignette, screen flash and fade. Plain DOM.
  */
 import { iconHtml } from './pixelIcons';
+import type { Rarity } from '../data/rarity';
+import { MAX_GEARS } from '../game/hero';
 
 export interface HudState {
   hp: number;
@@ -20,6 +22,8 @@ export interface HudState {
   timeLeft: number; // seconds; -1 = boss fight, -2 = stage cleared
   kills: number;
   gold: number;
+  /** Level-up rerolls held (max MAX_GEARS). */
+  gears: number;
   boss: { name: string; hp01: number } | null;
   lowHp: boolean;
 }
@@ -34,6 +38,9 @@ export interface LoadoutItem {
   /** Weapon evolved (shown instead of MAX). */
   evo?: boolean;
   name: string;
+  rarity?: Rarity;
+  /** What it does (pause-screen tooltip). */
+  desc?: string;
   kind: 'weapon' | 'passive';
 }
 
@@ -61,7 +68,7 @@ export class Hud {
       `<div id="ingame">
          <div id="xpbar"><div class="fill"></div><div class="lv"></div></div>
          <div id="hp"><div class="bar"><div class="fill"></div></div><div class="num"></div></div>
-         <div id="runinfo"><span class="kills"></span><span class="gold"></span></div>
+         <div id="runinfo"><span class="kills"></span><span class="gold"></span><span class="gears"></span></div>
          <div id="timer"><div class="clock"></div><div class="stage"></div></div>
          <button id="pausebtn" title="Pause (Esc)" aria-label="Pause">II</button>
          <div id="bossbar" hidden><div class="name"></div><div class="bar"><div class="fill"></div></div></div>
@@ -165,7 +172,7 @@ export class Hud {
         .filter((i) => i.kind === kind)
         .map(
           (i) =>
-            `<div class="slot ${i.max ? 'max' : ''}" style="--c:${i.color}" title="${i.name}">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'EVO' : i.max ? 'MAX' : i.level}</i></div>`,
+            `<div class="slot ${i.max ? 'max' : ''} r-${i.rarity ?? 'common'}" style="--c:${i.color}" title="${i.name}">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'EVO' : i.max ? 'MAX' : i.level}</i></div>`,
         )
         .join('');
     this.el('#loadout .weapons').innerHTML = html('weapon');
@@ -261,6 +268,7 @@ export class Hud {
     }
     this.text('#runinfo .kills', `☠ ${s.kills}`);
     this.text('#runinfo .gold', `● ${s.gold}`);
+    this.text('#runinfo .gears', `⚙ ${s.gears}/${MAX_GEARS}`);
     if (s.gold !== this.lastGold) {
       if (s.gold > this.lastGold && this.lastGold >= 0) {
         const g = this.el('#runinfo .gold');

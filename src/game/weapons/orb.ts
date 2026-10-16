@@ -90,6 +90,8 @@ export class PlasmaOrb extends Weapon {
           if (n++ < 4) ctx.fx.star(e.x, 0.9, e.z, 0.7, this.color, 0.08);
         }
         if (n) ctx.sound('zap');
+        const rr = (o.mega ? r * 1.5 : r) ** 2;
+        ctx.hitBarrels(p.dmg, (bx, bz) => (bx - o.x) ** 2 + (bz - o.z) ** 2 < rr);
       }
       if (o.life <= 0) {
         if (evo) ctx.blast(o.x, o.z, r, p.dmg * 3, this.color, 'orb');

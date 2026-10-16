@@ -1,3 +1,4 @@
+import type { Rarity } from '../data/rarity';
 import type { Tag } from '../data/tags';
 import type { Enemy } from './enemies';
 import type { Player } from './player';
@@ -91,7 +92,7 @@ export function emptyFlags(): ModFlags {
   };
 }
 
-export type ModRarity = 'common' | 'uncommon' | 'rare';
+export type ModRarity = Rarity;
 
 export interface ModDef {
   id: string;

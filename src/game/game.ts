@@ -25,7 +25,7 @@ import { CameraRig, cameraTuning } from './cameraRig';
 import { Director } from './director';
 import { Enemies, type Enemy, type EnemyCtx, type SpawnOpts } from './enemies';
 import { Fx } from './fx';
-import { HERO_COLORS, Hero, economyTuning, type HeroWorld } from './hero';
+import { HERO_COLORS, Hero, MAX_GEARS, economyTuning, type HeroWorld } from './hero';
 import { loadHighScores, submitScore } from './highscores';
 import { Juice } from './juice';
 import { Particles } from './particles';
@@ -58,6 +58,7 @@ export const dropTuning = {
   goldChance: 0.006,
   heartChance: 0.004,
   magnetChance: 0.0015,
+  gearChance: 0.0025, // per kill, x(1 + 0.25 per Luck of the killer)
 };
 
 /** Status effects and their combos. */
@@ -384,6 +385,7 @@ export class Game implements HeroWorld {
       damage: (e, base, o) => this.damage(e, base, o, hero),
       nearest: (x, z, r, skip) => this.nearestEnemy(x, z, r, skip),
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),
+      hitBarrels: (dmg, inside) => this.barrels.hitWhere(dmg, hero.index, inside),
       blast: (x, z, r, base, color, source) => this.blast(x, z, r, base, color, source, WEAPONS[source]?.tags ?? ['explosive'], false, hero),
       sound: (name) => this.vfx.sound('w:' + name, hero.player.x, hero.player.z),
     };
@@ -840,6 +842,7 @@ export class Game implements HeroWorld {
         const color = h.applyOffer(o);
         h.consumePick();
         this.vfx.sound('powerUp', h.player.x, h.player.z);
+        if (o.rarity === 'legendary') this.legendaryFx(h, o.name);
         this.afterPick(h, color);
       } else if (a === 'skip') {
         const g = h.skipGold;
@@ -878,6 +881,17 @@ export class Game implements HeroWorld {
       const fx = ({ buy: 'buy', sell: 'sell', sreroll: 'reroll', heal: 'heal' } as Record<string, ShopFx>)[a];
       if (fx) this.shopFx(h, fx, i);
     }
+  }
+
+  /** Picking a legendary: fanfare, golden fountain and a team-wide banner. */
+  private legendaryFx(h: Hero, name: string): void {
+    const p = h.player;
+    this.vfx.sound('legendaryPick', p.x, p.z);
+    this.vfx.burst(p.x, 1, p.z, { count: 60, color: '#ffcd75', color2: '#ffffff', speed: [4, 12], size: [0.15, 0.4], life: [0.6, 1.2], up: 12, gravity: 9 });
+    this.vfx.ring(p.x, p.z, 1, 14, '#ffcd75', 0.6);
+    this.vfx.ring(p.x, p.z, 1, 9, '#ef7d57', 0.45);
+    this.vfx.shake(p.x, p.z, 0.6);
+    this.vfx.banner('LEGENDARY!', this.heroes.length > 1 ? `${h.name}: ${name}` : name, 1.8);
   }
 
   private afterPick(h: Hero, color: string): void {
@@ -1022,7 +1036,12 @@ export class Game implements HeroWorld {
     this.barrels.update(dt, (i, b) => this.explodeBarrel(i, b));
     this.collectors.length = 0;
     for (const h of this.heroes) this.collectors.push({ x: h.player.x, z: h.player.z, magnet: h.stats.magnet, alive: !h.player.dead && !h.left });
-    this.pickups.update(dt, this.collectors, (t, v, who) => this.collect(this.heroes[who], t, v));
+    this.pickups.update(
+      dt,
+      this.collectors,
+      (t, v, who) => this.collect(this.heroes[who], t, v),
+      (t, who) => t !== PickupType.Gear || this.heroes[who].rerollsLeft < MAX_GEARS,
+    );
     this.updateChests();
     this.particles.update(dt);
     this.fx.update(dt);
@@ -1456,12 +1475,16 @@ export class Game implements HeroWorld {
       const chests = isBoss ? Math.max(1, this.heroes.filter((h) => !h.left).length) : 1;
       for (let i = 0; i < chests; i++) this.pickups.spawn(PickupType.Chest, e.x + i * 0.8, e.z);
       for (let i = 0; i < (isBoss ? 6 : 2); i++) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 1);
+      for (let i = 0; i < (isBoss ? 2 : 1); i++) this.pickups.spawn(PickupType.Gear, e.x, e.z);
       if (e.elite) this.elitesRun++;
     } else {
       if (this.rng.chance(dropTuning.goldChance)) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 1);
       if (this.rng.chance(dropTuning.heartChance)) this.pickups.spawn(PickupType.Heart, e.x, e.z);
       if (this.rng.chance(dropTuning.magnetChance)) this.pickups.spawn(PickupType.Magnet, e.x, e.z);
+      if (this.rng.chance(dropTuning.gearChance * (1 + 0.25 * (by?.stats.luck ?? 0)))) this.pickups.spawn(PickupType.Gear, e.x, e.z);
     }
+    // Vampire Fang: life per kill.
+    if (by && by.stats.killHeal > 0 && !by.player.dead) by.player.heal(by.stats.killHeal);
 
     // Feedback scales with importance; swarm kills stay light so hundreds don't stutter.
     const r = e.radius;
@@ -1684,6 +1707,11 @@ export class Game implements HeroWorld {
         this.pickups.vacuum = true;
         this.vfx.sound('heal', p.x, p.z);
         this.vfx.toast('MAGNET!');
+        break;
+      case PickupType.Gear:
+        h.rerollsLeft = Math.min(MAX_GEARS, h.rerollsLeft + 1);
+        this.vfx.sound('gear', p.x, p.z);
+        this.vfx.num(p.x, 2.4, p.z, `+1 GEAR (${h.rerollsLeft}/${MAX_GEARS})`, 'score');
         break;
       case PickupType.Chest:
         h.chestsPending++;
@@ -2037,6 +2065,7 @@ export class Game implements HeroWorld {
       }),
       you: {
         gold: forHero.gold,
+        gears: forHero.rerollsLeft,
         bomb: r2(forHero.bombCharge),
         mods: forHero.synergy.slots.map((s, i) => ({ id: s.def.id, ro: forHero.synergy.readout(i) })),
         passives: forHero.passives,
@@ -2259,6 +2288,7 @@ export class Game implements HeroWorld {
     const you = s.you as Record<string, unknown>;
     const h = this.hero;
     h.gold = Number(you.gold);
+    h.rerollsLeft = Number(you.gears ?? 0);
     h.bombCharge = Number(you.bomb);
     this.netMods = (you.mods as { id: string; ro: string }[]) ?? [];
     const passives = (you.passives as Record<string, number>) ?? {};
@@ -2440,6 +2470,7 @@ export class Game implements HeroWorld {
         timeLeft: client ? this.netTimeLeft : !this.director.bossSpawned ? this.director.remaining : this.boss ? -1 : -2,
         kills: this.kills,
         gold: local.gold,
+        gears: local.rerollsLeft,
         boss,
         lowHp: !p.dead && p.hp / p.maxHp <= 0.3 && this.mode !== 'title',
       },

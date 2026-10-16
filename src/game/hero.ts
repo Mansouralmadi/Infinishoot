@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { Rng } from '../core/rng';
 import { MOD_RARITY_WEIGHT, MODS } from '../data/mods';
 import { PASSIVES } from '../data/passives';
+import { RARITY, rarityWeight, type Rarity } from '../data/rarity';
 import type { Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
 import type { LoadoutItem } from '../ui/hud';
@@ -15,6 +16,8 @@ import { createWeapon, type Weapon, type WeaponCtx } from './weapons';
 
 export const MAX_WEAPONS = 6;
 export const MAX_PASSIVES = 6;
+/** Gears are spent to reroll level-up cards; you can carry this many. */
+export const MAX_GEARS = 5;
 export const HERO_COLORS = ['#2f7bff', '#22c76a', '#ffb627', '#d8def0'];
 
 export const economyTuning = {
@@ -66,6 +69,7 @@ export class Hero implements SynergyHost {
   readonly stats: Stats = computeStats({});
   private statBase: Stats = computeStats({});
   gold = 0;
+  /** Gears held (each rerolls one level-up). */
   rerollsLeft = 0;
   revivesLeft = 0;
   dashes = 0;
@@ -152,7 +156,7 @@ export class Hero implements SynergyHost {
     this.reviveT = 0;
     this.shopDone = true;
     this.recomputeStats();
-    this.rerollsLeft = this.stats.rerolls;
+    this.rerollsLeft = Math.min(MAX_GEARS, this.stats.rerolls);
     this.revivesLeft = this.stats.revives;
     this.player.reset(this.stats);
     this.loadoutDirty = true;
@@ -186,10 +190,21 @@ export class Hero implements SynergyHost {
 
   loadout(): LoadoutItem[] {
     return [
-      ...this.weapons.map((w) => ({ id: w.iconId, icon: w.def.icon, color: w.color, level: w.level, max: w.maxed, evo: w.evolved, name: w.name, kind: 'weapon' as const })),
+      ...this.weapons.map((w) => ({
+        id: w.iconId,
+        icon: w.def.icon,
+        color: w.color,
+        level: w.level,
+        max: w.maxed,
+        evo: w.evolved,
+        name: w.name,
+        rarity: w.def.rarity,
+        desc: `${w.def.desc} Now: ${w.def.levels[w.level - 1].text}`,
+        kind: 'weapon' as const,
+      })),
       ...Object.entries(this.passives).map(([id, lv]) => {
         const d = PASSIVES[id];
-        return { id, icon: d.icon, color: d.color, level: lv, max: lv >= d.maxLevel, name: d.name, kind: 'passive' as const };
+        return { id, icon: d.icon, color: d.color, level: lv, max: lv >= d.maxLevel, name: d.name, rarity: d.rarity, desc: `${d.desc} (x${lv})`, kind: 'passive' as const };
       }),
     ];
   }
@@ -212,15 +227,22 @@ export class Hero implements SynergyHost {
     type Cand = Offer & { w: number };
     const cands: Cand[] = [];
     const armTaken = (slot: string) => this.weapons.some((w) => w.def.slot === slot);
+    // New items show up at their rarity's rate. Upgrades of items you own come
+    // at least at the uncommon rate, so finding a legendary isn't followed by
+    // another long wait for its levels (they keep the legendary label).
+    const luck = this.stats.luck;
+    const fresh = (r: Rarity) => rarityWeight(r, luck);
+    const upgrade = (r: Rarity) => Math.max(fresh(r), fresh('uncommon'));
     for (const w of this.weapons) {
       if (w.maxed) continue;
       const next = w.def.levels[w.level];
+      const rarity = w.def.rarity;
       if (w.def.evo && w.level + 1 === w.def.levels.length) {
         const evo = w.def.evo;
-        cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, w: 4 });
+        cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, rarity, w: 4 * upgrade(rarity) });
         continue;
       }
-      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, w: 3 });
+      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, w: 3 * upgrade(rarity) });
     }
     // Arm weapons don't use auto-weapon slots; one per arm slot.
     const autoCount = this.weapons.filter((w) => !w.def.slot).length;
@@ -228,13 +250,13 @@ export class Hero implements SynergyHost {
       const d = WEAPONS[id];
       if (!d || this.weapons.some((w) => w.def.id === id)) continue;
       if (d.slot ? armTaken(d.slot) : autoCount >= MAX_WEAPONS) continue;
-      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, w: 2.4 });
+      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, w: 2.4 * fresh(d.rarity) });
     }
     const owned = Object.keys(this.passives).length;
     for (const [id, d] of Object.entries(PASSIVES)) {
       const lv = this.passives[id] ?? 0;
       if (lv >= d.maxLevel || (lv === 0 && owned >= MAX_PASSIVES)) continue;
-      cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, w: lv ? 1.8 : 1.1 });
+      cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, w: lv ? 1.8 * upgrade(d.rarity) : 1.1 * fresh(d.rarity) });
     }
     const out: Offer[] = [];
     while (out.length < 3 && cands.length) {
@@ -317,11 +339,13 @@ export class Hero implements SynergyHost {
 
   rollShop(): void {
     const pool = MODS.filter((m) => !this.synergy.owns(m.id));
+    // Luck lifts the rarer Mods, like level-up cards.
+    const w = (m: ModDef) => MOD_RARITY_WEIGHT[m.rarity] * (1 + this.stats.luck * RARITY[m.rarity].luck);
     this.shopOffers = [];
     for (let k = 0; k < economyTuning.shopOffers && pool.length; k++) {
-      let r = this.rng.next() * pool.reduce((a, m) => a + MOD_RARITY_WEIGHT[m.rarity], 0);
+      let r = this.rng.next() * pool.reduce((a, m) => a + w(m), 0);
       let i = 0;
-      while (i < pool.length - 1 && (r -= MOD_RARITY_WEIGHT[pool[i].rarity]) > 0) i++;
+      while (i < pool.length - 1 && (r -= w(pool[i])) > 0) i++;
       this.shopOffers.push(pool.splice(i, 1)[0]);
     }
   }

@@ -28,6 +28,10 @@ const ART = {
   well_evo: 'black-hole-bolas',
   shield: 'energy-shield',
   shield_evo: 'magic-shield',
+  rail: 'laser-gun',
+  rail_evo: 'lightning-arc',
+  orbital: 'satellite',
+  orbital_evo: 'sun-radiations',
   // passives
   power_cell: 'battery-pack',
   rapid_coil: 'stopwatch',
@@ -41,6 +45,9 @@ const ART = {
   capacitor: 'battery-plus',
   plasma_core: 'plasma-bolt',
   nanobots: 'microchip',
+  thrusters: 'rocket-thruster',
+  clover: 'clover',
+  vampire: 'vampire-dracula',
   // Mods
   demolition: 'dynamite',
   hive_mind: 'beehive',

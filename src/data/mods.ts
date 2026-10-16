@@ -333,7 +333,7 @@ export const MODS: ModDef[] = [
     name: 'Echo',
     icon: '⇉',
     color: '#ff3df0',
-    rarity: 'rare',
+    rarity: 'legendary',
     price: 10,
     desc: 'Copies the Mod in the slot to its right.',
     echo: true,
@@ -539,7 +539,7 @@ export const MODS: ModDef[] = [
     name: 'Overclocked Heart',
     icon: '♥',
     color: '#ff3d5a',
-    rarity: 'rare',
+    rarity: 'legendary',
     price: 7,
     cursed: true,
     desc: 'Weapons recharge 40% faster. You lose 1.5 life per second.',
@@ -566,4 +566,4 @@ export const MODS: ModDef[] = [
 
 export const MOD_BY_ID: Record<string, ModDef> = Object.fromEntries(MODS.map((m) => [m.id, m]));
 
-export const MOD_RARITY_WEIGHT = { common: 60, uncommon: 32, rare: 10 };
+export const MOD_RARITY_WEIGHT = { common: 60, uncommon: 32, rare: 10, legendary: 3 };

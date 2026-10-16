@@ -22,6 +22,8 @@ export interface Stats {
   revives: number;
   chargeSpeed: number; // Buster charge rate multiplier
   chargeDmg: number; // charged shot damage multiplier
+  luck: number; // lifts rarer level-up cards, Mods and gear drops (see data/rarity.ts)
+  killHeal: number; // life restored per kill
 }
 
 export function baseStats(): Stats {
@@ -43,6 +45,8 @@ export function baseStats(): Stats {
     revives: 0,
     chargeSpeed: 1,
     chargeDmg: 1,
+    luck: 0,
+    killHeal: 0,
   };
 }
 
@@ -58,6 +62,7 @@ export function computeStats(passives: Record<string, number>): Stats {
     if (def) apply(s, def.add, lv);
   }
   s.cooldownMul = Math.max(0.4, s.cooldownMul);
+  s.dashCooldownMul = Math.max(0.4, s.dashCooldownMul);
   s.critChance = Math.min(1, s.critChance);
   return s;
 }

@@ -107,6 +107,7 @@ export class GravityWell extends Weapon {
         w.tickT += TICK;
         let n = 0;
         for (const e of ctx.inRadius(w.x, w.z, r, this.hits)) ctx.damage(e, p.dps * TICK * dmgMul, { source: 'well', loud: n++ < 3 });
+        ctx.hitBarrels(p.dps * TICK * dmgMul, (bx, bz) => (bx - w.x) ** 2 + (bz - w.z) ** 2 < r * r);
       }
       if (w.t >= THROW + life) {
         if (p.implode > 0) {

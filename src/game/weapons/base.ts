@@ -66,6 +66,8 @@ export interface WeaponCtx {
   damage(e: Enemy, base: number, o: DamageOpts): number;
   nearest(x: number, z: number, r: number, skip?: (e: Enemy) => boolean): Enemy | null;
   inRadius(x: number, z: number, r: number, out: Enemy[]): Enemy[];
+  /** Damage every barrel whose centre passes `inside` (beams, zaps, fields; bullets and blasts handle their own). */
+  hitBarrels(dmg: number, inside: (x: number, z: number) => boolean): void;
   /** Area blast that damages enemies (never the player). */
   blast(x: number, z: number, r: number, base: number, color: string, source: string): void;
   sound(name: 'zap' | 'disc' | 'missile' | 'mine' | 'freeze' | 'explode' | 'shoot' | 'flame' | 'charge' | 'chargeFull' | 'chargeShot'): void;

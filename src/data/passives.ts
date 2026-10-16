@@ -1,4 +1,5 @@
 import type { Stats } from '../game/stats';
+import type { Rarity } from './rarity';
 
 /** Passive items: simple stat boosts, 5 levels each. `add` is applied once per level. */
 export interface PassiveDef {
@@ -8,6 +9,7 @@ export interface PassiveDef {
   color: string;
   desc: string; // per-level effect
   maxLevel: number;
+  rarity: Rarity;
   add: Partial<Stats>;
   healOnPick?: number;
 }
@@ -15,6 +17,7 @@ export interface PassiveDef {
 export const PASSIVES: Record<string, PassiveDef> = {
   power_cell: {
     id: 'power_cell',
+    rarity: 'common',
     name: 'Power Cell',
     icon: '⚡',
     color: '#ffd23f',
@@ -24,6 +27,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   rapid_coil: {
     id: 'rapid_coil',
+    rarity: 'uncommon',
     name: 'Rapid Coil',
     icon: '»',
     color: '#ff9f3d',
@@ -33,6 +37,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   magnet: {
     id: 'magnet',
+    rarity: 'common',
     name: 'Magnet',
     icon: 'U',
     color: '#ff3d5a',
@@ -42,6 +47,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   sneakers: {
     id: 'sneakers',
+    rarity: 'common',
     name: 'Turbo Sneakers',
     icon: '→',
     color: '#3de0c8',
@@ -51,6 +57,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   heart: {
     id: 'heart',
+    rarity: 'common',
     name: 'Heart Container',
     icon: '♥',
     color: '#ff5e7a',
@@ -61,6 +68,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   armor: {
     id: 'armor',
+    rarity: 'uncommon',
     name: 'Armor Plate',
     icon: '▣',
     color: '#8a90c8',
@@ -70,6 +78,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   big_bang: {
     id: 'big_bang',
+    rarity: 'uncommon',
     name: 'Big Bang',
     icon: '◉',
     color: '#ff7eb6',
@@ -79,6 +88,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   lucky_star: {
     id: 'lucky_star',
+    rarity: 'uncommon',
     name: 'Lucky Star',
     icon: '★',
     color: '#fff35c',
@@ -88,6 +98,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   growth: {
     id: 'growth',
+    rarity: 'common',
     name: 'Growth Chip',
     icon: '↑',
     color: '#7dffb0',
@@ -97,6 +108,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   capacitor: {
     id: 'capacitor',
+    rarity: 'common',
     name: 'Capacitor',
     icon: '◔',
     color: '#5cf2ff',
@@ -106,6 +118,7 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   plasma_core: {
     id: 'plasma_core',
+    rarity: 'uncommon',
     name: 'Plasma Core',
     icon: '◈',
     color: '#3dffb0',
@@ -115,11 +128,42 @@ export const PASSIVES: Record<string, PassiveDef> = {
   },
   nanobots: {
     id: 'nanobots',
+    rarity: 'uncommon',
     name: 'Nanobots',
     icon: '+',
     color: '#4fd36a',
     desc: 'Regenerate 0.3 life per second',
     maxLevel: 5,
     add: { regen: 0.3 },
+  },
+  thrusters: {
+    id: 'thrusters',
+    rarity: 'uncommon',
+    name: 'Jet Thrusters',
+    icon: '»',
+    color: '#7df9ff',
+    desc: 'Dash recharges 12% faster',
+    maxLevel: 5,
+    add: { dashCooldownMul: -0.12 },
+  },
+  clover: {
+    id: 'clover',
+    rarity: 'rare',
+    name: 'Lucky Clover',
+    icon: '♣',
+    color: '#38b764',
+    desc: '+1 Luck: rarer cards and Mods show up more, and gears drop more often',
+    maxLevel: 5,
+    add: { luck: 1 },
+  },
+  vampire: {
+    id: 'vampire',
+    rarity: 'rare',
+    name: 'Vampire Fang',
+    icon: '♠',
+    color: '#b13e53',
+    desc: 'Heal 0.25 life per kill',
+    maxLevel: 5,
+    add: { killHeal: 0.25 },
   },
 };
