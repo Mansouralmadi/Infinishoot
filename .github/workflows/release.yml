@@ -17,7 +17,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run dist
+      - name: Build exe
+        shell: bash
+        run: npm run dist 2>&1 | tee dist.log; exit ${PIPESTATUS[0]}
+      # Logs need a sign-in; annotations don't, so surface the failure there.
+      - name: Report build failure
+        if: failure()
+        shell: bash
+        run: echo "::error title=dist failed::$(tail -40 dist.log | tr -d '\r' | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
       - uses: softprops/action-gh-release@v2
         with:
           files: release/InfiniShoot.exe
