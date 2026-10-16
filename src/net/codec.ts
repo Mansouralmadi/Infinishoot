@@ -12,7 +12,7 @@ const DEF_INDEX = new Map(DEF_IDS.map((id, i) => [id, i]));
 const STATES: EnemyState[] = ['spawning', 'move', 'windup', 'attack', 'recover'];
 const STATE_INDEX = new Map(STATES.map((s, i) => [s, i]));
 
-const ENEMY_BYTES = 20;
+const ENEMY_BYTES = 21;
 const BULLET_BYTES = 14;
 const PICKUP_BYTES = 8;
 
@@ -46,6 +46,7 @@ export function packEnemies(list: Enemy[]): ArrayBuffer {
     v.setInt8(o + 15, qAng(Math.atan2(e.lungeX, e.lungeZ)));
     v.setInt16(o + 16, q16(e.targetX), true);
     v.setInt16(o + 18, q16(e.targetZ), true);
+    v.setUint8(o + 20, Math.round(Math.max(0, Math.min(1, e.hp / (e.maxHp || 1))) * 255));
     o += ENEMY_BYTES;
   }
   return buf;
@@ -71,6 +72,8 @@ export interface EnemyRecord {
   lunge: number;
   targetX: number;
   targetZ: number;
+  /** Health fraction, 0..1 in 1/255 steps (elite bars on clients). */
+  hp01: number;
 }
 
 export function unpackEnemies(buf: ArrayBuffer, each: (r: EnemyRecord) => void): void {
@@ -98,6 +101,7 @@ export function unpackEnemies(buf: ArrayBuffer, each: (r: EnemyRecord) => void):
     r.lunge = dqAng(v.getInt8(o + 15));
     r.targetX = v.getInt16(o + 16, true) / 100;
     r.targetZ = v.getInt16(o + 18, true) / 100;
+    r.hp01 = v.getUint8(o + 20) / 255;
     each(r);
   }
 }

@@ -7,7 +7,9 @@ import { ENEMIES, type EnemyDef } from '../data/enemies';
 import { ACHIEVEMENTS } from '../data/meta';
 import { MOD_BY_ID } from '../data/mods';
 import type { Tag } from '../data/tags';
+import { SPECIALS } from '../data/specials';
 import { WEAPONS } from '../data/weapons';
+import { resetSpecials, startSpecial, updateSpecials, type SpecialApi } from './specials';
 import { sfx } from '../audio/sfx';
 import { NetClient, NetHost } from '../net/peer';
 import { packBullets, packEnemies, packPickups, unpackBullets, unpackEnemies, unpackPickups } from '../net/codec';
@@ -40,15 +42,14 @@ import { createWeapon, type Buster, type DamageOpts, type WeaponCtx } from './we
 export { economyTuning } from './hero';
 
 export const scoreTuning = {
+  levelUpHeal: 10, // life restored to every living hero on each level-up
   comboWindow: 2.0, // seconds a combo survives without a kill
   tiers: [0, 25, 75, 150, 300, 500, 800, 1200], // combo needed for x1..x8
   noHitBonus: 2000, // x stage, for clearing a stage without damage
 };
 
 export const bombTuning = {
-  chargePerXp: 0.004, // bomb meter gained per XP point of enemies killed
-  damage: 80,
-  radius: 10,
+  chargePerXp: 0.004, // special meter gained per XP point of enemies killed (x the special's `charge`)
   duration: 0.35,
   knockback: 18,
 };
@@ -230,6 +231,8 @@ export class Game implements HeroWorld {
   private mz = { x: 0, z: 0 };
   private tmp = new THREE.Vector3();
   private scratch: Enemy[] = [];
+  /** What the Q/E specials (other than the Bomb) may touch; see specials.ts. */
+  private specialApi: SpecialApi = this.makeSpecialApi();
   /** The free starting shop before stage 1 is open (its gold is not kept). */
   private preShop = false;
   private shownCharge = 0;
@@ -605,6 +608,7 @@ export class Game implements HeroWorld {
       if (h.player.dead && !h.left) this.reviveHero(h, 0.5, false);
     });
     this.director.start(stage);
+    resetSpecials();
     this.damagedThisStage = false;
     this.mode = 'fight';
     this.modeT = 0;
@@ -824,6 +828,11 @@ export class Game implements HeroWorld {
         if (h.left) continue;
         h.pendingLevels++;
         h.synergy.levelUp();
+        // Every level-up tops you up a little (downed heroes stay down).
+        if (!h.player.dead) {
+          const healed = h.player.heal(scoreTuning.levelUpHeal);
+          if (healed > 0) this.vfx.num(h.player.x, 2.4, h.player.z, `+${Math.round(healed)}`, 'heal');
+        }
       }
     }
   }
@@ -1070,6 +1079,7 @@ export class Game implements HeroWorld {
       if (h === this.hero && h.weapons.some((w) => w.muzzleT > 0.045)) this.juice.kick(-h.player.aim.x, -h.player.aim.z, 2);
     }
     for (const h of this.heroes) this.updateBomb(h, dt);
+    updateSpecials(this.heroes, dt, this.specialApi);
 
     // Enemies chase the nearest living hero.
     this.targets.length = 0;
@@ -1499,6 +1509,7 @@ export class Game implements HeroWorld {
   }
 
   private sourceName(id: string): string {
+    if (SPECIALS[id]) return SPECIALS[id].name;
     const named: Record<string, string> = { bomb: 'Bomb', nuke: 'Nuke', burn: 'Burning', shatter: 'Shatter', overload: 'Overload', zap: 'Chain Zaps', exploder: 'Enemy blasts', charge: 'Charge Shot', barrel: 'Barrels' };
     return WEAPONS[id]?.name ?? MOD_BY_ID[id]?.name ?? named[id] ?? 'Other';
   }
@@ -1512,7 +1523,7 @@ export class Game implements HeroWorld {
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     this.score += def.score * this.multiplier * (e.elite ? 5 : 1);
     const xp = def.xp * (e.elite ? 10 : 1);
-    if (by) by.bombCharge = Math.min(1, by.bombCharge + bombTuning.chargePerXp * xp);
+    if (by) by.bombCharge = Math.min(1, by.bombCharge + bombTuning.chargePerXp * xp * (by.specialP.charge ?? 1));
 
     // Drops
     this.pickups.spawn(PickupType.Gem, e.x, e.z, xp * dropTuning.xpMul);
@@ -1878,8 +1889,34 @@ export class Game implements HeroWorld {
     this.blast(b.x[i], b.z[i], b.blast[i], b.damage[i] * 0.6, this.bullets.colorOf(i), 'charge', ['projectile', 'explosive'], false, by);
   }
 
+  private makeSpecialApi(): SpecialApi {
+    const g = this;
+    return {
+      get enemies() {
+        return g.enemies.list;
+      },
+      get rng() {
+        return g.rng;
+      },
+      get vfx() {
+        return g.vfx;
+      },
+      damage: (e, base, o, by) => g.damage(e, base, o, by),
+      blast: (x, z, r, base, color, source, tags, noStatus, by) => g.blast(x, z, r, base, color, source, tags, noStatus, by),
+      zap: (from, hops, dmg, by) => g.zap(from, hops, dmg, by),
+      ignite: (e, dps, by) => g.ignite(e, dps, by),
+    };
+  }
+
+  /** Q/E: fire the hero's special once its meter is full. */
   private tryBomb(h: Hero): void {
-    if (h.bombCharge < 1 || h.bombT >= 0 || h.player.dead) return;
+    if (h.bombCharge < 1 || h.player.dead) return;
+    if (h.special.id !== 'bomb') {
+      h.bombCharge = 0;
+      startSpecial(h, h.specialDef, h.specialP, this.specialApi);
+      return;
+    }
+    if (h.bombT >= 0) return;
     const p = h.player;
     h.bombCharge = 0;
     h.bombT = 0;
@@ -1892,8 +1929,8 @@ export class Game implements HeroWorld {
     if (h === this.hero) this.hud.flash(0.9);
     this.vfx.shake(p.x, p.z, 0.9);
     this.juice.freeze(0.06);
-    const R = bombTuning.radius;
-    this.vfx.ring(p.x, p.z, 1, R * 2, '#ff3df0', bombTuning.duration + 0.15);
+    const R = h.specialP.radius;
+    this.vfx.ring(p.x, p.z, 1, R * 2, '#ef7d57', bombTuning.duration + 0.15);
     this.vfx.ring(p.x, p.z, 1, R * 1.6, '#ffffff', bombTuning.duration);
     this.vfx.star(p.x, 1.2, p.z, 5, '#ffffff', 0.2);
     for (let i = 0; i < this.bullets.count; i++) {
@@ -1930,7 +1967,7 @@ export class Game implements HeroWorld {
     h.bombT += dt;
     const nuke = h.bombNuke;
     const k = Math.min(1, h.bombT / (nuke ? nukeTuning.duration : bombTuning.duration));
-    const r = (nuke ? nukeTuning.radius : bombTuning.radius) * (1 - (1 - k) * (1 - k));
+    const r = (nuke ? nukeTuning.radius : h.specialP.radius) * (1 - (1 - k) * (1 - k));
     const stamp = h.index * 1000 + h.bombId + 1;
     for (const e of this.enemies.list) {
       if (!e.alive || e.hp <= 0 || e.bombStamp === stamp) continue;
@@ -1941,7 +1978,7 @@ export class Game implements HeroWorld {
       e.bombStamp = stamp;
       const n = d || 1;
       // The nuke over-kills normal enemies and takes a big bite out of bosses.
-      const dmg = !nuke ? bombTuning.damage : e.def.boss ? (e.maxHp * nukeTuning.bossHpFrac) / Math.max(0.1, h.stats.damageMul) : e.maxHp * 20;
+      const dmg = !nuke ? h.specialP.dmg : e.def.boss ? (e.maxHp * nukeTuning.bossHpFrac) / Math.max(0.1, h.stats.damageMul) : e.maxHp * 20;
       this.damage(e, dmg, { source: nuke ? 'nuke' : 'bomb', dirX: dx / n, dirZ: dz / n, knockback: bombTuning.knockback, noStatus: nuke }, h);
     }
     if (k >= 1) h.bombT = -1;
@@ -2147,6 +2184,7 @@ export class Game implements HeroWorld {
       you: {
         gold: forHero.gold,
         gears: forHero.rerollsLeft,
+        special: [forHero.special.id, forHero.special.level],
         bomb: r2(forHero.bombCharge),
         mods: forHero.synergy.slots.map((s, i) => ({ id: s.def.id, ro: forHero.synergy.readout(i) })),
         passives: forHero.passives,
@@ -2373,6 +2411,11 @@ export class Game implements HeroWorld {
     const h = this.hero;
     h.gold = Number(you.gold);
     h.rerollsLeft = Number(you.gears ?? 0);
+    const sp = you.special as [string, number] | undefined;
+    if (sp && (sp[0] !== h.special.id || sp[1] !== h.special.level)) {
+      h.special = { id: sp[0], level: sp[1] };
+      h.loadoutDirty = true;
+    }
     h.bombCharge = Number(you.bomb);
     this.netMods = (you.mods as { id: string; ro: string }[]) ?? [];
     const passives = (you.passives as Record<string, number>) ?? {};
@@ -2403,6 +2446,7 @@ export class Game implements HeroWorld {
       e.facing = r.facing;
       e.sq = r.sq;
       e.hopY = r.hopY;
+      e.hp = r.hp01 * e.maxHp; // drives elite health bars
       e.frozen = r.frozen ? 1 : 0;
       e.burnT = r.burn ? 1 : 0;
       e.shockT = r.shock ? 1 : 0;
@@ -2552,6 +2596,7 @@ export class Game implements HeroWorld {
       : local.synergy.slots.map((sl, i) => ({ def: sl.def, ro: local.synergy.readout(i) }));
     this.hud.setMods(mods.map((m) => ({ id: m.def.id, icon: m.def.icon, color: m.def.color, name: m.def.name, readout: m.ro, cursed: !!m.def.cursed })));
     this.renderTeam();
+    this.renderEliteBars(alpha);
     this.renderChestPointer();
     this.dmg.render(rdt, this.cam.camera);
     const boss = client ? this.netBoss : this.boss && this.boss.active ? { name: this.boss.def.name, hp01: Math.max(0, this.boss.hp / this.boss.maxHp) } : null;
@@ -2563,6 +2608,7 @@ export class Game implements HeroWorld {
         dashStock: p.dashStock,
         dashMax: p.dashMax,
         bomb01: local.bombCharge,
+        special: local.specialDef.short,
         score: this.score,
         combo: this.combo,
         multiplier: this.multiplier,
@@ -2636,6 +2682,26 @@ export class Game implements HeroWorld {
   }
 
   /** Teammate bars and name tags (co-op only). */
+  /** Health bars over elites (bosses use the big boss bar). */
+  private renderEliteBars(alpha: number): void {
+    const bars: { x: number; y: number; hp01: number; onScreen: boolean }[] = [];
+    if (this.isCombatMode && this.screens.current === 'none') {
+      for (const e of this.enemies.list) {
+        if (!e.active || !e.elite || e.def.boss || e.hp <= 0) continue;
+        const x = e.px + (e.x - e.px) * alpha;
+        const z = e.pz + (e.z - e.pz) * alpha;
+        this.tmp.set(x, e.hopY + e.radius * 2.6, z).project(this.cam.camera);
+        bars.push({
+          x: ((this.tmp.x + 1) / 2) * innerWidth,
+          y: ((1 - this.tmp.y) / 2) * innerHeight,
+          hp01: Math.max(0, Math.min(1, e.hp / e.maxHp)),
+          onScreen: this.tmp.z < 1 && Math.abs(this.tmp.x) < 1.05 && Math.abs(this.tmp.y) < 1.05,
+        });
+      }
+    }
+    this.hud.setEliteBars(bars);
+  }
+
   private renderTeam(): void {
     if (this.heroes.length < 2 || this.mode === 'title') {
       this.hud.setTeam([], []);

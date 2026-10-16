@@ -22,6 +22,23 @@ export const bossTuning = {
   enragePace: 0.7, // extra pace multiplier once enraged (also bigger attacks)
 };
 
+/** Elites (not bosses) hunt harder than their normal kin. */
+export const eliteTuning = {
+  speed: 1.2, // move speed multiplier
+  pace: 0.65, // multiplier on wind-ups, recoveries and attack cooldowns
+  minWindup: 0.3, // telegraphs never get shorter than this (seconds)
+  track: 0.2, // lungers and chargers keep aiming until this fraction of the wind-up is left
+  extraBullets: 2, // extra bullets per shooter volley (the fan widens to keep its gaps)
+  bulletSpeed: 1.25, // shooter bullet speed multiplier
+};
+
+/** Elite timing: pauses shrink by eliteTuning.pace; telegraphs too, but never below minWindup. */
+function aggro(e: Enemy, t: number, telegraph = false): number {
+  if (!e.elite) return t;
+  const k = t * eliteTuning.pace;
+  return telegraph ? Math.max(Math.min(t, eliteTuning.minWindup), k) : k;
+}
+
 const SPAWN_TIME = 0.45;
 const BATCH_CAP = 700; // max simultaneous enemies of one type
 const DARK = '#2b2f4a';
@@ -266,13 +283,13 @@ export class Enemy {
     this.scale = this.elite ? 1.6 : 1;
     this.radius = this.def.radius * this.scale;
     this.hp = this.maxHp = Math.round(this.def.hp * (o.hpMul ?? 1) * (this.elite ? 10 : 1));
-    this.speedMul = (o.speedMul ?? 1) * (this.elite ? 0.9 : 1);
+    this.speedMul = (o.speedMul ?? 1) * (this.elite ? eliteTuning.speed : 1);
     this.dmgMul = (o.dmgMul ?? 1) * (this.elite ? 1.5 : 1);
     this.bombStamp = 0;
     this.flash = this.frozen = this.slowT = this.shatter = 0;
     this.burnT = this.burnDps = this.burnAcc = this.shockT = this.burnOwner = 0;
     this.sq = this.sqV = this.hopY = 0;
-    this.timerA = this.def.boss ? bossTuning.firstAttack : 1 + Math.random() * 2;
+    this.timerA = this.def.boss ? bossTuning.firstAttack : aggro(this, 1 + Math.random() * 2);
     this.enraged = false;
     this.burst = this.spin = this.timerB = this.step = 0;
     this.action = 'ring';
@@ -501,16 +518,16 @@ export class Enemies {
             wantX = nx * speed;
             wantZ = nz * speed;
             e.facing = Math.atan2(dx, dz);
-            if (dist < L.range * e.scale && ctx.targetAlive) this.enter(e, 'windup', L.windup, -5, ctx);
+            if (dist < L.range * e.scale && ctx.targetAlive) this.enter(e, 'windup', aggro(e, L.windup, true), -5, ctx);
           } else if (e.state === 'windup') {
-            if (e.t > L.windup * 0.5) this.lockOn(e, nx, nz, dx, dz);
+            if (e.t > aggro(e, L.windup, true) * (e.elite ? eliteTuning.track : 0.5)) this.lockOn(e, nx, nz, dx, dz);
             e.sq = Math.min(e.sq, -0.25);
             if (e.t <= 0) this.enter(e, 'attack', L.duration, 9);
           } else if (e.state === 'attack') {
             wantX = e.lungeX * L.speed;
             wantZ = e.lungeZ * L.speed;
             rigid = true;
-            if (e.t <= 0) this.enter(e, 'recover', L.recover, -4);
+            if (e.t <= 0) this.enter(e, 'recover', aggro(e, L.recover), -4);
           } else if (e.t <= 0) e.state = 'move';
           break;
         }
@@ -524,16 +541,18 @@ export class Enemies {
             wantX = (nx * radial - nz * e.strafe * 0.6) * speed;
             wantZ = (nz * radial + nx * e.strafe * 0.6) * speed;
             e.timerA -= dt;
-            if (e.timerA <= 0 && dist < 15 && ctx.targetAlive) this.enter(e, 'windup', 0.45, -4, ctx);
+            if (e.timerA <= 0 && dist < 15 && ctx.targetAlive) this.enter(e, 'windup', aggro(e, 0.45, true), -4, ctx);
           } else if (e.state === 'windup' && e.t <= 0) {
             const base = Math.atan2(nz, nx);
-            const spread = THREE.MathUtils.degToRad(S.spreadDeg);
-            for (let i = 0; i < S.bullets; i++) {
-              const a = base + (S.bullets > 1 ? (i / (S.bullets - 1) - 0.5) * spread : 0);
-              ctx.fireBullet(e, Math.cos(a), Math.sin(a), S.speed, S.damage);
+            const n = S.bullets + (e.elite ? eliteTuning.extraBullets : 0);
+            const spread = THREE.MathUtils.degToRad(S.spreadDeg) * ((n - 1) / Math.max(1, S.bullets - 1));
+            const bulletSpeed = S.speed * (e.elite ? eliteTuning.bulletSpeed : 1);
+            for (let i = 0; i < n; i++) {
+              const a = base + (n > 1 ? (i / (n - 1) - 0.5) * spread : 0);
+              ctx.fireBullet(e, Math.cos(a), Math.sin(a), bulletSpeed, S.damage);
             }
             e.squash(6);
-            e.timerA = S.interval * (0.8 + Math.random() * 0.4);
+            e.timerA = aggro(e, S.interval * (0.8 + Math.random() * 0.4));
             e.state = 'move';
           }
           break;
@@ -547,16 +566,18 @@ export class Enemies {
             e.facing = Math.atan2(dx, dz);
             if (dist < C.range && ctx.targetAlive) {
               this.lockOn(e, nx, nz, dx, dz);
-              this.enter(e, 'windup', C.windup, -5, ctx);
+              this.enter(e, 'windup', aggro(e, C.windup, true), -5, ctx);
             }
           } else if (e.state === 'windup') {
+            // Elites keep re-aiming the charge line for most of the wind-up.
+            if (e.elite && e.t > aggro(e, C.windup, true) * eliteTuning.track) this.lockOn(e, nx, nz, dx, dz);
             e.sq = Math.min(e.sq, -0.2);
             if (e.t <= 0) this.enter(e, 'attack', C.duration, 8);
           } else if (e.state === 'attack') {
             wantX = e.lungeX * C.speed;
             wantZ = e.lungeZ * C.speed;
             rigid = true;
-            if (e.t <= 0) this.enter(e, 'recover', C.recover, -5);
+            if (e.t <= 0) this.enter(e, 'recover', aggro(e, C.recover), -5);
           } else if (e.t <= 0) e.state = 'move';
           break;
         }
@@ -567,7 +588,7 @@ export class Enemies {
             wantX = nx * speed;
             wantZ = nz * speed;
             e.facing = Math.atan2(dx, dz);
-            if (dist < F.range && ctx.targetAlive) this.enter(e, 'windup', F.time, -3, ctx);
+            if (dist < F.range && ctx.targetAlive) this.enter(e, 'windup', aggro(e, F.time, true), -3, ctx);
           } else if (e.state === 'windup') {
             // Keeps creeping toward you while the fuse burns.
             wantX = nx * speed * 0.25;
@@ -584,14 +605,14 @@ export class Enemies {
           const P = e.def.spawn!;
           if (e.state === 'move') {
             e.timerA -= dt;
-            if (e.timerA <= 0) this.enter(e, 'windup', 0.7, -4, ctx);
+            if (e.timerA <= 0) this.enter(e, 'windup', aggro(e, 0.7, true), -4, ctx);
           } else if (e.state === 'windup' && e.t <= 0) {
             for (let i = 0; i < P.count; i++) {
               const a = (i / P.count) * Math.PI * 2;
               ctx.spawnChild(P.into, e.x + Math.cos(a) * 1.6, e.z + Math.sin(a) * 1.6, e);
             }
             e.squash(8);
-            e.timerA = P.interval;
+            e.timerA = aggro(e, P.interval);
             e.state = 'move';
           }
           break;
@@ -645,7 +666,7 @@ export class Enemies {
       const walled = e.def.behavior !== 'queen' && e.hopY <= 0 && resolveCircleVsBoxes(e, e.radius, ctx.colliders);
       if (walled && rigid && e.def.behavior === 'charger') {
         // Rhinos stop (and wobble) when they hit a wall mid-charge.
-        this.enter(e, 'recover', e.def.charge!.recover, -7);
+        this.enter(e, 'recover', aggro(e, e.def.charge!.recover), -7);
       }
     }
   }
@@ -954,7 +975,7 @@ export class Enemies {
           d.lines.setMatrixAt(d.lines.count++, this.m4);
         } else if (e.def.behavior === 'exploder') {
           const F = e.def.fuse!;
-          const k = 1 - e.t / F.time;
+          const k = 1 - e.t / aggro(e, F.time, true);
           sx *= 1 + k * 0.35;
           sy *= 1 + k * 0.35;
           this.m4.makeScale(F.radius, 1, F.radius).setPosition(x, 0.05, z);

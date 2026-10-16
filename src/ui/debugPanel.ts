@@ -7,7 +7,7 @@ import { cameraTuning } from '../game/cameraRig';
 import { playerTuning } from '../game/player';
 import { bombTuning, cheats, scoreTuning, type Game } from '../game/game';
 import { directorTuning } from '../game/director';
-import { bossTuning } from '../game/enemies';
+import { bossTuning, eliteTuning } from '../game/enemies';
 import { juiceTuning } from '../game/juice';
 import { WEAPONS } from '../data/weapons';
 import { MODS } from '../data/mods';
@@ -109,7 +109,6 @@ export function createDebugPanel(renderer: RetroRenderer, game: Game, onResize: 
   dir.add(directorTuning, 'ringEvery', 10, 120, 5);
   dir.add(scoreTuning, 'comboWindow', 0.5, 6, 0.1);
   dir.add(bombTuning, 'chargePerXp', 0, 0.05, 0.001).name('Bomb charge/XP');
-  dir.add(bombTuning, 'damage', 0, 500, 5).name('Bomb damage');
 
   const boss = gui.addFolder('Boss').close();
   boss.add(bossTuning, 'hp', 0.2, 5, 0.1);
@@ -119,6 +118,8 @@ export function createDebugPanel(renderer: RetroRenderer, game: Game, onResize: 
   boss.add(bossTuning, 'enrageAt', 0, 1, 0.05);
   boss.add(bossTuning, 'enrageSpeed', 1, 2, 0.05);
   boss.add(bossTuning, 'enragePace', 0.2, 1, 0.05);
+  boss.add(eliteTuning, 'speed', 0.5, 2, 0.05).name('Elite speed');
+  boss.add(eliteTuning, 'pace', 0.3, 1.5, 0.05).name('Elite pace');
 
   const fx = gui.addFolder('Juice & audio').close();
   fx.add(juiceTuning, 'hitStopScale', 0, 3, 0.1).name('Hit-stop x');

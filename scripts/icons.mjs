@@ -47,6 +47,11 @@ const ART = {
   nanobots: 'microchip',
   thrusters: 'rocket-thruster',
   dash_cells: 'dodge',
+  // specials (Q/E)
+  sp_bomb: 'unlit-bomb',
+  sp_storm: 'thunder-struck',
+  sp_blizzard: 'snowing',
+  sp_meteor: 'meteor-impact',
   nuke: 'nuclear-bomb',
   clover: 'clover',
   vampire: 'vampire-dracula',

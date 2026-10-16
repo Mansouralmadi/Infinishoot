@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { Rng } from '../core/rng';
 import { MOD_RARITY_WEIGHT, MODS } from '../data/mods';
 import { PASSIVES } from '../data/passives';
+import { SPECIALS, type SpecialDef } from '../data/specials';
 import { RARITY, rarityWeight, type Rarity } from '../data/rarity';
 import type { Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
@@ -88,6 +89,8 @@ export class Hero implements SynergyHost {
   shopDone = true;
   // Bomb
   bombCharge = 0;
+  /** The special on Q/E (the Bomb by default); level-up cards upgrade or replace it. */
+  special = { id: 'bomb', level: 1 };
   bombT = -1;
   /** The current wave is a Nuke pickup, not the bomb. */
   bombNuke = false;
@@ -156,6 +159,7 @@ export class Hero implements SynergyHost {
     this.gold = this.dashes = 0;
     this.damageBy = {};
     this.pendingLevels = this.chestsPending = 0;
+    this.special = { id: 'bomb', level: 1 };
     this.bombCharge = 0;
     this.bombT = -1;
     this.reviveT = 0;
@@ -198,6 +202,15 @@ export class Hero implements SynergyHost {
    * are gone (it stays only as the default charge shot, at level 1, unless a
    * right-click weapon replaces that too), and it leaves the loadout.
    */
+  get specialDef(): SpecialDef {
+    return SPECIALS[this.special.id] ?? SPECIALS.bomb;
+  }
+
+  /** Params for the special's current level. */
+  get specialP(): Record<string, number> {
+    return this.specialDef.levels[Math.min(this.special.level, this.specialDef.levels.length) - 1].p;
+  }
+
   get busterRetired(): boolean {
     return this.weapons.some((w) => w.def.slot === 'primary');
   }
@@ -211,7 +224,20 @@ export class Hero implements SynergyHost {
   }
 
   loadout(): LoadoutItem[] {
+    const sp = this.specialDef;
+    const spLv = this.special.level;
     return [
+      {
+        id: 'sp_' + sp.id,
+        icon: sp.icon,
+        color: sp.color,
+        level: spLv,
+        max: spLv >= sp.levels.length,
+        name: sp.name,
+        rarity: sp.rarity,
+        desc: `SPECIAL (Q/E): ${sp.desc} Now: ${sp.levels[spLv - 1].text}`,
+        kind: 'weapon' as const,
+      },
       ...this.weapons.filter((w) => !(w.def.id === 'buster' && this.busterRetired)).map((w) => ({
         id: w.iconId,
         icon: w.def.icon,
@@ -276,6 +302,17 @@ export class Hero implements SynergyHost {
       const replaces = d.slot ? this.replacedBy(d.slot) : undefined;
       cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, replaces, w: 2.4 * fresh(d.rarity) });
     }
+    // Specials: upgrade the one you hold, or swap it for another (the card warns).
+    const cur = this.specialDef;
+    for (const d of Object.values(SPECIALS)) {
+      if (d.id === cur.id) {
+        const lv = this.special.level;
+        if (lv >= d.levels.length) continue;
+        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: `LV ${lv + 1}`, text: d.levels[lv].text, rarity: d.rarity, level: lv, maxLevel: d.levels.length, w: 1.6 * upgrade(d.rarity) });
+      } else {
+        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, rarity: d.rarity, replaces: `${cur.name} LV ${this.special.level}`, w: 1.0 * fresh(d.rarity) });
+      }
+    }
     const owned = Object.keys(this.passives).length;
     for (const [id, d] of Object.entries(PASSIVES)) {
       const lv = this.passives[id] ?? 0;
@@ -316,6 +353,10 @@ export class Hero implements SynergyHost {
         }
         this.weapons.push(createWeapon(id, this.world.scene));
       }
+    } else if (o.kind === 'special') {
+      const id = o.id.replace(/^sp_/, '');
+      if (id === this.special.id) this.special.level = Math.min(this.specialDef.levels.length, this.special.level + 1);
+      else this.special = { id, level: 1 };
     } else if (o.kind === 'passive') {
       this.passives[o.id] = (this.passives[o.id] ?? 0) + 1;
       this.recomputeStats();

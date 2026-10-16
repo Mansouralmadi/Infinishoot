@@ -64,7 +64,7 @@ export interface ShopView {
 }
 
 export interface Offer {
-  kind: 'weapon' | 'passive' | 'gold' | 'heal';
+  kind: 'weapon' | 'passive' | 'special' | 'gold' | 'heal';
   id: string;
   name: string;
   icon: string;
@@ -486,7 +486,7 @@ export class Screens {
           <div class="desc">${o.text}</div>
           ${o.tags ? `<div class="chips">${tagChips(o.tags)}</div>` : ''}
           ${o.replaces ? replaceStrip(o.replaces) : ''}
-          <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : 'BONUS'}</div>
+          <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : o.kind === 'special' ? 'SPECIAL (Q/E)' : 'BONUS'}</div>
           <div class="key">${i + 1}</div>
         </button>`,
       )

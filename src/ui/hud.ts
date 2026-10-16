@@ -60,6 +60,8 @@ export interface HudState {
   dashStock: number;
   dashMax: number;
   bomb01: number;
+  /** Short name of the special on Q/E (BOMB, STORM...). */
+  special: string;
   score: number;
   combo: number;
   multiplier: number;
@@ -127,6 +129,7 @@ export class Hud {
          <div id="loadout"><div class="row weapons"></div><div class="row passives"></div></div>
          <div id="mods"></div>
          <div id="team"></div>
+         <div id="ebars"></div>
          <div id="tags"></div>
          <div id="meters">
            <div id="dashpip" class="pip"><span>DASH</span></div>
@@ -317,6 +320,47 @@ export class Hud {
     });
   }
 
+  private ebars: { el: HTMLElement; fill: HTMLElement; trail: HTMLElement; hp: number; hitT: number; shown: boolean }[] = [];
+
+  /**
+   * Floating health bars over elites. x/y are screen pixels of the bar's
+   * bottom centre; call every frame (an empty list hides them all).
+   */
+  setEliteBars(bars: { x: number; y: number; hp01: number; onScreen: boolean }[]): void {
+    const now = performance.now();
+    while (this.ebars.length < bars.length) {
+      const el = document.createElement('div');
+      el.className = 'ebar';
+      el.style.display = 'none';
+      el.innerHTML = '<i></i><div class="bar"><b class="trail"></b><b class="fill"></b></div>';
+      this.el('#ebars').appendChild(el);
+      this.ebars.push({ el, fill: el.querySelector('.fill')!, trail: el.querySelector('.trail')!, hp: -1, hitT: -1e9, shown: false });
+    }
+    this.ebars.forEach((b, i) => {
+      const t = bars[i];
+      const show = !!t && t.onScreen;
+      if (show !== b.shown) {
+        b.shown = show;
+        b.el.style.display = show ? '' : 'none';
+      }
+      if (!show) {
+        b.hp = -1;
+        return;
+      }
+      b.el.style.transform = `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) translate(-50%, -100%)`;
+      // Whole UI pixels only (16 across the bar); any drop flashes and leaves a white trail.
+      const hp = Math.ceil(Math.max(0, Math.min(1, t.hp01)) * 16) / 16;
+      if (hp < b.hp) b.hitT = now;
+      // Snap (no trail) when shown fresh, healed, or the slot moved to another elite.
+      b.el.classList.toggle('snap', hp > b.hp);
+      b.el.classList.toggle('hit', now - b.hitT < 90);
+      if (hp !== b.hp) {
+        b.hp = hp;
+        b.fill.style.transform = b.trail.style.transform = `scaleX(${hp})`;
+      }
+    });
+  }
+
   /** Owned Mods, bottom-right, with live readouts (only rebuilt when the markup changes). */
   setMods(mods: { id: string; icon: string; color: string; name: string; readout: string; cursed: boolean }[]): void {
     const html = mods
@@ -415,6 +459,7 @@ export class Hud {
     const bomb = this.el('#bombpip');
     bomb.style.setProperty('--k', String(s.bomb01));
     bomb.classList.toggle('ready', s.bomb01 >= 1);
+    this.text('#bombpip span', s.special);
 
     if (this.bannerT > 0) {
       this.bannerT -= dt;

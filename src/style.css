@@ -142,6 +142,7 @@ div.mod-card.sold,
 .lobby-player,
 .mate .bar,
 #tags .tag,
+#ebars .bar,
 .key,
 .tag-chip {
   --bg: var(--night);
@@ -909,6 +910,66 @@ div.mod-card.sold,
   background:
     linear-gradient(90deg, var(--lime) calc(var(--rv) * 100%), var(--night) 0) bottom / 100% 4px no-repeat,
     var(--ink);
+}
+
+/* Elite health bars: a skull and a segmented danger bar over each elite. */
+#ebars .ebar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(2 * var(--p));
+  pointer-events: none;
+}
+
+#ebars i {
+  width: 14px;
+  height: 16px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8' shape-rendering='crispEdges'%3E%3Cpath fill='%231a1c2c' d='M1 0h5v1h1v4H6v2H5v1H2V7H1V5H0V1h1z'/%3E%3Cpath fill='%23f4f4f4' d='M1 1h5v1H1zM3 2h1v2H3zM1 4h5v1H1zM2 5h3v1H2zM2 6h1v1H2zM4 6h1v1H4z'/%3E%3Cpath fill='%23ef7d57' d='M1 2h2v2H1zM4 2h2v2H4z'/%3E%3C/svg%3E")
+    center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+
+#ebars .bar {
+  --bg: var(--ink);
+  --hi: var(--ink);
+  --lo: var(--ink);
+  --ring: var(--red);
+  --drop: transparent;
+  position: relative;
+  width: calc(18 * var(--p));
+  height: calc(4 * var(--p));
+}
+
+#ebars b,
+#ebars .bar::after {
+  position: absolute;
+  inset: var(--p);
+  transform-origin: left;
+}
+
+#ebars .trail {
+  background: var(--white);
+  transition: transform 0.24s steps(4) 0.12s;
+}
+
+#ebars .snap .trail {
+  transition: none;
+}
+
+#ebars .fill {
+  background: linear-gradient(var(--orange) 0 50%, var(--red) 0);
+}
+
+#ebars .hit .fill {
+  background: var(--white);
+}
+
+/* Segment notches sit on top so they don't stretch with the fill. */
+#ebars .bar::after {
+  content: '';
+  background: repeating-linear-gradient(90deg, transparent 0 calc(3 * var(--p)), var(--ink) 0 calc(4 * var(--p)));
 }
 
 /* Posterised hurt vignette, flash and fade. */
