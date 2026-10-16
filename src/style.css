@@ -28,8 +28,9 @@
   --night: #333c57;
   --font: 'Jersey 15', ui-monospace, monospace;
   --display: 'Jersey 10', 'Jersey 15', ui-monospace, monospace;
-  --logo: 'Pixelify Sans', 'Jersey 10', ui-monospace, monospace;
-  --label: 'Silkscreen', 'Pixelify Sans', ui-monospace, monospace;
+  /* Jersey 10 for the logo: Pixelify Sans's bold H read as a W under the 3D extrusion ("INFINISWOOT"). */
+  --logo: 'Jersey 10', 'Jersey 15', ui-monospace, monospace;
+  --label: 'Silkscreen', 'Jersey 15', ui-monospace, monospace;
   /* Text outline: one pixel all round plus a pixel drop. */
   --o: 2px;
   --outline:
@@ -1275,8 +1276,8 @@ div.mod-card.sold,
   flex-wrap: wrap;
   justify-content: center;
   gap: 0 0.25em;
-  font-size: clamp(56px, 11vw, 132px);
-  font-weight: 700;
+  font-size: clamp(72px, 14vw, 168px);
+  font-weight: 400;
   line-height: 1;
 }
 
@@ -3195,4 +3196,26 @@ h1.ko {
 
 #scr-levelup.locked .reroll-row .skip {
   opacity: 0.5;
+}
+
+/* Shop: upgrading owned Mods (a level-N Mod works like N stacked copies). */
+.owned-mod .mod-lv {
+  font: 10px var(--label);
+  color: var(--cyan);
+  white-space: nowrap;
+}
+
+.screen .owned-mod button.mod-up {
+  --bg: var(--teal);
+  --hi: var(--cyan);
+  --lo: var(--ink);
+  font-size: 15px;
+  padding: 2px 8px;
+  align-self: stretch;
+}
+
+.owned-mod .mod-max {
+  font: 10px var(--label);
+  color: var(--yellow);
+  text-align: center;
 }

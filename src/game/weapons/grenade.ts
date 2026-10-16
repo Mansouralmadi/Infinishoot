@@ -101,7 +101,7 @@ export class Grenade extends Weapon {
       ctx.sound('explode');
       for (let b = 0; b < p.bomblets; b++) {
         const a = (b / p.bomblets) * Math.PI * 2 + ctx.rng.next() * 0.5;
-        const d = p.radius * area * (0.8 + ctx.rng.next() * 0.5);
+        const d = p.radius * area * (0.35 + ctx.rng.next() * 0.6); // bomblets land in the crowd, not past it
         this.lob(s.x, s.z, s.x + Math.cos(a) * d, s.z + Math.sin(a) * d, true);
       }
     }

@@ -13,7 +13,7 @@ export type BossAction = 'ring' | 'summon' | 'slam' | 'charge' | 'spiral' | 'wav
 export const BOSS_ACTIONS: BossAction[] = ['ring', 'summon', 'slam', 'charge', 'spiral', 'waves', 'volley', 'rain'];
 
 export const bossTuning = {
-  hp: 1.8, // boss HP multiplier on top of stage scaling
+  hp: 2.4, // boss HP multiplier on top of stage scaling (bosses melted in 7-25 s at 1.8)
   speed: 1.2, // move speed multiplier
   pace: 0.65, // multiplier on pauses between attacks and recovery times
   firstAttack: 1.5, // seconds before the first attack
@@ -341,7 +341,7 @@ export class Enemy {
     this.radius = this.def.radius * this.scale;
     this.hp = this.maxHp = Math.round(this.def.hp * (o.hpMul ?? 1) * (this.elite ? 10 : 1));
     this.speedMul = (o.speedMul ?? 1) * (this.elite ? eliteTuning.speed : 1);
-    this.dmgMul = (o.dmgMul ?? 1) * (this.elite ? 1.5 : 1);
+    this.dmgMul = (o.dmgMul ?? 1) * (this.elite ? 1.3 : 1);
     this.bombStamp = 0;
     this.flash = this.frozen = this.slowT = this.shatter = 0;
     this.burnT = this.burnDps = this.burnAcc = this.shockT = this.burnOwner = 0;
@@ -733,6 +733,10 @@ export class Enemies {
       e.kz *= kd;
       e.x += (e.vx + e.kx + sx * 7) * dt;
       e.z += (e.vz + e.kz + sz * 7) * dt;
+      if (e.def.behavior === 'reaper') {
+        e.x = Math.max(-58, Math.min(58, e.x));
+        e.z = Math.max(-58, Math.min(58, e.z));
+      }
       const walled = e.def.behavior !== 'queen' && e.def.behavior !== 'reaper' && e.hopY <= 0 && resolveCircleVsBoxes(e, e.radius, ctx.colliders);
       if (walled && rigid && e.def.behavior === 'charger') {
         // Rhinos stop (and wobble) when they hit a wall mid-charge.

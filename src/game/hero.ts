@@ -9,7 +9,7 @@ import { WEAPONS } from '../data/weapons';
 import type { LoadoutItem } from '../ui/hud';
 import type { Offer, ShopView } from '../ui/screens';
 import type { Enemy } from './enemies';
-import type { ModDef } from './modTypes';
+import { modMaxLevel, type ModDef } from './modTypes';
 import { Player, dashLevelMul } from './player';
 import { computeStats, type Stats } from './stats';
 import { MAX_MOD_SLOTS, Synergy, type SynergyHost } from './synergy';
@@ -24,7 +24,7 @@ export const HERO_COLORS = ['#2f7bff', '#22c76a', '#ffb627', '#d8def0'];
 export const economyTuning = {
   clearGold: 5, // flat gold for clearing a stage
   interestPer: 5, // +1 gold per this much held at stage clear
-  interestCap: 5, // max interest per stage (Piggy Bank raises it)
+  interestCap: 10, // max interest per stage (Piggy Bank raises it); holding 50 gold pays 10
   rerollBase: 2, // first paid reroll; +1 each reroll in the same shop
   startGold: 15, // free gold in the starting shop (not kept)
   healCost: 3,
@@ -296,13 +296,15 @@ export class Hero implements SynergyHost {
     // Arm weapons don't use auto-weapon slots. A new one replaces whatever holds
     // its click (the Buster's rapid fire / charge shot, or another arm weapon),
     // and the card says so.
-    const autoCount = this.weapons.filter((w) => !w.def.slot).length;
+    const autoCount = this.weapons.filter((w) => !w.def.slot && !(w.def.id === 'buster' && this.busterRetired)).length;
     for (const id of this.unlocked) {
       const d = WEAPONS[id];
       if (!d || this.weapons.some((w) => w.def.id === id)) continue;
       if (!d.slot && autoCount >= MAX_WEAPONS) continue;
       const replaces = d.slot ? this.replacedBy(d.slot) : undefined;
-      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, replaces, w: 2.4 * fresh(d.rarity) });
+      const held = d.slot ? this.weapons.find((w) => w.def.slot === d.slot) : undefined;
+      const kindW = held && held.level >= 2 ? 0.6 : 2.4; // swapping a levelled arm weapon is rarely the pick
+      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, replaces, w: kindW * fresh(d.rarity) });
     }
     // Specials: upgrade the one you hold, or swap it for another (the card warns).
     const cur = this.specialDef;
@@ -312,7 +314,7 @@ export class Hero implements SynergyHost {
         if (lv >= d.levels.length) continue;
         cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: `LV ${lv + 1}`, text: d.levels[lv].text, rarity: d.rarity, level: lv, maxLevel: d.levels.length, w: 1.6 * upgrade(d.rarity) });
       } else {
-        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, rarity: d.rarity, replaces: `${cur.name} LV ${this.special.level}`, w: 1.0 * fresh(d.rarity) });
+        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, rarity: d.rarity, replaces: `${cur.name} LV ${this.special.level}`, w: (this.special.level >= 2 ? 0.25 : 1.0) * fresh(d.rarity) });
       }
     }
     const owned = Object.keys(this.passives).length;
@@ -320,7 +322,14 @@ export class Hero implements SynergyHost {
       if (d.coop && !this.world.coop) continue;
       const lv = this.passives[id] ?? 0;
       if (lv >= d.maxLevel || (lv === 0 && owned >= MAX_PASSIVES)) continue;
-      cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, level: lv, maxLevel: d.maxLevel, w: lv ? 1.8 * upgrade(d.rarity) : 1.1 * fresh(d.rarity) });
+      cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, level: lv, maxLevel: d.maxLevel, w: lv ? 1.8 * upgrade(d.rarity) : 0.8 * fresh(d.rarity) });
+    }
+    // Late runs: once only swaps are left, mix in gold and healing so cards aren't all downgrades.
+    if (cands.filter((c) => !c.replaces).length < 3) {
+      cands.push(
+        { kind: 'gold', id: 'gold', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: `+${2 * this.skipGold} gold`, w: 2 },
+        { kind: 'heal', id: 'heal', name: 'Snack', icon: '♥', color: '#ff5e7a', tag: 'BONUS', text: 'Heal 40 life', w: 2 },
+      );
     }
     const out: Offer[] = [];
     while (out.length < 3 && cands.length) {
@@ -332,7 +341,7 @@ export class Hero implements SynergyHost {
     }
     if (out.length === 0) {
       out.push(
-        { kind: 'gold', id: 'gold', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: '+5 gold' },
+        { kind: 'gold', id: 'gold', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: `+${2 * this.skipGold} gold` },
         { kind: 'heal', id: 'heal', name: 'Snack', icon: '♥', color: '#ff5e7a', tag: 'BONUS', text: 'Heal 40 life' },
       );
     }
@@ -365,7 +374,7 @@ export class Hero implements SynergyHost {
       this.recomputeStats();
       const heal = PASSIVES[o.id].healOnPick;
       if (heal) this.player.heal(heal);
-    } else if (o.kind === 'gold') this.gold += 5;
+    } else if (o.kind === 'gold') this.gold += 2 * this.skipGold;
     else if (o.kind === 'heal') this.player.heal(40);
     this.player.hp = Math.min(this.player.hp, this.player.maxHp);
     this.loadoutDirty = true;
@@ -383,11 +392,10 @@ export class Hero implements SynergyHost {
    * can take, else a level for an owned weapon, else gold.
    */
   chestItem(): { id: string; name: string; color: string; icon: string; text: string; rarity: Rarity } {
-    const owned = Object.keys(this.passives).length;
     const passives = Object.values(PASSIVES).filter((d) => {
       if (d.coop && !this.world.coop) return false;
       const lv = this.passives[d.id] ?? 0;
-      return lv < d.maxLevel && (lv > 0 || owned < MAX_PASSIVES);
+      return lv > 0 && lv < d.maxLevel;
     });
     if (passives.length) {
       // Rarer items come out of chests less often too (Luck helps).
@@ -435,12 +443,17 @@ export class Hero implements SynergyHost {
   }
 
   price(m: ModDef): number {
-    return Math.max(1, Math.round(m.price * (1 - this.synergy.flags.shopDiscount)));
+    return Math.max(1, Math.round(m.price * (1 - Math.min(0.5, this.synergy.flags.shopDiscount))));
   }
 
-  /** Half price back, or full price with Pawn Shop. */
-  sellPrice(m: ModDef): number {
-    return this.synergy.flags.sellFull ? m.price : Math.floor(this.price(m) / 2);
+  /** Half of what you actually paid (purchase + upgrades), or all of it with Pawn Shop. */
+  sellPrice(paid: number): number {
+    return this.synergy.flags.sellFull ? paid : Math.floor(paid / 2);
+  }
+
+  /** Gold to take an owned Mod from `level` to level + 1: its price, then 1.5x. */
+  upgradeCost(m: ModDef, level: number): number {
+    return Math.round(this.price(m) * (level === 1 ? 1 : 1.5));
   }
 
   get rerollCost(): number {
@@ -468,7 +481,14 @@ export class Hero implements SynergyHost {
       interestCap: this.interestCap,
       interestPer: this.interestPer,
       offers: this.shopOffers.map((m) => (m ? { def: m, price: this.price(m), hint: this.synergyHint(m) } : null)),
-      owned: this.synergy.slots.map((sl, i) => ({ def: sl.def, sell: this.sellPrice(sl.def), readout: this.synergy.readout(i) })),
+      owned: this.synergy.slots.map((sl, i) => ({
+        def: sl.def,
+        sell: this.sellPrice(sl.paid),
+        readout: this.synergy.readout(i),
+        level: sl.level,
+        maxLevel: modMaxLevel(sl.def),
+        upCost: this.synergy.canUpgrade(i) ? this.upgradeCost(sl.def, sl.level) : -1,
+      })),
       slots: MAX_MOD_SLOTS,
       rerollCost: this.rerollCost,
       healCost: economyTuning.healCost,
@@ -496,8 +516,21 @@ export class Hero implements SynergyHost {
     const cost = this.price(m);
     if (this.gold < cost) return 'NOT ENOUGH GOLD';
     this.gold -= cost;
-    this.synergy.add(m);
+    this.synergy.add(m, cost);
     this.shopOffers[i] = null;
+    this.recomputeStats();
+    return '';
+  }
+
+  /** Upgrade an owned Mod (acts like one more stacked copy). */
+  upgradeMod(i: number): string {
+    const sl = this.synergy.slots[i];
+    if (!sl) return 'NOTHING TO UPGRADE';
+    if (!this.synergy.canUpgrade(i)) return 'ALREADY MAX LEVEL';
+    const cost = this.upgradeCost(sl.def, sl.level);
+    if (this.gold < cost) return 'NOT ENOUGH GOLD';
+    this.gold -= cost;
+    this.synergy.upgrade(i, cost);
     this.recomputeStats();
     return '';
   }
@@ -505,7 +538,7 @@ export class Hero implements SynergyHost {
   sell(i: number): string {
     const sl = this.synergy.slots[i];
     if (!sl) return 'NOTHING TO SELL';
-    this.gold += this.sellPrice(sl.def);
+    this.gold += this.sellPrice(sl.paid);
     this.synergy.remove(i);
     this.recomputeStats();
     return '';

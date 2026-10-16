@@ -71,7 +71,7 @@ export class Rail extends Weapon {
     for (let i = this.ions.length - 1; i >= 0; i--) {
       const ion = this.ions[i];
       if ((ion.t -= dt) > 0) continue;
-      ctx.blast(ion.x, ion.z, 1.6 * Math.sqrt(ctx.stats.areaMul), p.dmg * 0.5, this.color, 'rail');
+      ctx.blast(ion.x, ion.z, 1.6 * Math.sqrt(ctx.stats.areaMul), p.dmg * 0.5, this.color, 'rail', ['projectile', 'explosive']);
       this.ions.splice(i, 1);
     }
 

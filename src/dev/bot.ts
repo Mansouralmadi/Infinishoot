@@ -25,8 +25,12 @@ export function installBot(game: Game, input: Input): void {
 
   /** Shop policy: buy affordable Mods left to right while slots remain, then continue. */
   const shop = () => {
-    const btns = Array.from(document.querySelectorAll<HTMLElement>('#scr-shop [data-act=buy]'));
-    for (const b of btns) if (!b.classList.contains('cant')) b.click();
+    // Buying re-renders the offers, so look the buttons up again after each buy. Skips cursed Mods (Pacifist Core stalls a Buster-only bot).
+    for (let k = 0; k < 5; k++) {
+      const b = document.querySelector<HTMLElement>('#scr-shop [data-act=buy]:not(.cant):not(.cursed)');
+      if (!b) break;
+      b.click();
+    }
     document.querySelector<HTMLElement>('#scr-shop [data-act=shop-done]')?.click();
   };
 
@@ -110,10 +114,12 @@ export function installBot(game: Game, input: Input): void {
     let total = 0;
     let worst = 0;
     let maxAlive = 0;
+    let ran = 0;
     const log: string[] = [];
     for (let i = 0; i < n && g.mode !== 'dead' && g.mode !== 'title'; i++) {
       const t = performance.now();
       step();
+      ran++;
       const d = performance.now() - t;
       total += d;
       if (i > 60) worst = Math.max(worst, d);
@@ -134,7 +140,7 @@ export function installBot(game: Game, input: Input): void {
       hp: Math.round(g.player.hp),
       weapons: g.hero.weapons.map((w) => w.def.id + w.level).join(' '),
       passives: JSON.stringify(g.hero.passives),
-      avgMs: (total / n).toFixed(2),
+      avgMs: (total / Math.max(1, ran)).toFixed(2),
       worstMs: worst.toFixed(1),
     };
   };

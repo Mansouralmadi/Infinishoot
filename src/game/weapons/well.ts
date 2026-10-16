@@ -115,7 +115,7 @@ export class GravityWell extends Weapon {
       }
       if (w.t >= THROW + life) {
         if (p.implode > 0) {
-          ctx.blast(w.x, w.z, r * 0.8, p.implode * dmgMul, this.color, 'well');
+          ctx.blast(w.x, w.z, r * 0.8, p.implode * dmgMul, this.color, 'well', ['area', 'explosive']);
           ctx.sound('explode');
         }
         this.wells.splice(i, 1);

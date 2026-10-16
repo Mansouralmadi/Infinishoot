@@ -25,7 +25,8 @@ export class Nova extends Weapon {
     let n = 0;
     for (const e of ctx.inRadius(pl.x, pl.z, r, this.hits)) {
       // Bosses shrug off most of the freeze.
-      e.frozen = Math.max(e.frozen, p.freeze * (e.def.boss ? 0.15 : 1));
+      const freeze = Math.min(p.freeze, 0.6 * p.cd * ctx.stats.cooldownMul); // never a permanent lock
+      e.frozen = Math.max(e.frozen, freeze * (e.def.boss ? 0.15 : 1));
       e.shatter = p.shatter;
       ctx.damage(e, p.dmg, { source: 'nova', canCrit: true, loud: n++ < 3 });
     }

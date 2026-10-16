@@ -23,6 +23,7 @@ export const playerTuning = {
   dashTrainedLevel: 20,
   dashIframesExtra: 0.06, // invulnerability lingers slightly after the dash
   hurtIframes: 0.7,
+  maxHitFrac: 0.35, // no single hit takes more than this share of max life
   hurtKnockback: 7,
 };
 

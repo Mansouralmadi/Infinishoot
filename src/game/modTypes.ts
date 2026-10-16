@@ -30,6 +30,8 @@ export interface ModApi {
   readonly level: number;
   readonly gold: number;
   readonly moving: boolean;
+  /** Seconds this hero has been alive; advances once per step (not per Mod copy), for timers shared by copies. */
+  readonly time: number;
   /** How many owned weapons carry this tag. */
   tagCount(tag: Tag): number;
   /** Number of different tags across owned weapons. */
@@ -67,6 +69,15 @@ export interface ModFlags {
   overcharge: boolean; // charge can build to a second level
   interestPer: number; // gold needed per 1 interest is reduced by this
   sellFull: boolean; // Mods sell for their full price
+}
+
+/** How many times a Mod can be owned stacked (1 = can't be upgraded). */
+export function modMaxLevel(def: ModDef): number {
+  if (def.maxLevel !== undefined) return def.maxLevel;
+  if (def.echo || def.cursed) return 1;
+  const hooks = def.stat || def.live || def.dmg || def.onHit || def.onCrit || def.onKill || def.onDash || def.onHurt || def.onGem || def.onLevelUp || def.onStageClear || def.tick;
+  const numeric = def.flags && Object.values(def.flags).some((v) => typeof v === 'number');
+  return hooks || numeric ? 3 : 1;
 }
 
 export function emptyFlags(): ModFlags {
@@ -107,6 +118,12 @@ export interface ModDef {
   synergy?: Tag[];
   /** Copies the Mod in the slot to its right. */
   echo?: boolean;
+  /**
+   * Shop upgrades: a level-N Mod acts like N stacked copies (flags sum, hooks
+   * run N times, shared state), except damage, which stacks linearly:
+   * (amount + add * N) * (1 + (mult - 1) * N). Default from modMaxLevel().
+   */
+  maxLevel?: number;
   flags?: Partial<ModFlags>;
   /** Permanent stat change while owned (runs after passives). */
   stat?(s: Stats): void;
@@ -123,6 +140,6 @@ export interface ModDef {
   /** Stage cleared (before the shop opens). */
   onStageClear?(api: ModApi, st: ModState): void;
   tick?(dt: number, api: ModApi, st: ModState): void;
-  /** Live readout for the HUD/shop, e.g. "x1.42". */
-  readout?(api: ModApi, st: ModState): string;
+  /** Live readout for the HUD/shop, e.g. "x1.42"; `lv` is the slot's level. */
+  readout?(api: ModApi, st: ModState, lv: number): string;
 }

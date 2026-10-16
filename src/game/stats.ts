@@ -24,6 +24,7 @@ export interface Stats {
   chargeDmg: number; // charged shot damage multiplier
   luck: number; // lifts rarer level-up cards, Mods and gear drops (see data/rarity.ts)
   killHeal: number; // life restored per kill
+  specialCharge: number; // Q/E special meter fill rate multiplier (Battery Pack)
   dashCharges: number; // dashes you can chain before waiting (Dash Cells)
   // Applied by the synergy engine (src/game/synergy.ts).
   thorns: number; // Spiked Shell: damage of the spike burst when you get hit
@@ -67,6 +68,7 @@ export function baseStats(): Stats {
     chargeDmg: 1,
     luck: 0,
     killHeal: 0,
+    specialCharge: 1,
     dashCharges: 1,
     thorns: 0,
     dashZap: 0,
@@ -91,7 +93,7 @@ export function computeStats(passives: Record<string, number>): Stats {
     if (def) apply(s, def.add, lv);
   }
   s.cooldownMul = Math.max(0.4, s.cooldownMul);
-  s.dashCooldownMul = Math.max(0.4, s.dashCooldownMul);
+  s.dashCooldownMul = Math.max(0.5, s.dashCooldownMul); // dash must stay below i-frame spam
   s.critChance = Math.min(1, s.critChance);
   return s;
 }

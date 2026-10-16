@@ -11,7 +11,7 @@ import { PASSIVES } from '../data/passives';
 import { SPECIALS } from '../data/specials';
 import { WEAPONS } from '../data/weapons';
 import { passiveTuning } from './stats';
-import { resetSpecials, startSpecial, updateSpecials, type SpecialApi } from './specials';
+import { isSpecialRunning, resetSpecials, startSpecial, updateSpecials, type SpecialApi } from './specials';
 import { sfx } from '../audio/sfx';
 import { NetClient, NetHost } from '../net/peer';
 import { packBullets, packEnemies, packPickups, unpackBullets, unpackEnemies, unpackPickups } from '../net/codec';
@@ -62,14 +62,20 @@ export const bombTuning = {
 
 export const dropTuning = {
   xpMul: 0.55, // XP gem value per enemy XP point (lower = slower levelling)
-  goldChance: 0.006,
+  goldChance: 0.009, // thinned with the horde like the utility drops, so income stays steady
   heartChance: 0.004,
   magnetChance: 0.0015,
-  gearChance: 0.0025, // per kill, x(1 + 0.25 per Luck of the killer)
+  gearChance: 0.0012, // per kill, x(1 + 0.25 per Luck of the killer)
   nukeChance: 0.0006, // per kill: a full-screen wipe
   // Heart, magnet, gear and nuke chances are scaled by min(1, dropRef / enemies the
   // director wants alive), so drops per minute stay flat as hordes grow.
   dropRef: 70,
+};
+
+/** Treasure chests appear over the stage instead of all at the start. */
+export const chestTuning = {
+  every: 30, // seconds between new chests
+  maxClosed: 4, // unopened chests on the map at once
 };
 
 /** The Nuke pickup: an expanding wave across the whole screen. */
@@ -84,9 +90,13 @@ export const statusTuning = {
   burnTime: 3,
   shockTime: 2,
   shockMult: 0.2, // shocked enemies take +20% damage
-  shatterDamage: 18,
-  overloadDamage: 30,
-  napalmDps: 8,
+  // Combo damage grows with team level (enemy HP grows ~6-9x by stage 4; flat numbers fell off).
+  shatterDamage: 12,
+  shatterPerLevel: 2,
+  overloadDamage: 20,
+  overloadPerLevel: 3,
+  napalmDps: 5,
+  napalmPerLevel: 1,
 };
 
 export const cheats = { god: false };
@@ -132,7 +142,7 @@ interface NetShop {
   interestCap: number;
   interestPer: number;
   offers: ({ id: string; price: number; hint: string } | null)[];
-  owned: { id: string; sell: number; readout: string }[];
+  owned: { id: string; sell: number; readout: string; level: number; maxLevel: number; upCost: number }[];
   slots: number;
   rerollCost: number;
   healCost: number;
@@ -194,6 +204,8 @@ export class Game implements HeroWorld {
   overloads = 0;
   private elitesRun = 0;
   private bossesRun = 0;
+  /** Seconds toward the next treasure chest. */
+  private chestT = 0;
   /** Final bosses beaten this run (one per loop). */
   private victories = 0;
   private newAchievements: string[] = [];
@@ -266,7 +278,7 @@ export class Game implements HeroWorld {
     this.barrels = new Barrels(this.scene);
     this.barrels.load(this.arena);
     this.chests = new Chests(this.scene);
-    this.chests.load(this.arena.chests);
+    this.chests.clear();
     this.pickups = new Pickups(this.scene);
     this.cam = new CameraRig(aspect);
     this.dmg = new DamageNumbers(hudRoot);
@@ -292,6 +304,7 @@ export class Game implements HeroWorld {
       buy: (i) => this.ui('buy', i),
       sell: (i) => this.ui('sell', i),
       moveMod: (i, d) => this.ui('move', i, d),
+      upgradeMod: (i) => this.ui('mup', i),
       shopReroll: () => this.ui('sreroll'),
       shopHeal: () => this.ui('heal'),
       shopDone: () => this.ui('done'),
@@ -422,7 +435,7 @@ export class Game implements HeroWorld {
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),
       shake: (x, z, amount) => this.vfx.shake(x, z, amount),
       hitBarrels: (dmg, inside) => this.barrels.hitWhere(dmg, hero.index, inside),
-      blast: (x, z, r, base, color, source) => this.blast(x, z, r, base, color, source, WEAPONS[source]?.tags ?? ['explosive'], false, hero),
+      blast: (x, z, r, base, color, source, tags) => this.blast(x, z, r, base, color, source, tags ?? WEAPONS[source]?.tags ?? ['explosive'], false, hero),
       sound: (name) => this.vfx.sound('w:' + name, hero.player.x, hero.player.z),
     };
   }
@@ -511,7 +524,7 @@ export class Game implements HeroWorld {
     this.walls = new StaticBoxGrid(this.arena.colliders);
     this.enemyCtx.colliders = this.arena.colliders;
     this.barrels.load(this.arena);
-    this.chests.load(this.arena.chests);
+    this.chests.clear();
   }
 
   private spawnSpot(i: number): { x: number; z: number } {
@@ -628,6 +641,7 @@ export class Game implements HeroWorld {
     });
     this.director.start(stage);
     resetSpecials();
+    this.chestT = 0;
     this.damagedThisStage = false;
     this.mode = 'fight';
     this.modeT = 0;
@@ -677,7 +691,7 @@ export class Game implements HeroWorld {
     const m = MOD_BY_ID[id];
     const h = this.hero;
     if (!m || h.synergy.owns(id) || h.synergy.full) return;
-    h.synergy.add(m);
+    h.synergy.add(m, 0);
     h.recomputeStats();
   }
 
@@ -902,7 +916,7 @@ export class Game implements HeroWorld {
     const net: NetShop = {
       ...v,
       offers: v.offers.map((o) => (o ? { id: o.def.id, price: o.price, hint: o.hint } : null)),
-      owned: v.owned.map((o) => ({ id: o.def.id, sell: o.sell, readout: o.readout })),
+      owned: v.owned.map((o) => ({ id: o.def.id, sell: o.sell, readout: o.readout, level: o.level, maxLevel: o.maxLevel, upCost: o.upCost })),
     };
     this.tell(h, { t: 'shop', view: net, focus });
   }
@@ -951,6 +965,7 @@ export class Game implements HeroWorld {
       if (a === 'buy') err = h.buy(i);
       else if (a === 'sell') err = h.sell(i);
       else if (a === 'move') h.moveMod(i, d);
+      else if (a === 'mup') err = h.upgradeMod(i);
       else if (a === 'sreroll') err = h.reroll();
       else if (a === 'heal') err = h.heal();
       else if (a === 'done') {
@@ -966,7 +981,7 @@ export class Game implements HeroWorld {
         return;
       }
       this.presentShop(h, a === 'buy' ? i : undefined);
-      const fx = ({ buy: 'buy', sell: 'sell', sreroll: 'reroll', heal: 'heal' } as Record<string, ShopFx>)[a];
+      const fx = ({ buy: 'buy', sell: 'sell', sreroll: 'reroll', heal: 'heal', mup: 'upgrade' } as Record<string, ShopFx>)[a];
       if (fx) this.shopFx(h, fx, i);
     }
   }
@@ -1139,6 +1154,7 @@ export class Game implements HeroWorld {
       (t, who) => t !== PickupType.Gear || this.heroes[who].rerollsLeft < MAX_GEARS,
     );
     this.updateChests();
+    if (this.mode === 'fight' && anyAlive) this.updateChestSpawns(dt);
     this.particles.update(dt);
     this.fx.update(dt);
     if (this.heroes.length > 1) this.updateRevives(dt);
@@ -1452,16 +1468,17 @@ export class Game implements HeroWorld {
   private damage(e: Enemy, base: number, o: DamageOpts, by: Hero): number {
     if (!e.active || e.hp <= 0) return 0;
     const tags: readonly Tag[] = o.tags ?? WEAPONS[o.source]?.tags ?? [];
-    const crit = !!o.canCrit && this.rng.chance(by.stats.critChance);
+    const crit = !o.fixed && !!o.canCrit && this.rng.chance(by.stats.critChance);
     const ev = { e, source: o.source, tags, dist: Math.hypot(e.x - by.player.x, e.z - by.player.z), crit };
     // Stats first, then Mods left to right, then statuses and crit.
-    let amount = by.synergy.damage(ev, base * by.stats.damageMul);
-    if (e.frozen > 0 && e.shatter > 0) amount *= 1 + e.shatter;
-    if (e.shockT > 0) amount *= 1 + statusTuning.shockMult + by.synergy.flags.shockMult;
+    let amount = o.fixed ? base : by.synergy.damage(ev, base * by.stats.damageMul);
+    if (!o.fixed && e.frozen > 0 && e.shatter > 0) amount *= 1 + e.shatter;
+    if (!o.fixed && e.shockT > 0) amount *= 1 + statusTuning.shockMult + by.synergy.flags.shockMult;
     if (crit) amount *= by.stats.critMult;
     amount = Math.max(1, Math.round(amount));
+    const dealt = Math.min(amount, Math.max(0, e.hp));
     e.hp -= amount;
-    by.damageBy[o.source] = (by.damageBy[o.source] ?? 0) + amount;
+    by.damageBy[o.source] = (by.damageBy[o.source] ?? 0) + dealt;
     e.flash = 0.07;
     const k = (o.knockback ?? 0) * by.stats.knockbackMul * (1 - e.def.knockbackResist) * (crit ? 1.5 : 1);
     if (k > 0) {
@@ -1519,7 +1536,7 @@ export class Game implements HeroWorld {
     this.overloads++;
     const m = 1 + by.synergy.flags.overloadMult;
     if (this.overloads % 3 === 1) this.vfx.num(e.x, 2.2, e.z, 'OVERLOAD!', 'crit');
-    this.blast(e.x, e.z, 1.8 * Math.sqrt(m), statusTuning.overloadDamage * m, '#ffe14d', 'overload', ['explosive'], true, by);
+    this.blast(e.x, e.z, 1.8 * Math.sqrt(m), (statusTuning.overloadDamage + statusTuning.overloadPerLevel * this.level) * m, '#ffe14d', 'overload', ['explosive'], true, by);
   }
 
   /** Frozen enemy killed: ice shards burst out. */
@@ -1530,7 +1547,7 @@ export class Game implements HeroWorld {
     for (const o of this.enemiesInRadius(e.x, e.z, 2, this.scratch).slice()) {
       if (o === e) continue;
       const d = Math.hypot(o.x - e.x, o.z - e.z) || 1;
-      this.damage(o, statusTuning.shatterDamage * m, { source: 'shatter', tags: ['frost'], dirX: (o.x - e.x) / d, dirZ: (o.z - e.z) / d, knockback: 4, noStatus: true }, by);
+      this.damage(o, (statusTuning.shatterDamage + statusTuning.shatterPerLevel * this.level) * m, { source: 'shatter', tags: ['frost'], dirX: (o.x - e.x) / d, dirZ: (o.z - e.z) / d, knockback: 4, noStatus: true }, by);
     }
   }
 
@@ -1538,6 +1555,7 @@ export class Game implements HeroWorld {
   zap(from: Enemy, hops: number, dmg: number, by: Hero): void {
     const hit = new Set<number>([from.uid]);
     let cur: Enemy = from;
+    hops += by.synergy.flags.chainBonus;
     for (let i = 0; i < hops; i++) {
       const next = this.nearestEnemy(cur.x, cur.z, 5, (o) => hit.has(o.uid));
       if (!next) break;
@@ -1585,7 +1603,8 @@ export class Game implements HeroWorld {
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     this.score += def.score * this.multiplier * (e.elite ? 5 : 1);
     const xp = def.xp * (e.elite ? 10 : 1);
-    if (by) by.bombCharge = Math.min(1, by.bombCharge + bombTuning.chargePerXp * xp * (by.specialP.charge ?? 1));
+    // The meter waits while the special (or bomb wave) is still running, so it can't chain forever.
+    if (by && by.bombT < 0 && !isSpecialRunning(by)) by.bombCharge = Math.min(1, by.bombCharge + bombTuning.chargePerXp * xp * (by.specialP.charge ?? 1) * by.stats.specialCharge);
 
     // Drops
     this.pickups.spawn(PickupType.Gem, e.x, e.z, xp * dropTuning.xpMul);
@@ -1599,8 +1618,8 @@ export class Game implements HeroWorld {
       for (let i = 0; i < (isBoss ? 2 : 1); i++) this.pickups.spawn(PickupType.Gear, e.x, e.z);
       if (e.elite) this.elitesRun++;
     } else {
-      if (this.rng.chance(dropTuning.goldChance)) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 1);
       const thin = Math.min(1, dropTuning.dropRef / Math.max(1, this.director.targetAlive));
+      if (this.rng.chance(dropTuning.goldChance * thin)) this.pickups.spawn(PickupType.Bolt, e.x, e.z, 1);
       if (this.rng.chance(dropTuning.heartChance * thin)) this.pickups.spawn(PickupType.Heart, e.x, e.z);
       if (this.rng.chance(dropTuning.magnetChance * thin)) this.pickups.spawn(PickupType.Magnet, e.x, e.z);
       if (this.rng.chance(dropTuning.gearChance * thin * (1 + 0.25 * (by?.stats.luck ?? 0)))) this.pickups.spawn(PickupType.Gear, e.x, e.z);
@@ -1655,7 +1674,7 @@ export class Game implements HeroWorld {
     for (const e of targets) {
       const d = Math.hypot(e.x - x, e.z - z) || 1;
       this.damage(e, base, { source, tags, dirX: (e.x - x) / d, dirZ: (e.z - z) / d, knockback: 8, canCrit: true, noStatus, loud: n++ < 2 }, by);
-      if (napalm && e.active) this.ignite(e, statusTuning.napalmDps, by);
+      if (napalm && e.active) this.ignite(e, statusTuning.napalmDps + statusTuning.napalmPerLevel * this.level, by);
     }
   }
 
@@ -1729,7 +1748,7 @@ export class Game implements HeroWorld {
     this.vfx.ring(e.x, e.z, 1, R * 1.6, '#ffffff', 0.3);
     this.vfx.burst(e.x, 0.3, e.z, { count: 30, color: '#f2e2b8', color2: '#ffffff', speed: [5, 12], size: [0.2, 0.4], life: [0.4, 0.8], up: 4, gravity: 10 });
     for (const h of this.aliveHeroes) {
-      if (Math.hypot(h.player.x - e.x, h.player.z - e.z) < R + h.player.radius) this.hurtHero(h, 30 * e.dmgMul, e.x, e.z);
+      if (Math.hypot(h.player.x - e.x, h.player.z - e.z) < R + h.player.radius) this.hurtHero(h, 24 * e.dmgMul, e.x, e.z);
     }
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
@@ -1759,7 +1778,7 @@ export class Game implements HeroWorld {
   private hurtHero(h: Hero, raw: number, fromX: number, fromZ: number): void {
     const p = h.player;
     if (cheats.god || p.dead || p.invuln > 0) return;
-    const dmg = Math.max(1, Math.round(raw - h.stats.armor));
+    const dmg = Math.max(1, Math.round(Math.min(raw - h.stats.armor, p.maxHp * playerTuning.maxHitFrac)));
     const dx = p.x - fromX;
     const dz = p.z - fromZ;
     const d = Math.hypot(dx, dz) || 1;
@@ -1901,6 +1920,10 @@ export class Game implements HeroWorld {
         const by = this.heroes[b.owner[i]] ?? this.hero;
         const kind = BULLET_KINDS[b.kind[i]] ?? BULLET_KINDS[0];
         this.damage(hit, b.damage[i], { source: kind.source, tags: kind.tags, dirX: b.vx[i] / sp, dirZ: b.vz[i] / sp, knockback: b.knockback[i], hx: x, hz: z, canCrit: true, loud: true }, by);
+        if (b.blast[i] > 0 && b.kind[i] === 1) {
+          this.bulletBlast(i);
+          b.blast[i] = 0;
+        }
         if (b.pierce[i] > 0) {
           b.pierce[i]--;
           b.markHit(i, hit.uid);
@@ -1923,6 +1946,28 @@ export class Game implements HeroWorld {
     for (const c of this.chests.list) {
       if (c.openT >= 0 || !this.aliveHeroes.some((h) => Math.hypot(h.player.x - c.x, h.player.z - c.z) < 30)) continue;
       this.vfx.burst(c.x, 0.9, c.z, { count: 2, color: '#ffcd75', color2: '#f4f4f4', speed: [0.4, 1.4], size: [0.1, 0.18], life: [0.5, 0.9], up: 2.5, drag: 1 });
+    }
+  }
+
+  /** Host/solo: a new chest every chestTuning.every seconds at a random clear spot. */
+  private updateChestSpawns(dt: number): void {
+    this.chestT += dt;
+    if (this.chestT < chestTuning.every) return;
+    this.chestT -= chestTuning.every;
+    if (this.chests.closedCount >= chestTuning.maxClosed) return;
+    const lim = this.arena.halfSize - 5;
+    for (let tries = 0; tries < 30; tries++) {
+      const x = this.rng.range(-lim, lim);
+      const z = this.rng.range(-lim, lim);
+      if (this.walls.hitCircle(x, z, 1.2)) continue;
+      const facing = this.rng.range(0, Math.PI * 2);
+      this.chests.add(x, z, facing);
+      this.host?.broadcast({ t: 'chestspawn', x, z, f: facing });
+      this.vfx.ring(x, z, 1, 6, '#ffcd75', 0.6);
+      this.vfx.burst(x, 1, z, { count: 20, color: '#ffcd75', color2: '#ffffff', speed: [2, 6], size: [0.15, 0.3], life: [0.5, 0.9], up: 8, gravity: 10 });
+      this.vfx.toast('A TREASURE CHEST APPEARED!');
+      this.vfx.sound('chest', NaN, NaN);
+      return;
     }
   }
 
@@ -2040,8 +2085,9 @@ export class Game implements HeroWorld {
       e.bombStamp = stamp;
       const n = d || 1;
       // The nuke over-kills normal enemies and takes a big bite out of bosses.
-      const dmg = !nuke ? h.specialP.dmg : e.def.boss || e.def.id === 'reaper' ? (e.maxHp * nukeTuning.bossHpFrac) / Math.max(0.1, h.stats.damageMul) : e.maxHp * 20;
-      this.damage(e, dmg, { source: nuke ? 'nuke' : 'bomb', dirX: dx / n, dirZ: dz / n, knockback: bombTuning.knockback, noStatus: nuke }, h);
+      const tough = e.def.boss || e.def.id === 'reaper';
+      const dmg = !nuke ? h.specialP.dmg : tough ? e.maxHp * nukeTuning.bossHpFrac : e.maxHp * 20;
+      this.damage(e, dmg, { source: nuke ? 'nuke' : 'bomb', tags: nuke ? [] : ['explosive'], dirX: dx / n, dirZ: dz / n, knockback: bombTuning.knockback, noStatus: nuke, fixed: nuke && tough }, h);
     }
     if (k >= 1) h.bombT = -1;
   }
@@ -2279,6 +2325,9 @@ export class Game implements HeroWorld {
       case 'wchest':
         this.chests.open(Number(m.i));
         break;
+      case 'chestspawn':
+        this.chests.add(Number(m.x), Number(m.z), Number(m.f));
+        break;
       case 'chestitem':
         this.hud.chestReveal(m.item as Parameters<Hud['chestReveal']>[0]);
         break;
@@ -2336,7 +2385,7 @@ export class Game implements HeroWorld {
     return {
       ...v,
       offers: v.offers.map((o) => (o && MOD_BY_ID[o.id] ? { def: MOD_BY_ID[o.id], price: o.price, hint: o.hint } : null)),
-      owned: v.owned.filter((o) => MOD_BY_ID[o.id]).map((o) => ({ def: MOD_BY_ID[o.id], sell: o.sell, readout: o.readout })),
+      owned: v.owned.filter((o) => MOD_BY_ID[o.id]).map((o) => ({ def: MOD_BY_ID[o.id], sell: o.sell, readout: o.readout, level: o.level, maxLevel: o.maxLevel, upCost: o.upCost })),
     };
   }
 

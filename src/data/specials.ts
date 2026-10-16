@@ -46,11 +46,11 @@ export const SPECIALS: Record<string, SpecialDef> = {
     rarity: 'rare',
     desc: 'Calls a storm: lightning strikes enemies around you for a few seconds.',
     levels: [
-      { text: 'Lightning rains on nearby enemies.', p: { dur: 3, rate: 6, dmg: 40, radius: 14, chains: 1, charge: 1 } },
-      { text: 'More strikes, longer storm.', p: { dur: 3.5, rate: 7, dmg: 48, radius: 14, chains: 1, charge: 1.05 } },
-      { text: 'Bolts chain to 2 more.', p: { dur: 4, rate: 8, dmg: 58, radius: 16, chains: 2, charge: 1.1 } },
-      { text: 'Heavier bolts.', p: { dur: 4.5, rate: 9, dmg: 70, radius: 16, chains: 2, charge: 1.2 } },
-      { text: 'Supercell!', p: { dur: 5, rate: 11, dmg: 85, radius: 18, chains: 3, charge: 1.3 } },
+      { text: 'Lightning rains on nearby enemies and chains to 2 more.', p: { dur: 3, rate: 8, dmg: 40, radius: 14, chains: 2, charge: 1 } },
+      { text: 'More strikes, longer storm.', p: { dur: 3.5, rate: 9, dmg: 48, radius: 14, chains: 2, charge: 1.05 } },
+      { text: 'Wider, faster storm.', p: { dur: 4, rate: 10, dmg: 58, radius: 16, chains: 2, charge: 1.1 } },
+      { text: 'Bolts chain to 3.', p: { dur: 4.5, rate: 11, dmg: 70, radius: 16, chains: 3, charge: 1.2 } },
+      { text: 'Supercell!', p: { dur: 5, rate: 12, dmg: 85, radius: 18, chains: 3, charge: 1.3 } },
     ],
   },
   blizzard: {
@@ -62,11 +62,11 @@ export const SPECIALS: Record<string, SpecialDef> = {
     rarity: 'rare',
     desc: 'An icy wave freezes everything around you; frozen enemies take extra damage.',
     levels: [
-      { text: 'Freezes enemies around you.', p: { radius: 14, freeze: 2.5, shatter: 0.5, dmg: 30, charge: 1 } },
-      { text: 'Bigger wave.', p: { radius: 16, freeze: 3, shatter: 0.6, dmg: 40, charge: 1.05 } },
-      { text: 'Longer freeze.', p: { radius: 18, freeze: 3.5, shatter: 0.75, dmg: 55, charge: 1.1 } },
-      { text: 'Frozen enemies take +90%.', p: { radius: 20, freeze: 4, shatter: 0.9, dmg: 70, charge: 1.2 } },
-      { text: 'Ice age!', p: { radius: 24, freeze: 5, shatter: 1.2, dmg: 90, charge: 1.3 } },
+      { text: 'Freezes enemies around you.', p: { radius: 14, freeze: 2.0, shatter: 0.4, dmg: 40, charge: 1 } },
+      { text: 'Bigger wave.', p: { radius: 16, freeze: 2.2, shatter: 0.5, dmg: 55, charge: 1.05 } },
+      { text: 'Longer freeze.', p: { radius: 18, freeze: 2.4, shatter: 0.6, dmg: 70, charge: 1.1 } },
+      { text: 'Frozen enemies take +75%.', p: { radius: 20, freeze: 2.6, shatter: 0.75, dmg: 90, charge: 1.2 } },
+      { text: 'Ice age!', p: { radius: 24, freeze: 3.0, shatter: 0.9, dmg: 120, charge: 1.3 } },
     ],
   },
   meteor: {

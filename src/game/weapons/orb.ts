@@ -85,7 +85,11 @@ export class PlasmaOrb extends Weapon {
       if (o.tickT <= 0) {
         o.tickT += p.tick;
         let n = 0;
-        for (const e of ctx.inRadius(o.x, o.z, o.mega ? r * 1.5 : r, this.hits)) {
+        // Zap only the nearest few (p.zaps): the orb is a precise shot, not a giant aura.
+        const near = ctx.inRadius(o.x, o.z, o.mega ? r * 1.5 : r, this.hits);
+        near.sort((a, b) => (a.x - o.x) ** 2 + (a.z - o.z) ** 2 - ((b.x - o.x) ** 2 + (b.z - o.z) ** 2));
+        if (near.length > p.zaps * (o.mega ? 2 : 1)) near.length = p.zaps * (o.mega ? 2 : 1);
+        for (const e of near) {
           ctx.damage(e, p.dmg * (o.mega ? 4 : 1), { source: 'orb', tags: evo ? STORM_TAGS : undefined, knockback: 0, canCrit: true, loud: n < 3 });
           if (n++ < 4) ctx.fx.star(e.x, 0.9, e.z, 0.7, this.color, 0.08);
         }

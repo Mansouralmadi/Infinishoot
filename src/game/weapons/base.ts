@@ -26,6 +26,8 @@ export interface DamageOpts {
   tags?: readonly Tag[];
   /** Don't apply statuses or fire Mod hit triggers (DoT ticks, combo blasts). */
   noStatus?: boolean;
+  /** Exact damage: skip stats, Mods, status multipliers and crits (the Nuke's bite on bosses). */
+  fixed?: boolean;
 }
 
 /** Cosmetic effects (recorded for online clients). */
@@ -67,7 +69,7 @@ export interface WeaponCtx {
   /** Damage every barrel whose centre passes `inside` (beams, zaps, fields; bullets and blasts handle their own). */
   hitBarrels(dmg: number, inside: (x: number, z: number) => boolean): void;
   /** Area blast that damages enemies (never the player). */
-  blast(x: number, z: number, r: number, base: number, color: string, source: string): void;
+  blast(x: number, z: number, r: number, base: number, color: string, source: string, tags?: Tag[]): void;
   sound(
     name: 'zap' | 'disc' | 'missile' | 'mine' | 'freeze' | 'explode' | 'shoot' | 'flame' | 'charge' | 'chargeFull' | 'chargeShot' | 'lob' | 'vortex' | 'shieldUp' | 'block' | 'uplink' | 'beam' | 'rail',
   ): void;

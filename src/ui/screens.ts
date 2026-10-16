@@ -27,6 +27,7 @@ export interface ScreenActions {
   buy(index: number): void;
   sell(index: number): void;
   moveMod(index: number, dir: -1 | 1): void;
+  upgradeMod(index: number): void;
   shopReroll(): void;
   shopHeal(): void;
   shopDone(): void;
@@ -44,7 +45,7 @@ export interface LobbyView {
   status: string;
 }
 
-export type ShopFx = 'open' | 'buy' | 'sell' | 'reroll' | 'heal' | 'deny';
+export type ShopFx = 'open' | 'buy' | 'sell' | 'reroll' | 'heal' | 'deny' | 'upgrade';
 
 export interface ShopView {
   gold: number;
@@ -52,7 +53,7 @@ export interface ShopView {
   interestCap: number;
   interestPer: number;
   offers: ({ def: ModDef; price: number; hint: string } | null)[];
-  owned: { def: ModDef; sell: number; readout: string }[];
+  owned: { def: ModDef; sell: number; readout: string; level: number; maxLevel: number; upCost: number }[];
   slots: number;
   rerollCost: number;
   healCost: number;
@@ -173,7 +174,7 @@ export class Screens {
   <div class="wallet"></div>
   <div class="hiscores"></div>
   <div class="controls">WASD / L-stick move &middot; Mouse / R-stick aim &amp; shoot &middot; Hold right click / X charge shot &middot; Space / LB dash &middot; Q / RB bomb &middot; Esc / Start pause</div>
-  <div class="credits">Icons: game-icons.net by Lorc, Delapouite &amp; contributors (CC BY 3.0) &middot; Fonts: Jersey, Pixelify Sans, Silkscreen (OFL) &middot; Palette: Sweetie 16 by GrafxKid</div>
+  <div class="credits">Icons: game-icons.net by Lorc, Delapouite &amp; contributors (CC BY 3.0) &middot; Fonts: Jersey, Silkscreen (OFL) &middot; Palette: Sweetie 16 by GrafxKid</div>
   <div class="version">v${__APP_VERSION__}</div>
 </div>
 <div id="scr-pause" class="screen dim" hidden>
@@ -331,6 +332,8 @@ export class Screens {
           return actions.buy(Number(btn.dataset.index));
         case 'sell':
           return actions.sell(Number(btn.dataset.index));
+        case 'mod-up':
+          return actions.upgradeMod(Number(btn.dataset.index));
         case 'mod-left':
           return actions.moveMod(Number(btn.dataset.index), -1);
         case 'mod-right':
@@ -622,9 +625,10 @@ export class Screens {
           (o, i) => `<div class="owned-mod ${o.def.cursed ? 'cursed' : ''}" title="${o.def.desc}">
           <div class="slot-no">${i + 1}</div>
           <div class="icon" style="--c:${o.def.color}">${iconHtml(o.def.id, o.def.color, o.def.icon)}</div>
-          <div class="name">${o.def.name}</div>
+          <div class="name">${o.def.name}${o.maxLevel > 1 ? ` <span class="mod-lv">LV ${o.level}/${o.maxLevel}</span>` : ''}</div>
           <div class="desc">${o.def.desc}</div>
           ${o.readout ? `<div class="readout">${o.readout}</div>` : ''}
+          ${o.upCost >= 0 ? `<button data-nav data-act="mod-up" data-index="${i}" class="mod-up ${o.upCost > v.gold ? 'cant' : ''}">UPGRADE <span class="gold-dot"></span> ${o.upCost}</button>` : o.maxLevel > 1 ? '<div class="mod-max">MAX LEVEL</div>' : ''}
           <div class="ctrl">
             <button data-nav data-act="mod-left" data-index="${i}" ${i === 0 ? 'disabled' : ''}>&#9664;</button>
             <button data-nav data-act="mod-right" data-index="${i}" ${i === v.owned.length - 1 ? 'disabled' : ''}>&#9654;</button>
@@ -667,6 +671,17 @@ export class Screens {
         const owned = el.querySelectorAll<HTMLElement>('.owned-mod:not(.empty)');
         const fresh = owned[owned.length - 1];
         if (fresh) replay(fresh, 'fresh');
+        break;
+      }
+      case 'upgrade': {
+        sfx.buy();
+        sfx.powerUp();
+        const card = el.querySelectorAll<HTMLElement>('.owned-mod:not(.empty)')[i];
+        if (card) {
+          if (gold) coinsBetween(gold, card, 10);
+          burstAt(card, ['var(--yellow)', 'var(--cyan)', 'var(--white)'], 22);
+          replay(card, 'fresh');
+        }
         break;
       }
       case 'sell':

@@ -87,7 +87,9 @@ export class Pickups {
 
   spawn(type: PickupType, x: number, z: number, value = 1): void {
     // When full, fold gems into an existing gem instead of dropping XP.
-    if (this.count >= MAX) {
+    // Gems fold into an existing gem once the pool is nearly full, so the last
+    // slots stay free for chests, gold, gears, hearts and nukes.
+    if (this.count >= MAX - (type === PickupType.Gem ? 100 : 0)) {
       if (type === PickupType.Gem) {
         for (let i = this.count - 1; i >= 0; i--) {
           if (this.type[i] === PickupType.Gem) {

@@ -121,7 +121,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     radius: 0.65,
     bodyColor: '#ff3d5a',
     accentColor: '#ffd23f',
-    contactDamage: 18,
+    contactDamage: 15,
     knockbackResist: 0.5,
     xp: 4,
     score: 150,
@@ -139,7 +139,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     radius: 0.85,
     bodyColor: '#9b6bff',
     accentColor: '#ffd23f',
-    contactDamage: 18,
+    contactDamage: 15,
     knockbackResist: 0.75,
     xp: 6,
     score: 250,
@@ -230,7 +230,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     radius: 2.0,
     bodyColor: '#ff5e8a',
     accentColor: '#ffd23f',
-    contactDamage: 25,
+    contactDamage: 20,
     knockbackResist: 0.97,
     xp: 100,
     score: 10000,
@@ -304,7 +304,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     name: 'Reaper',
     behavior: 'reaper',
     model: 'reaper',
-    hp: 6000, // times the director's stage and minute HP scaling
+    hp: 15000, // times the director's stage and minute HP scaling (6000 melted in 10-15 s)
     speed: 7.7, // a hero's base speed is 7 (playerTuning.maxSpeed)
     radius: 0.9,
     bodyColor: '#333c57',

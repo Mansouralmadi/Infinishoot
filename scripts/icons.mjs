@@ -47,6 +47,7 @@ const ART = {
   nanobots: 'microchip',
   thrusters: 'rocket-thruster',
   dash_cells: 'dodge',
+  battery_pack: 'battery-pack-alt',
   focus_lens: 'microscope-lens',
   boxing_glove: 'boxing-glove',
   spiked_shell: 'spiked-shell',
@@ -117,6 +118,9 @@ const ART = {
   storm_crown: 'queen-crown',
   supernova: 'explosion-rays',
   midas: 'hand',
+  flash_freeze: 'ice-bomb',
+  trailblazer: 'trail',
+  wide_load: 'sonic-boom',
   // level-up bonuses
   gold: 'swap-bag',
   heal: 'health-potion',

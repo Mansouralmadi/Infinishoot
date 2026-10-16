@@ -28,9 +28,10 @@ export const directorTuning = {
   veteranFrom: 3, // first stage where veterans (tougher, recoloured enemies) mix in
   veteranPerStage: 0.15, // share of spawns that are veterans, per stage from veteranFrom (capped)
   veteranMax: 0.6,
+  bossLoopHp: 1.8, // boss HP x this per loop after the first
   reaperLevel: 50, // team level that summons Reapers (a filter for runaway builds)
   reaperDelay: 10, // seconds into a stage before the first one
-  reaperEvery: 45, // seconds between Reapers after that
+  reaperEvery: 60, // seconds between Reapers after that
   reaperMax: 4, // most alive at once
 };
 
@@ -92,7 +93,8 @@ export class Director {
 
   /** Bosses scale per stage only (not by minute), so they stay beatable. */
   get bossHpMul(): number {
-    return bossTuning.hp * this.curve(directorTuning.hpPerStage, directorTuning.hpPerStage2) * (1 + 0.6 * (this.players - 1));
+    const loop = Math.ceil(this.stage / 4);
+    return bossTuning.hp * this.curve(directorTuning.hpPerStage, directorTuning.hpPerStage2) * Math.pow(directorTuning.bossLoopHp, loop - 1) * (1 + 0.6 * (this.players - 1));
   }
 
   get dmgMul(): number {

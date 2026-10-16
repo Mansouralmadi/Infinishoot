@@ -42,6 +42,11 @@ interface Running {
 }
 
 const running = new Map<Hero, Running[]>();
+
+/** Is h's special (not the Bomb) still going? The meter waits until it ends. */
+export function isSpecialRunning(h: Hero): boolean {
+  return (running.get(h)?.length ?? 0) > 0;
+}
 const near: Enemy[] = [];
 const fresh: Enemy[] = [];
 
