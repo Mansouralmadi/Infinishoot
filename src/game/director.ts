@@ -28,6 +28,10 @@ export const directorTuning = {
   veteranFrom: 3, // first stage where veterans (tougher, recoloured enemies) mix in
   veteranPerStage: 0.15, // share of spawns that are veterans, per stage from veteranFrom (capped)
   veteranMax: 0.6,
+  reaperLevel: 50, // team level that summons Reapers (a filter for runaway builds)
+  reaperDelay: 10, // seconds into a stage before the first one
+  reaperEvery: 45, // seconds between Reapers after that
+  reaperMax: 4, // most alive at once
 };
 
 export type SpawnRequest =
@@ -39,11 +43,14 @@ export class Director {
   stage = 1;
   /** Co-op scales enemy count and toughness with the number of players. */
   players = 1;
+  /** Team level, set by the game every step; summons Reapers at directorTuning.reaperLevel. */
+  teamLevel = 1;
   time = 0;
   bossSpawned = false;
   private spawnBudget = 0;
   private nextElite = 0;
   private nextRing = 0;
+  private nextReaper = 0;
   private queue: SpawnRequest[] = [];
 
   start(stage: number): void {
@@ -53,6 +60,7 @@ export class Director {
     this.spawnBudget = 0;
     this.nextElite = directorTuning.eliteEvery;
     this.nextRing = directorTuning.ringEvery * 0.6;
+    this.nextReaper = directorTuning.reaperDelay;
     this.queue = [];
   }
 
@@ -150,6 +158,11 @@ export class Director {
       this.nextRing += t.ringEvery * rng.range(0.8, 1.2);
       const minute = this.paceMinute;
       this.queue.push({ kind: 'ring', def: this.vet(minute > 2.5 && rng.chance(0.4) ? ENEMIES.zippy : ENEMIES.swarmer, rng), count: Math.round(18 + minute * 6 + this.stage * 6) });
+    }
+
+    if (this.teamLevel >= t.reaperLevel && this.time >= this.nextReaper && !this.bossSpawned) {
+      this.nextReaper = this.time + t.reaperEvery;
+      if (count('reaper') < t.reaperMax) this.queue.push({ kind: 'enemy', def: ENEMIES.reaper });
     }
 
     // Keep the field topped up toward the target (lighter during the boss).

@@ -1,6 +1,6 @@
 /** Enemy definitions. Pure data; behaviour lives in game/enemies.ts. */
-export type Behavior = 'chase' | 'lunge' | 'shooter' | 'charger' | 'exploder' | 'spawner' | 'boss' | 'rex' | 'queen';
-export type Model = 'bopper' | 'swarmer' | 'shooter' | 'charger' | 'exploder' | 'splitter' | 'spawner' | 'king' | 'rex' | 'queen';
+export type Behavior = 'chase' | 'lunge' | 'shooter' | 'charger' | 'exploder' | 'spawner' | 'boss' | 'rex' | 'queen' | 'omega' | 'reaper';
+export type Model = 'bopper' | 'swarmer' | 'shooter' | 'charger' | 'exploder' | 'splitter' | 'spawner' | 'king' | 'rex' | 'queen' | 'omega' | 'reaper';
 
 export interface EnemyDef {
   id: string;
@@ -273,6 +273,49 @@ export const ENEMIES: Record<string, EnemyDef> = {
     minMinute: -1,
     weight: 0,
   },
+  /** Final boss of every 4th stage (see bossForStage); three phases in updateOmega. */
+  omega: {
+    id: 'omega',
+    name: 'Omega Overlord',
+    behavior: 'omega',
+    model: 'omega',
+    boss: true,
+    hp: 8000, // ~3.3x King, before bossTuning.hp and stage scaling
+    speed: 2.8,
+    radius: 2.4,
+    bodyColor: '#3b5dc9',
+    accentColor: '#ffcd75',
+    contactDamage: 35,
+    knockbackResist: 1,
+    xp: 300,
+    score: 50000,
+    minMinute: -1,
+    weight: 0,
+    // Its charge chain: range = distance that triggers a gap-closing charge or jump.
+    charge: { range: 15, windup: 0.85, speed: 26, duration: 0.5, recover: 1.0 },
+  },
+  /**
+   * Late-run filter: the director sends Reapers once the team level reaches
+   * directorTuning.reaperLevel. Not a boss: no boss bar, doesn't end the stage.
+   * Ignores knockback, freezes, slows, crowds and walls.
+   */
+  reaper: {
+    id: 'reaper',
+    name: 'Reaper',
+    behavior: 'reaper',
+    model: 'reaper',
+    hp: 6000, // times the director's stage and minute HP scaling
+    speed: 7.7, // a hero's base speed is 7 (playerTuning.maxSpeed)
+    radius: 0.9,
+    bodyColor: '#333c57',
+    accentColor: '#73eff7',
+    contactDamage: 50, // times director.dmgMul
+    knockbackResist: 1,
+    xp: 150,
+    score: 30000,
+    minMinute: -1,
+    weight: 0,
+  },
 };
 
 /**
@@ -325,8 +368,8 @@ for (const [id, [bodyColor, accentColor]] of Object.entries(VETERAN_LOOK)) {
   };
 }
 
-/** Bosses rotate by stage: King, Rex, Queen, King... */
-export const BOSS_ORDER = ['king', 'rex', 'queen'];
+/** Bosses rotate by stage: King, Rex, Queen, then the final boss on every 4th stage; stage 5 starts the loop again. */
+export const BOSS_ORDER = ['king', 'rex', 'queen', 'omega'];
 export function bossForStage(stage: number): EnemyDef {
   return ENEMIES[BOSS_ORDER[(Math.max(1, stage) - 1) % BOSS_ORDER.length]];
 }

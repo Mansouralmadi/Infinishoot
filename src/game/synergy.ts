@@ -3,12 +3,14 @@ import type { Tag } from '../data/tags';
 import type { Enemy } from './enemies';
 import { emptyFlags, type DamageEvent, type ModApi, type ModDef, type ModFlags, type ModState } from './modTypes';
 import type { Player } from './player';
-import type { Stats } from './stats';
+import { passiveTuning, type Stats } from './stats';
 import type { Weapon } from './weapons';
 
 /** What the synergy engine needs from the game. */
 export interface SynergyHost {
   readonly player: Player;
+  /** Live stats: passive triggers (Spiked Shell, Tesla Boots, Cryo Rounds) read them. */
+  readonly stats: Stats;
   readonly level: number;
   readonly gold: number;
   readonly weapons: Weapon[];
@@ -180,9 +182,16 @@ export class Synergy implements ModApi {
   }
 
   // ---------------------------------------------------------------- triggers
+  // Passive triggers run after the Mods (so Phoenix can revive before Spiked Shell
+  // checks for death), once each: Echo never copies them.
 
   hit(ev: DamageEvent): void {
     for (const e of this.eff) e.def.onHit?.(ev, this, e.st);
+    // Cryo Rounds: a frozen enemy that dies shatters, so this opens the Frost combos.
+    const fc = this.host.stats.freezeChance;
+    if (fc > 0 && ev.e.hp > 0 && this.chance(fc)) {
+      ev.e.frozen = Math.max(ev.e.frozen, passiveTuning.freezeTime * (ev.e.def.boss ? 0.15 : 1));
+    }
   }
   crit(ev: DamageEvent): void {
     for (const e of this.eff) e.def.onCrit?.(ev, this, e.st);
@@ -192,9 +201,17 @@ export class Synergy implements ModApi {
   }
   dash(): void {
     for (const e of this.eff) e.def.onDash?.(this, e.st);
+    const s = this.host.stats;
+    const p = this.player;
+    if (s.dashZap > 0) this.blast(p.x, p.z, passiveTuning.dashZapRadius, s.dashZap, '#73eff7', 'tesla_boots', ['shock']);
   }
   hurt(): void {
     for (const e of this.eff) e.def.onHurt?.(this, e.st);
+    const s = this.host.stats;
+    const p = this.player;
+    if (s.thorns > 0 && !p.dead) {
+      this.blast(p.x, p.z, passiveTuning.thornsRadius, s.thorns * (1 + passiveTuning.thornsPerArmor * s.armor), '#a7f070', 'spiked_shell', []);
+    }
   }
   gem(v: number): void {
     for (const e of this.eff) e.def.onGem?.(v, this, e.st);

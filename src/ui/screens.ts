@@ -135,6 +135,9 @@ function modChip(m: ModDef): string {
 
 type Named = Exclude<ScreenName, 'none'>;
 
+/** Level-up pick lock: seconds after the cards appear (or a reroll) before any pick or skip counts. */
+export const pickTuning = { lock: 0.6 };
+
 export class Screens {
   current: ScreenName = 'none';
   private els = {} as Record<Named, HTMLElement>;
@@ -146,6 +149,10 @@ export class Screens {
   /** Level-up card reels still spinning, and the time since they started. */
   private reels: { card: HTMLElement; strip: HTMLElement; steps: number[]; passed: number; rarity?: Rarity }[] = [];
   private reelT = 0;
+  /** Level-up pick lock: no pick or skip before this time (ms), so a held click or key can't choose by accident. */
+  private lockUntil = 0;
+  /** Cards still showing the locked look. */
+  private lockCards: HTMLElement[] = [];
 
   private root: HTMLElement;
 
@@ -315,11 +322,11 @@ export class Screens {
         case 'ul-back':
           return actions.title();
         case 'pick':
-          return actions.pick(Number(btn.dataset.index));
+          return this.canPick(Number(btn.dataset.index)) ? actions.pick(Number(btn.dataset.index)) : undefined;
         case 'reroll':
           return actions.reroll();
         case 'skip':
-          return actions.skip();
+          return this.pickOpen() ? actions.skip() : undefined;
         case 'buy':
           return actions.buy(Number(btn.dataset.index));
         case 'sell':
@@ -391,6 +398,7 @@ export class Screens {
   update(input: Input, dt: number): void {
     if (this.current !== 'none') this.navs[this.current].update(input, dt);
     this.tickReels(dt);
+    this.tickLock();
   }
 
   // ---------------------------------------------------------------- online
@@ -488,6 +496,7 @@ export class Screens {
           ${o.replaces ? replaceStrip(o.replaces) : ''}
           <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : o.kind === 'special' ? 'SPECIAL (Q/E)' : 'BONUS'}</div>
           <div class="key">${i + 1}</div>
+          <i class="lock"></i>
         </button>`,
       )
       .join('');
@@ -497,9 +506,40 @@ export class Screens {
     el.querySelector('.build')!.innerHTML = loadout.map(badge).join('');
     this.show('levelup');
     const cards = el.querySelectorAll<HTMLElement>('.card');
+    // Each card's lock bar fills until it can be picked: the shared lock or its own reel landing, whichever is later.
+    this.lockUntil = performance.now() + pickTuning.lock * 1000;
+    this.lockCards = [...cards];
+    el.classList.add('locked');
+    cards.forEach((c, i) => {
+      c.classList.add('locked');
+      c.style.setProperty('--lock', `${Math.max(pickTuning.lock, steps[i].reduce((a, b) => a + b, 0))}s`);
+    });
     this.reels = offers.map((o, i) => ({ card: cards[i], strip: cards[i].querySelector<HTMLElement>('.strip')!, steps: steps[i], passed: 0, rarity: o.rarity }));
     this.reelT = 0;
     this.tickReels(0);
+  }
+
+  private pickOpen(): boolean {
+    return this.current === 'levelup' && performance.now() >= this.lockUntil;
+  }
+
+  /** Whether level-up card i can be picked yet (lock passed and its reel landed). Gate every pick path with it. */
+  canPick(i: number): boolean {
+    const card = this.els.levelup.querySelectorAll('.card')[i];
+    return this.pickOpen() && !!card && !card.classList.contains('rolling');
+  }
+
+  /** Unlock the level-up screen and each card once it's pickable, with a small "ready" pop. */
+  private tickLock(): void {
+    if (!this.pickOpen()) return;
+    const el = this.els.levelup;
+    if (el.classList.contains('locked')) el.classList.remove('locked');
+    if (!this.lockCards.length) return;
+    this.lockCards = this.lockCards.filter((c) => {
+      if (c.classList.contains('rolling')) return true;
+      c.classList.replace('locked', 'ready');
+      return false;
+    });
   }
 
   /** Advance the level-up reels: a click per item passing, then each card's landing. */

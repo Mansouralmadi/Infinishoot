@@ -152,6 +152,25 @@ export const MODS: ModDef[] = [
     dmg: (_ev, api) => ({ add: 3 * api.distinctTags() }),
     readout: (api) => `+${3 * api.distinctTags()}`,
   },
+  {
+    id: 'wildfire',
+    name: 'Wildfire',
+    icon: '☀',
+    color: '#ff7a2f',
+    rarity: 'uncommon',
+    price: 6,
+    desc: 'Burning enemies burst into flames when they die, setting the enemies around them on fire (Fire).',
+    synergy: ['fire'],
+    onKill: (e, source, api, st) => {
+      if ((e.burnT <= 0 && source !== 'burn') || st.t > 0) return;
+      // Fire builds kill fast: at most ~7 bursts a second.
+      st.t = 0.15;
+      api.blast(e.x, e.z, 2.2, 12 + 2 * api.level, '#ff7a2f', 'wildfire', ['fire']);
+    },
+    tick: (dt, _api, st) => {
+      st.t -= dt;
+    },
+  },
 
   // ---------------------------------------------------------------- triggers
   {
@@ -283,6 +302,37 @@ export const MODS: ModDef[] = [
     desc: 'Critical hits arc lightning to 2 nearby enemies (Chain, Shock).',
     synergy: ['chain', 'shock'],
     onCrit: (ev, api) => api.zap(ev.e, 2, 20),
+  },
+  {
+    id: 'overkill',
+    name: 'Overkill',
+    icon: '↯',
+    color: '#ffe14d',
+    rarity: 'rare',
+    price: 8,
+    desc: 'Big kills carry on: half the damage past a kill arcs to the nearest enemy (Chain, Shock).',
+    synergy: ['chain', 'shock'],
+    onKill: (e, _s, api, st) => {
+      const extra = -e.hp * 0.5;
+      // st.t blocks re-entry, so the arc's own kills don't arc again.
+      if (extra < 10 || st.t) return;
+      st.t = 1;
+      api.zap(e, 1, extra);
+      st.t = 0;
+    },
+  },
+  {
+    id: 'phase_step',
+    name: 'Phase Step',
+    icon: '≈',
+    color: '#c4b8ff',
+    rarity: 'common',
+    price: 4,
+    desc: 'You stay invulnerable for 0.5s after every dash.',
+    onDash: (api) => {
+      const p = api.player;
+      p.invuln = Math.max(p.invuln, 0.7); // dash 0.16s + 0.5s
+    },
   },
 
   // ---------------------------------------------------------------- scaling

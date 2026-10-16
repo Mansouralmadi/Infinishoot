@@ -31,7 +31,7 @@ export function reelAt(steps: number[], t: number): { pos: number; passed: numbe
   return { pos: Math.ceil((steps.length - passed - f) * 3) / 3, passed };
 }
 
-const REEL_POOL = [...Object.values(WEAPONS), ...Object.values(PASSIVES)];
+const REEL_POOL = [...Object.values(WEAPONS), ...Object.values(PASSIVES).filter((d) => !d.coop)];
 
 /** n random items for a reel strip, never `not` and never the same twice in a row. */
 export function decoys(n: number, not: string): { id: string; name: string; color: string; icon: string }[] {
@@ -94,6 +94,38 @@ export interface LoadoutItem {
   kind: 'weapon' | 'passive';
 }
 
+/** Minimap input: world positions on the XZ plane; the arena spans -half..half on both axes. */
+export interface MinimapView {
+  half: number;
+  me: { x: number; z: number; color: string };
+  mates: { x: number; z: number; color: string; down: boolean }[];
+  boss: { x: number; z: number } | null;
+  elites: { x: number; z: number }[];
+  chests: { x: number; z: number }[];
+  portal: { x: number; z: number } | null;
+}
+
+/** Co-op name tag: screen position over the teammate's head, plus distance (m) for the off-screen edge pointer. */
+export interface TeamTag {
+  x: number;
+  y: number;
+  name: string;
+  color: string;
+  down: boolean;
+  revive01: number;
+  onScreen: boolean;
+  dist?: number;
+}
+
+/** Minimap size in canvas pixels; each one is drawn as one UI pixel (--p). */
+const MM = 48;
+// Tiny sprites for the minimap: '#' = colour, 'w' = white, 'k' = ink. Each gets a 1px ink outline.
+const MM_ME = ['###', '###', '###'];
+const MM_X = ['#.#', '.#.', '#.#'];
+const MM_SKULL = ['.###.', '#k#k#', '#####', '.#.#.'];
+const MM_RING = ['.###.', '#...#', '#...#', '#...#', '.###.'];
+const MM_DOT = ['##', '##'];
+
 export const fmtScore = (n: number) => Math.floor(n).toLocaleString('en-US');
 const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -131,6 +163,8 @@ export class Hud {
          <div id="team"></div>
          <div id="ebars"></div>
          <div id="tags"></div>
+         <canvas id="minimap" width="${MM}" height="${MM}" hidden></canvas>
+         <div id="downed" hidden><div class="t">YOU'RE DOWN</div><div class="bar"></div><div class="s"></div><div class="h">A TEAMMATE MUST STAND NEXT TO YOU</div></div>
          <div id="meters">
            <div id="dashpip" class="pip"><span>DASH</span></div>
            <div id="bombpip" class="pip"><span>BOMB</span></div>
@@ -277,13 +311,14 @@ export class Hud {
 
   private lastMods = '';
   private lastTeam = '';
-  private tagEls: HTMLElement[] = [];
+  private tagEls: { el: HTMLElement; nm: HTMLElement; rv: HTMLElement; arrow: HTMLElement; label: string; rvPct: number; dir: number; color: string }[] = [];
 
-  /** Co-op: teammate life bars (top-left) and floating name tags. */
-  setTeam(
-    team: { name: string; color: string; hp01: number; down: boolean; left: boolean }[],
-    tags: { x: number; y: number; name: string; color: string; down: boolean; revive01: number; onScreen: boolean }[],
-  ): void {
+  /**
+   * Co-op: teammate life bars (top-left) and floating name tags. Off-screen
+   * teammates get an edge pointer in their colour with name and distance; a
+   * downed teammate's tag carries a revive progress bar.
+   */
+  setTeam(team: { name: string; color: string; hp01: number; down: boolean; left: boolean }[], tags: TeamTag[]): void {
     const html = team
       .map(
         (t) =>
@@ -296,28 +331,109 @@ export class Hud {
     }
     const root = this.el('#tags');
     while (this.tagEls.length < tags.length) {
-      const d = document.createElement('div');
-      d.className = 'tag';
-      root.appendChild(d);
-      this.tagEls.push(d);
+      const el = document.createElement('div');
+      el.className = 'tag';
+      el.innerHTML = '<div class="rv"><span></span><div class="bar"></div></div><div class="nm"></div><i class="arrow"></i>';
+      root.appendChild(el);
+      this.tagEls.push({ el, nm: el.querySelector('.nm')!, rv: el.querySelector('.rv span')!, arrow: el.querySelector('.arrow')!, label: '', rvPct: -1, dir: 99, color: '' });
     }
+    const cx = innerWidth / 2;
+    const cy = innerHeight / 2;
     this.tagEls.forEach((d, i) => {
       const t = tags[i];
-      if (!t || !t.onScreen) {
-        d.style.display = 'none';
-        return;
+      d.el.style.display = t ? '' : 'none';
+      if (!t) return;
+      if (d.color !== t.color) d.el.style.setProperty('--c', (d.color = t.color));
+      const edge = !t.onScreen;
+      if (edge) {
+        // Pin to a rectangle inset from the screen edge, along the line from the centre (wider inset left/right for the name).
+        const dx = t.x - cx;
+        const dy = t.y - cy;
+        const k = Math.min((cx - 90) / Math.abs(dx || 1e-6), (cy - 64) / Math.abs(dy || 1e-6));
+        d.el.style.transform = `translate(${Math.round(cx + dx * k)}px, ${Math.round(cy + dy * k)}px) translate(-50%, -50%)`;
+        // 8 directions keep the arrow a clean sprite; it sits on that side of the tag.
+        const dir = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+        if (dir !== d.dir) {
+          d.dir = dir;
+          const a = (dir * Math.PI) / 4;
+          d.arrow.style.cssText = `--ax:${Math.round(Math.cos(a))};--ay:${Math.round(Math.sin(a))};--ang:${dir * 45}deg`;
+        }
+      } else {
+        d.el.style.transform = `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) translate(-50%, -100%)`;
       }
-      d.style.display = '';
-      d.style.setProperty('--c', t.color);
-      d.style.transform = `translate(${t.x}px, ${t.y}px) translate(-50%, -100%)`;
-      const label = t.down ? `${t.name} - REVIVE!` : t.name;
-      if (d.dataset.label !== label) {
-        d.dataset.label = label;
-        d.textContent = label;
+      d.el.classList.toggle('edge', edge);
+      d.el.classList.toggle('down', t.down);
+      const label = edge && t.dist !== undefined ? `${t.name} ${Math.round(t.dist)}m` : t.name;
+      if (d.label !== label) d.nm.textContent = d.label = label;
+      // Revive progress: whole percent, so the DOM only changes when it moves.
+      const pct = t.down ? Math.floor(Math.max(0, Math.min(1, t.revive01)) * 100) : -1;
+      if (pct !== d.rvPct) {
+        d.rvPct = pct;
+        d.el.style.setProperty('--rv', String(Math.max(0, pct) / 100));
+        d.el.classList.toggle('rev', pct > 0);
+        d.rv.textContent = pct > 0 ? `REVIVING ${pct}%` : 'REVIVE ME!';
       }
-      d.classList.toggle('down', t.down);
-      d.style.setProperty('--rv', String(t.revive01));
     });
+  }
+
+  private lastDowned = -2;
+
+  /** Local player downed in co-op: centre panel with the revive progress (null hides it). */
+  setDowned(state: { revive01: number } | null): void {
+    const pct = state ? Math.floor(Math.max(0, Math.min(1, state.revive01)) * 100) : -1;
+    if (pct === this.lastDowned) return;
+    this.lastDowned = pct;
+    const el = this.el('#downed');
+    el.hidden = !state;
+    if (!state) return;
+    el.style.setProperty('--rv', String(pct / 100));
+    el.classList.toggle('rev', pct > 0);
+    this.text('#downed .s', pct > 0 ? `REVIVING ${pct}%` : 'WAITING FOR HELP');
+  }
+
+  private mmG: CanvasRenderingContext2D | null = null;
+  private mmT = -1e9;
+
+  /** Minimap of the arena (bottom-right, above the Mods). Call every frame; redraws at ~15 Hz. null hides it. */
+  setMinimap(m: MinimapView | null): void {
+    const cv = this.el('#minimap') as HTMLCanvasElement;
+    if (cv.hidden !== !m) {
+      cv.hidden = !m;
+      this.mmT = -1e9;
+    }
+    const now = performance.now();
+    if (!m || now - this.mmT < 66) return;
+    this.mmT = now;
+    const g = (this.mmG ??= cv.getContext('2d')!);
+    const k = MM / (2 * m.half);
+    const at = (v: number) => Math.max(0, Math.min(MM - 1, Math.floor((v + m.half) * k)));
+    // Sprite centred on a world point: ink outline first, then the pixels.
+    const put = (rows: string[], x: number, z: number, color: string) => {
+      const ox = at(x) - (rows[0].length >> 1);
+      const oy = at(z) - (rows.length >> 1);
+      g.fillStyle = '#1a1c2c';
+      rows.forEach((r, y) => [...r].forEach((c, x2) => c !== '.' && g.fillRect(ox + x2 - 1, oy + y - 1, 3, 3)));
+      rows.forEach((r, y) =>
+        [...r].forEach((c, x2) => {
+          if (c === '.' || c === 'k') return;
+          g.fillStyle = c === 'w' ? '#f4f4f4' : color;
+          g.fillRect(ox + x2, oy + y, 1, 1);
+        }),
+      );
+    };
+    g.clearRect(0, 0, MM, MM);
+    g.fillStyle = '#333c57';
+    for (let i = 1; i < 4; i++) {
+      g.fillRect((MM * i) / 4, 0, 1, MM);
+      g.fillRect(0, (MM * i) / 4, MM, 1);
+    }
+    const blink = Math.floor(now / 250) % 2 === 0;
+    for (const c of m.chests) put(MM_DOT, c.x, c.z, '#ffcd75');
+    if (m.portal) put(MM_RING, m.portal.x, m.portal.z, blink ? '#73eff7' : '#41a6f6');
+    for (const e of m.elites) put(MM_DOT, e.x, e.z, '#ef7d57');
+    if (m.boss) put(MM_SKULL, m.boss.x, m.boss.z, '#b13e53');
+    for (const t of m.mates) put(t.down ? MM_X : MM_ME, t.x, t.z, t.down ? (blink ? '#b13e53' : '#f4f4f4') : t.color);
+    put(MM_ME, m.me.x, m.me.z, blink ? '#f4f4f4' : m.me.color);
   }
 
   private ebars: { el: HTMLElement; fill: HTMLElement; trail: HTMLElement; hp: number; hitT: number; shown: boolean }[] = [];

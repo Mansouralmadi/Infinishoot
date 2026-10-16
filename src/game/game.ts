@@ -7,8 +7,10 @@ import { ENEMIES, type EnemyDef } from '../data/enemies';
 import { ACHIEVEMENTS } from '../data/meta';
 import { MOD_BY_ID } from '../data/mods';
 import type { Tag } from '../data/tags';
+import { PASSIVES } from '../data/passives';
 import { SPECIALS } from '../data/specials';
 import { WEAPONS } from '../data/weapons';
+import { passiveTuning } from './stats';
 import { resetSpecials, startSpecial, updateSpecials, type SpecialApi } from './specials';
 import { sfx } from '../audio/sfx';
 import { NetClient, NetHost } from '../net/peer';
@@ -41,7 +43,11 @@ import { createWeapon, type Buster, type DamageOpts, type WeaponCtx } from './we
 
 export { economyTuning } from './hero';
 
+/** Stages per loop: every LOOP_STAGES-th stage ends with the final boss, then the biomes repeat, harder. */
+export const LOOP_STAGES = 4;
+
 export const scoreTuning = {
+  victoryBonus: 50000, // x loop number, for beating the final boss
   levelUpHeal: 10, // life restored to every living hero on each level-up
   comboWindow: 2.0, // seconds a combo survives without a kill
   tiers: [0, 25, 75, 150, 300, 500, 800, 1200], // combo needed for x1..x8
@@ -188,6 +194,8 @@ export class Game implements HeroWorld {
   overloads = 0;
   private elitesRun = 0;
   private bossesRun = 0;
+  /** Final bosses beaten this run (one per loop). */
+  private victories = 0;
   private newAchievements: string[] = [];
   private boss: Enemy | null = null;
   private comboT = 0;
@@ -317,6 +325,10 @@ export class Game implements HeroWorld {
   // ------------------------------------------------------------------ accessors
 
   /** This machine's hero. */
+  get coop(): boolean {
+    return this.heroes.filter((h) => !h.left).length > 1;
+  }
+
   get hero(): Hero {
     return this.heroes[this.local];
   }
@@ -556,7 +568,7 @@ export class Game implements HeroWorld {
     this.level = 1;
     this.xp = 0;
     this.xpNext = xpForLevel(1);
-    this.elitesRun = this.bossesRun = this.overloads = 0;
+    this.elitesRun = this.bossesRun = this.overloads = this.victories = 0;
     this.newAchievements = [];
     this.director.players = this.heroes.length;
     for (const h of this.heroes) {
@@ -598,6 +610,13 @@ export class Game implements HeroWorld {
     this.startRun();
   }
 
+  /** Stage banner subtitle: biome, loop and what the stage ends with. */
+  private stageSub(stage: number): string {
+    const loop = Math.ceil(stage / LOOP_STAGES);
+    const final = stage % LOOP_STAGES === 0 ? '<br>FINAL BOSS STAGE' : '';
+    return `${biomeForStage(stage).name.toUpperCase()}${loop > 1 ? ` · LOOP ${loop}` : ''}<br>SURVIVE ${Math.round(this.director.duration / 60)} MINUTES${final}`;
+  }
+
   private loadStage(stage: number): void {
     this.stage = stage;
     this.loadArena((this.seed ^ Math.imul(stage, 0x9e3779b1)) >>> 0, stage);
@@ -613,7 +632,7 @@ export class Game implements HeroWorld {
     this.mode = 'fight';
     this.modeT = 0;
     if (this.role === 'host') this.host!.broadcast({ t: 'stage', stage, seed: this.seed });
-    this.vfx.banner(`STAGE ${stage}`, `${biomeForStage(stage).name.toUpperCase()}<br>SURVIVE ${Math.round(this.director.duration / 60)} MINUTES`, 2.2);
+    this.vfx.banner(`STAGE ${stage}`, this.stageSub(stage), 2.2);
     this.vfx.sound('wave', NaN, NaN);
     this.checkAchievements();
   }
@@ -701,9 +720,21 @@ export class Game implements HeroWorld {
     }
     let sub = `+${economyTuning.clearGold} GOLD + INTEREST`;
     if (noHit) sub += `<br>NO-HIT BONUS +${noHit.toLocaleString('en-US')}`;
-    this.vfx.banner('STAGE CLEAR!', sub, 2.4);
-    this.vfx.sound('stageClear', NaN, NaN);
-    this.vfx.flash(0.5);
+    if (this.stage % LOOP_STAGES === 0) {
+      // The final boss fell: that's the ending. The run carries on as a harder loop.
+      const loop = this.stage / LOOP_STAGES;
+      const bonus = scoreTuning.victoryBonus * loop;
+      this.score += bonus;
+      this.victories++;
+      this.vfx.banner(loop === 1 ? 'VICTORY!' : `LOOP ${loop} CLEARED!`, `THE FINAL BOSS FALLS · +${bonus.toLocaleString('en-US')}<br>LOOP ${loop + 1} AWAITS: EVERYTHING HITS HARDER`, 4.5);
+      this.vfx.sound('legendaryPick', NaN, NaN);
+      this.vfx.flash(1);
+      for (const h of this.heroes) if (!h.left) this.legendaryBurst(h);
+    } else {
+      this.vfx.banner('STAGE CLEAR!', sub, 2.4);
+      this.vfx.sound('stageClear', NaN, NaN);
+      this.vfx.flash(0.5);
+    }
     this.checkAchievements();
   }
 
@@ -732,7 +763,7 @@ export class Game implements HeroWorld {
       for (const h of this.heroes) h.gold = 0;
       this.mode = 'fight';
       this.modeT = 0;
-      this.vfx.banner(`STAGE ${this.stage}`, `${biomeForStage(this.stage).name.toUpperCase()}<br>SURVIVE ${Math.round(this.director.duration / 60)} MINUTES`, 2.2);
+      this.vfx.banner(`STAGE ${this.stage}`, this.stageSub(this.stage), 2.2);
       return;
     }
     this.openPortal();
@@ -944,11 +975,17 @@ export class Game implements HeroWorld {
   private legendaryFx(h: Hero, name: string): void {
     const p = h.player;
     this.vfx.sound('legendaryPick', p.x, p.z);
+    this.legendaryBurst(h);
+    this.vfx.banner('LEGENDARY!', this.heroes.length > 1 ? `${h.name}: ${name}` : name, 1.8);
+  }
+
+  /** Golden fountain, rings and shake around a hero. */
+  private legendaryBurst(h: Hero): void {
+    const p = h.player;
     this.vfx.burst(p.x, 1, p.z, { count: 60, color: '#ffcd75', color2: '#ffffff', speed: [4, 12], size: [0.15, 0.4], life: [0.6, 1.2], up: 12, gravity: 9 });
     this.vfx.ring(p.x, p.z, 1, 14, '#ffcd75', 0.6);
     this.vfx.ring(p.x, p.z, 1, 9, '#ef7d57', 0.45);
     this.vfx.shake(p.x, p.z, 0.6);
-    this.vfx.banner('LEGENDARY!', this.heroes.length > 1 ? `${h.name}: ${name}` : name, 1.8);
   }
 
   private afterPick(h: Hero, color: string): void {
@@ -995,6 +1032,7 @@ export class Game implements HeroWorld {
       ['arsenal', h.weapons.length >= 6],
       ['maxed', h.weapons.some((w) => w.maxed)],
       ['stage_3', this.stage >= 3],
+      ['victory', this.victories > 0 || this.stage > LOOP_STAGES],
     ];
     for (const [id, ok] of want) {
       if (!ok) continue;
@@ -1036,7 +1074,7 @@ export class Game implements HeroWorld {
     // Solo pauses the world; online the game keeps running behind the menu.
     const frozen = (this.paused && this.role === 'solo') || this.mode === 'levelup' || this.mode === 'shop' || this.mode === 'title';
     if (this.mode === 'levelup' && !switched) {
-      for (let k = 0; k < 3; k++) if (input.keyPressed(`Digit${k + 1}`)) this.ui('pick', k);
+      for (let k = 0; k < 3; k++) if (input.keyPressed(`Digit${k + 1}`) && this.screens.canPick(k)) this.ui('pick', k);
       if (input.keyPressed('KeyR') || input.padButtonPressed(3)) this.ui('reroll');
     }
     if (frozen || switched) {
@@ -1112,6 +1150,7 @@ export class Game implements HeroWorld {
 
     // Stage flow
     if (this.mode === 'fight' && anyAlive) {
+      this.director.teamLevel = this.level; // the Reaper comes for high-level teams
       const reqs = this.director.update(dt, this.enemies.activeCount, (id) => this.enemies.countOf(id), this.rng);
       let anchor: { x: number; z: number; def: EnemyDef } | null = null;
       for (const r of reqs) {
@@ -1195,7 +1234,21 @@ export class Game implements HeroWorld {
     h.synergy.moving = p.speed > 1.2;
     if (!p.dead) h.synergy.tick(dt);
     h.refreshLive();
+    if (this.heroes.length > 1 && !p.dead) this.applyTeamAuras(h, dt);
     this.updateFootsteps(h, dt);
+  }
+
+  /** Co-op items worn by teammates near h: Rally Banner, Medic Link, Bond of Steel. */
+  private applyTeamAuras(h: Hero, dt: number): void {
+    let near = 0;
+    for (const o of this.heroes) {
+      if (o === h || o.left || o.player.dead) continue;
+      if (Math.hypot(o.player.x - h.player.x, o.player.z - h.player.z) > passiveTuning.teamRadius) continue;
+      near++;
+      h.stats.damageMul += o.stats.teamDmgAura;
+      if (o.stats.teamHeal > 0) h.player.heal(o.stats.teamHeal * dt);
+    }
+    if (near > 0) h.stats.armor += h.stats.nearMateArmor;
   }
 
   private updateTransition(): void {
@@ -1267,9 +1320,12 @@ export class Game implements HeroWorld {
   private updateRevives(dt: number): void {
     for (const h of this.heroes) {
       if (!h.player.dead || h.left) continue;
-      const near = this.aliveHeroes.some((o) => Math.hypot(o.player.x - h.player.x, o.player.z - h.player.z) < REVIVE_RANGE);
-      h.reviveT = near ? h.reviveT + dt : Math.max(0, h.reviveT - dt * 0.5);
-      if (h.reviveT >= REVIVE_TIME) this.reviveHero(h, 0.4);
+      const helpers = this.aliveHeroes.filter((o) => Math.hypot(o.player.x - h.player.x, o.player.z - h.player.z) < REVIVE_RANGE);
+      // Guardian Angel on a helper: faster revives, more life on getting up.
+      const speed = 1 + Math.max(0, ...helpers.map((o) => o.stats.reviveSpeed));
+      const hp = Math.min(1, 0.4 + Math.max(0, ...helpers.map((o) => o.stats.reviveHp)));
+      h.reviveT = helpers.length ? h.reviveT + dt * speed : Math.max(0, h.reviveT - dt * 0.5);
+      if (h.reviveT >= REVIVE_TIME) this.reviveHero(h, hp);
     }
   }
 
@@ -1306,6 +1362,11 @@ export class Game implements HeroWorld {
     pos ??= this.ringPoint(18, 24, def.radius * (elite ? 1.6 : 1) + 0.2);
     if (!pos) return null;
     this.enemies.spawn(def, pos.x, pos.z, this.spawnOpts({ elite }));
+    if (def.id === 'reaper') {
+      this.vfx.banner('THE REAPER COMES', 'RUN. OR TRY YOUR LUCK.', 2.4);
+      this.vfx.sound('boss', NaN, NaN);
+      this.vfx.flash(0.4);
+    }
     if (elite) {
       this.vfx.toast(`ELITE ${def.name.toUpperCase()} INCOMING!`);
       this.vfx.sound('elite', NaN, NaN);
@@ -1510,6 +1571,7 @@ export class Game implements HeroWorld {
 
   private sourceName(id: string): string {
     if (SPECIALS[id]) return SPECIALS[id].name;
+    if (PASSIVES[id]) return PASSIVES[id].name;
     const named: Record<string, string> = { bomb: 'Bomb', nuke: 'Nuke', burn: 'Burning', shatter: 'Shatter', overload: 'Overload', zap: 'Chain Zaps', exploder: 'Enemy blasts', charge: 'Charge Shot', barrel: 'Barrels' };
     return WEAPONS[id]?.name ?? MOD_BY_ID[id]?.name ?? named[id] ?? 'Other';
   }
@@ -1528,7 +1590,7 @@ export class Game implements HeroWorld {
     // Drops
     this.pickups.spawn(PickupType.Gem, e.x, e.z, xp * dropTuning.xpMul);
     const isBoss = !!def.boss;
-    const big = e.elite || isBoss;
+    const big = e.elite || isBoss || def.id === 'reaper';
     if (big) {
       // Every hero gets a chest from bosses; elites drop one.
       const chests = isBoss ? Math.max(1, this.heroes.filter((h) => !h.left).length) : 1;
@@ -1978,7 +2040,7 @@ export class Game implements HeroWorld {
       e.bombStamp = stamp;
       const n = d || 1;
       // The nuke over-kills normal enemies and takes a big bite out of bosses.
-      const dmg = !nuke ? h.specialP.dmg : e.def.boss ? (e.maxHp * nukeTuning.bossHpFrac) / Math.max(0.1, h.stats.damageMul) : e.maxHp * 20;
+      const dmg = !nuke ? h.specialP.dmg : e.def.boss || e.def.id === 'reaper' ? (e.maxHp * nukeTuning.bossHpFrac) / Math.max(0.1, h.stats.damageMul) : e.maxHp * 20;
       this.damage(e, dmg, { source: nuke ? 'nuke' : 'bomb', dirX: dx / n, dirZ: dz / n, knockback: bombTuning.knockback, noStatus: nuke }, h);
     }
     if (k >= 1) h.bombT = -1;
@@ -2320,7 +2382,7 @@ export class Game implements HeroWorld {
     this.screens.update(input, dt);
     if (this.paused && this.screens.current === 'none') this.paused = false;
     if (this.screens.current === 'levelup' && before === 'levelup') {
-      for (let k = 0; k < 3; k++) if (input.keyPressed(`Digit${k + 1}`)) this.ui('pick', k);
+      for (let k = 0; k < 3; k++) if (input.keyPressed(`Digit${k + 1}`) && this.screens.canPick(k)) this.ui('pick', k);
       if (input.keyPressed('KeyR') || input.padButtonPressed(3)) this.ui('reroll');
     }
     this.runTime += dt;
@@ -2597,6 +2659,8 @@ export class Game implements HeroWorld {
     this.hud.setMods(mods.map((m) => ({ id: m.def.id, icon: m.def.icon, color: m.def.color, name: m.def.name, readout: m.ro, cursed: !!m.def.cursed })));
     this.renderTeam();
     this.renderEliteBars(alpha);
+    this.renderMinimap();
+    this.hud.setDowned(this.heroes.length > 1 && this.isCombatMode && this.hero.player.dead ? { revive01: Math.min(1, this.hero.reviveT / REVIVE_TIME) } : null);
     this.renderChestPointer();
     this.dmg.render(rdt, this.cam.camera);
     const boss = client ? this.netBoss : this.boss && this.boss.active ? { name: this.boss.def.name, hp01: Math.max(0, this.boss.hp / this.boss.maxHp) } : null;
@@ -2682,12 +2746,37 @@ export class Game implements HeroWorld {
   }
 
   /** Teammate bars and name tags (co-op only). */
+  /** Corner minimap: you, teammates, boss, elites, closed chests, the portal. */
+  private renderMinimap(): void {
+    if (!this.isCombatMode) {
+      this.hud.setMinimap(null);
+      return;
+    }
+    const me = this.hero;
+    const elites: { x: number; z: number }[] = [];
+    let boss: { x: number; z: number } | null = null;
+    for (const e of this.enemies.list) {
+      if (!e.active) continue;
+      if (e.def.boss) boss = { x: e.x, z: e.z };
+      else if (e.elite || e.def.id === 'reaper') elites.push({ x: e.x, z: e.z });
+    }
+    this.hud.setMinimap({
+      half: this.arena.halfSize,
+      me: { x: me.player.x, z: me.player.z, color: me.color },
+      mates: this.heroes.filter((h) => h !== me && !h.left).map((h) => ({ x: h.player.x, z: h.player.z, color: h.color, down: h.player.dead })),
+      boss,
+      elites,
+      chests: this.chests.list.filter((c) => c.openT < 0).map((c) => ({ x: c.x, z: c.z })),
+      portal: this.portal.active ? { x: this.portal.x, z: this.portal.z } : null,
+    });
+  }
+
   /** Health bars over elites (bosses use the big boss bar). */
   private renderEliteBars(alpha: number): void {
     const bars: { x: number; y: number; hp01: number; onScreen: boolean }[] = [];
     if (this.isCombatMode && this.screens.current === 'none') {
       for (const e of this.enemies.list) {
-        if (!e.active || !e.elite || e.def.boss || e.hp <= 0) continue;
+        if (!e.active || !(e.elite || e.def.id === 'reaper') || e.def.boss || e.hp <= 0) continue;
         const x = e.px + (e.x - e.px) * alpha;
         const z = e.pz + (e.z - e.pz) * alpha;
         this.tmp.set(x, e.hopY + e.radius * 2.6, z).project(this.cam.camera);
@@ -2722,6 +2811,7 @@ export class Game implements HeroWorld {
           color: h.color,
           down: h.player.dead,
           revive01: h.reviveT / REVIVE_TIME,
+          dist: Math.hypot(h.player.x - this.hero.player.x, h.player.z - this.hero.player.z),
           onScreen: this.tmp.z < 1 && Math.abs(this.tmp.x) < 1.1 && Math.abs(this.tmp.y) < 1.1,
         };
       });

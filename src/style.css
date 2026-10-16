@@ -141,7 +141,11 @@ div.mod-card.sold,
 .lobby,
 .lobby-player,
 .mate .bar,
-#tags .tag,
+#tags .nm,
+#tags .rv .bar,
+#minimap,
+#downed,
+#downed .bar,
 #ebars .bar,
 .key,
 .tag-chip {
@@ -171,7 +175,7 @@ div.mod-card.sold,
 .tag-chip,
 .key,
 .mate .bar,
-#tags .tag,
+#tags .nm,
 #combo .cbar {
   --drop: transparent;
 }
@@ -829,7 +833,8 @@ div.mod-card.sold,
   color: var(--yellow);
 }
 
-#chestptr .arrow {
+#chestptr .arrow,
+#tags .arrow {
   --a: var(--yellow);
   position: absolute;
   width: var(--p);
@@ -889,27 +894,178 @@ div.mod-card.sold,
   opacity: 0.4;
 }
 
+/* Teammate name tags (hud.ts setTeam). Off screen (.edge) they pin to the
+ * screen edge with an arrow in the mate's colour; downed ones (.down) carry a
+ * segmented revive bar that fills while a teammate stands next to them. */
 #tags .tag {
-  --bg: var(--ink);
-  --hi: var(--ink);
-  --lo: var(--ink);
   position: absolute;
   left: 0;
   top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(2 * var(--p));
+  pointer-events: none;
+}
+
+#tags .nm {
+  --bg: var(--ink);
+  --hi: var(--ink);
+  --lo: var(--ink);
   padding: 2px 6px;
   font: 10px var(--label);
   color: var(--c);
   text-shadow: none;
   white-space: nowrap;
-  pointer-events: none;
 }
 
-#tags .tag.down {
+#tags .edge .nm {
+  --ring: var(--c);
+}
+
+#tags .down .nm {
   color: var(--orange);
-  padding-bottom: 8px;
+  animation: flash 0.5s steps(1) infinite;
+}
+
+#tags .arrow {
+  --a: var(--c);
+  display: none;
+  left: calc(50% + var(--ax, 1) * 50%);
+  top: calc(50% + var(--ay, 0) * 50%);
+  margin: calc(-0.5 * var(--p));
+  transform: rotate(var(--ang, 0deg)) translateX(calc(4 * var(--p)));
+}
+
+#tags .edge .arrow {
+  display: block;
+}
+
+#tags .rv {
+  display: none;
+  font: 12px var(--label);
+  color: var(--yellow);
+  white-space: nowrap;
+}
+
+#tags .down .rv {
+  display: block;
+}
+
+#tags .rev .rv {
+  color: var(--lime);
+}
+
+/* 10 segments of 2 + 1 notch UI pixels. */
+#tags .rv .bar {
+  --bg: var(--ink);
+  --hi: var(--ink);
+  --lo: var(--ink);
+  --ring: var(--orange);
+  --drop: transparent;
+  width: calc(32 * var(--p));
+  height: calc(5 * var(--p));
+  margin: var(--p) auto 0;
+  padding: var(--p);
   background:
-    linear-gradient(90deg, var(--lime) calc(var(--rv) * 100%), var(--night) 0) bottom / 100% 4px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 calc(2 * var(--p)), var(--ink) 0 calc(3 * var(--p))) content-box,
+    linear-gradient(90deg, var(--lime) calc(round(down, var(--rv, 0) * 10, 1) * 10%), var(--night) 0) content-box,
     var(--ink);
+}
+
+#tags .rev .rv .bar {
+  --ring: var(--lime);
+  animation: flash 0.4s steps(1) infinite;
+}
+
+/* Local player downed: big revive panel under the hero. */
+#downed {
+  --bg: var(--ink);
+  --hi: var(--night);
+  --lo: var(--ink);
+  --ring: var(--red);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 60%;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 10px 24px 14px;
+  text-align: center;
+  animation: popin 0.2s steps(3) both;
+}
+
+#downed[hidden] {
+  display: none;
+}
+
+#downed.rev {
+  --ring: var(--lime);
+}
+
+#downed .t {
+  font: 48px/1 var(--display);
+  letter-spacing: 2px;
+  color: var(--orange);
+  animation: flash 0.8s steps(1) infinite;
+}
+
+/* 10 segments of 5 + 1 notch UI pixels, two-tone fill like the life bar. */
+#downed .bar {
+  --bg: var(--ink);
+  --hi: var(--ink);
+  --lo: var(--ink);
+  --ring: var(--orange);
+  --drop: transparent;
+  width: calc(62 * var(--p));
+  height: calc(8 * var(--p));
+  margin: 12px auto 8px;
+  padding: var(--p);
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(5 * var(--p)), var(--ink) 0 calc(6 * var(--p))) content-box,
+    linear-gradient(var(--lime) 0 40%, var(--green) 0) 0 0 / calc(round(down, var(--rv, 0) * 10, 1) * 10%) 100% no-repeat content-box,
+    linear-gradient(var(--night), var(--night)) content-box,
+    var(--ink);
+}
+
+#downed.rev .bar {
+  --ring: var(--lime);
+}
+
+#downed .s {
+  font: 14px var(--label);
+  letter-spacing: 1px;
+  color: var(--yellow);
+}
+
+#downed.rev .s {
+  color: var(--lime);
+}
+
+#downed .h {
+  margin-top: 6px;
+  font: 11px var(--label);
+  color: var(--mist);
+}
+
+/* Minimap (hud.ts setMinimap): a 48x48 canvas, one canvas pixel per UI
+ * pixel, bottom-right above the Mods row and its readouts. */
+#minimap {
+  --bg: rgba(26, 28, 44, 0.8);
+  --hi: var(--night);
+  --lo: var(--ink);
+  position: absolute;
+  right: 20px;
+  bottom: 100px;
+  display: block;
+  width: calc(50 * var(--p));
+  height: calc(50 * var(--p));
+  padding: var(--p);
+  image-rendering: pixelated;
+}
+
+#minimap[hidden] {
+  display: none;
 }
 
 /* Elite health bars: a skull and a segmented danger bar over each elite. */
@@ -2986,4 +3142,57 @@ h1.ko {
     transform: translate(-50%, calc(-6 * var(--p)));
     opacity: 0;
   }
+}
+
+/* ---------------------------------------------------------------- pick lock
+ * Level-up cards can't be picked for a moment after they appear, nor before
+ * their reel lands (screens.ts canPick). A locked card shows a bar filling
+ * over --lock seconds and a dim key number; .ready pops the key once. */
+.card .lock {
+  display: none;
+}
+
+.screen button.card.locked .lock {
+  display: block;
+  position: absolute;
+  left: calc(6 * var(--p));
+  right: calc(6 * var(--p));
+  bottom: calc(2 * var(--p));
+  height: calc(2 * var(--p));
+  background: var(--mist);
+}
+
+.screen button.card.locked .lock::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--slate);
+  transform-origin: left;
+  animation: lockfill var(--lock, 0.6s) steps(8) both;
+}
+
+@keyframes lockfill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.screen button.card.locked .key {
+  color: var(--slate);
+}
+
+.screen button.card.ready .key {
+  animation: readypop 0.24s steps(3);
+}
+
+@keyframes readypop {
+  50% {
+    --bg: var(--yellow);
+    color: var(--ink);
+    transform: scale(1.4);
+  }
+}
+
+#scr-levelup.locked .reroll-row .skip {
+  opacity: 0.5;
 }

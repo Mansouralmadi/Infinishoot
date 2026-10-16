@@ -36,6 +36,8 @@ export interface HeroWorld {
   readonly scene: THREE.Scene;
   readonly rng: Rng;
   readonly level: number;
+  /** 2+ players still in the run: co-op items can be offered. */
+  readonly coop: boolean;
   blast(x: number, z: number, r: number, dmg: number, color: string, source: string, tags: Tag[], noStatus: boolean, by: Hero): void;
   zap(from: Enemy, hops: number, dmg: number, by: Hero): void;
   ignite(e: Enemy, dps: number, by: Hero): void;
@@ -315,6 +317,7 @@ export class Hero implements SynergyHost {
     }
     const owned = Object.keys(this.passives).length;
     for (const [id, d] of Object.entries(PASSIVES)) {
+      if (d.coop && !this.world.coop) continue;
       const lv = this.passives[id] ?? 0;
       if (lv >= d.maxLevel || (lv === 0 && owned >= MAX_PASSIVES)) continue;
       cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, level: lv, maxLevel: d.maxLevel, w: lv ? 1.8 * upgrade(d.rarity) : 1.1 * fresh(d.rarity) });
@@ -382,6 +385,7 @@ export class Hero implements SynergyHost {
   chestItem(): { id: string; name: string; color: string; icon: string; text: string; rarity: Rarity } {
     const owned = Object.keys(this.passives).length;
     const passives = Object.values(PASSIVES).filter((d) => {
+      if (d.coop && !this.world.coop) return false;
       const lv = this.passives[d.id] ?? 0;
       return lv < d.maxLevel && (lv > 0 || owned < MAX_PASSIVES);
     });

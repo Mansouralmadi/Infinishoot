@@ -95,7 +95,8 @@ export function installBot(game: Game, input: Input): void {
     inp.mouseButtons = best ? 1 : 0;
     if (bd < 1.3 && p.dashReady01 >= 1) inp.pressed.add('Space');
     if (g.hero.bombCharge >= 1 && Math.hypot(ax, az) > 1) inp.pressed.add('KeyQ');
-    if (g.mode === 'levelup') inp.pressed.add('Digit1');
+    // The bot picks the first card straight away (it skips the human pick lock).
+    if (g.mode === 'levelup' && g.hero.needsPick) (g as unknown as { ui(a: string, i: number): void }).ui('pick', 0);
     if (g.mode === 'shop') shop();
     inp.poll();
     inp.device = 'kbm';

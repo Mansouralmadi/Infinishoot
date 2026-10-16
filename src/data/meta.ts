@@ -19,4 +19,5 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'arsenal', name: 'Full Arsenal', desc: 'Hold 6 weapons at once' },
   { id: 'maxed', name: 'Maxed Out', desc: 'Get a weapon to level 5' },
   { id: 'stage_3', name: 'Deep Diver', desc: 'Reach stage 3' },
+  { id: 'victory', name: 'The End?', desc: 'Defeat the final boss on stage 4' },
 ];

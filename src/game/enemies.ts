@@ -22,6 +22,21 @@ export const bossTuning = {
   enragePace: 0.7, // extra pace multiplier once enraged (also bigger attacks)
 };
 
+/** Omega Overlord (final boss) phases; it uses bossTuning too (phase 2 counts as enraged). */
+export const omegaTuning = {
+  phase2At: 0.6, // HP fraction: adds the bullet spiral, gap waves and aimed fans
+  phase3At: 0.25, // HP fraction: relentless, strikes rain with every attack
+  phase3Pace: 0.75, // extra pace multiplier in phase 3
+  phase3Speed: 1.15, // extra move speed in phase 3
+};
+
+/** Omega Overlord attack rotation per phase. */
+const OMEGA_ORDER: BossAction[][] = [
+  ['ring', 'charge', 'rain', 'slam', 'summon'],
+  ['spiral', 'charge', 'waves', 'rain', 'volley', 'slam', 'summon'],
+  ['spiral', 'charge', 'waves', 'volley', 'slam', 'ring'],
+];
+
 /** Elites (not bosses) hunt harder than their normal kin. */
 export const eliteTuning = {
   speed: 1.2, // move speed multiplier
@@ -181,6 +196,46 @@ function buildModel(def: EnemyDef, add: Part): void {
       }
       break;
     }
+    case 'omega': {
+      // Floating robot emperor: hover skirt, armoured chest with a glowing core,
+      // gold pauldrons, detached fists, red visor and a fan of crown spikes.
+      const GLOW = '#73eff7';
+      add(new THREE.CylinderGeometry(r * 0.7, r * 0.3, r * 0.7, 8), B, 0, r * 0.55, 0);
+      add(new THREE.CylinderGeometry(r * 0.28, r * 0.28, r * 0.08, 8), GLOW, 0, r * 0.18, 0);
+      add(new THREE.BoxGeometry(r * 1.6, r * 0.95, r * 1.0), B, 0, r * 1.3, 0);
+      add(new THREE.BoxGeometry(r * 1.64, r * 0.14, r * 1.04), A, 0, r * 0.88, 0);
+      add(new THREE.OctahedronGeometry(r * 0.28, 0), GLOW, 0, r * 1.35, r * 0.52);
+      add(new THREE.BoxGeometry(r * 0.7, r * 0.55, r * 0.65), B, 0, r * 2.05, 0);
+      add(new THREE.BoxGeometry(r * 0.74, r * 0.16, r * 0.2), '#ff3d5a', 0, r * 2.1, r * 0.28);
+      for (let k = -2; k <= 2; k++) {
+        add(new THREE.ConeGeometry(r * 0.09, r * (0.75 - Math.abs(k) * 0.15), 4).rotateZ(-k * 0.3), A, k * r * 0.2, r * 2.6, -r * 0.12);
+      }
+      for (const sx of [-1, 1]) {
+        add(new THREE.SphereGeometry(r * 0.4, 8, 6), A, sx * r * 0.95, r * 1.75, 0);
+        add(new THREE.ConeGeometry(r * 0.1, r * 0.5, 4).rotateZ(-sx * 0.7), '#ffffff', sx * r * 1.2, r * 2.1, 0);
+        add(new THREE.BoxGeometry(r * 0.5, r * 0.5, r * 0.55), B, sx * r * 1.4, r * 0.95, r * 0.45);
+        add(new THREE.BoxGeometry(r * 0.54, r * 0.14, r * 0.59), A, sx * r * 1.4, r * 1.12, r * 0.45);
+      }
+      break;
+    }
+    case 'reaper': {
+      // Hooded spectre: floating tattered robe, void face with red eyes, scythe.
+      add(new THREE.ConeGeometry(r * 0.95, r * 2.4, 8), B, 0, r * 1.5, 0);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        add(new THREE.ConeGeometry(r * 0.2, r * 0.5, 4).rotateX(Math.PI), B, Math.cos(a) * r * 0.75, r * 0.2, Math.sin(a) * r * 0.75);
+      }
+      add(new THREE.SphereGeometry(r * 0.55, 10, 8), B, 0, r * 2.4, 0);
+      add(new THREE.ConeGeometry(r * 0.35, r * 0.6, 6).rotateX(-0.5), B, 0, r * 2.85, -r * 0.15);
+      add(new THREE.CylinderGeometry(r * 0.36, r * 0.36, 0.04, 10).rotateX(Math.PI / 2), DARK, 0, r * 2.35, r * 0.5);
+      for (const sx of [-1, 1]) add(new THREE.SphereGeometry(r * 0.08, 5, 4), '#ff3d5a', sx * r * 0.14, r * 2.42, r * 0.54);
+      add(new THREE.BoxGeometry(r * 0.3, r * 0.3, r * 0.8), B, r * 0.55, r * 1.7, r * 0.35);
+      add(new THREE.SphereGeometry(r * 0.14, 6, 4), '#f4f4f4', r * 0.85, r * 1.7, r * 0.6);
+      add(new THREE.CylinderGeometry(0.05, 0.05, r * 3.6, 5), '#566c86', r * 0.85, r * 1.7, r * 0.6);
+      // Blade hooks out and down from the top of the staff.
+      add(new THREE.TorusGeometry(r * 0.9, r * 0.09, 3, 10, Math.PI * 0.75).rotateZ(-Math.PI / 4), A, r * 0.85, r * 2.6, r * 0.6);
+      break;
+    }
   }
 }
 
@@ -251,6 +306,8 @@ export class Enemy {
   hitPlayer = false;
   /** Boss below bossTuning.enrageAt HP: faster, bigger attacks. */
   enraged = false;
+  /** Boss phase: 1, 2 once enraged (Omega Overlord also has a phase 3). */
+  phase = 1;
   timerA = 0;
   action: BossAction = 'ring';
   hopY = 0;
@@ -291,6 +348,7 @@ export class Enemy {
     this.sq = this.sqV = this.hopY = 0;
     this.timerA = this.def.boss ? bossTuning.firstAttack : aggro(this, 1 + Math.random() * 2);
     this.enraged = false;
+    this.phase = 1;
     this.burst = this.spin = this.timerB = this.step = 0;
     this.action = 'ring';
     this.strafe = Math.random() < 0.5 ? -1 : 1;
@@ -460,6 +518,7 @@ export class Enemies {
       e.sqV += (-220 * e.sq - 14 * e.sqV) * dt;
       e.sq += e.sqV * dt;
       if (e.slowT > 0) e.slowT -= dt;
+      if (e.def.behavior === 'reaper') e.frozen = e.slowT = 0; // nothing slows the Reaper
 
       if (e.state === 'spawning') {
         e.t -= dt;
@@ -633,12 +692,23 @@ export class Enemies {
           wantX = e.vx;
           wantZ = e.vz;
           break;
+        case 'omega':
+          rigid = this.updateOmega(e, dt, ctx, nx, nz, dist, this.bossSpeed(e, ctx, speed));
+          wantX = e.vx;
+          wantZ = e.vz;
+          break;
+        case 'reaper':
+          // Straight at you, ignoring the speed scaling: just faster than a hero's base speed.
+          wantX = e.vx = nx * e.def.speed;
+          wantZ = e.vz = nz * e.def.speed;
+          e.facing = Math.atan2(dx, dz);
+          break;
       }
 
       // Separation from neighbours so crowds spread out instead of stacking.
       let sx = 0;
       let sz = 0;
-      if (!e.def.boss) {
+      if (!e.def.boss && e.def.behavior !== 'reaper') {
         const r = e.radius;
         ctx.hash.query(e.x, e.z, r * 2, (o) => {
           if (o === e || !o.alive) return;
@@ -663,7 +733,7 @@ export class Enemies {
       e.kz *= kd;
       e.x += (e.vx + e.kx + sx * 7) * dt;
       e.z += (e.vz + e.kz + sz * 7) * dt;
-      const walled = e.def.behavior !== 'queen' && e.hopY <= 0 && resolveCircleVsBoxes(e, e.radius, ctx.colliders);
+      const walled = e.def.behavior !== 'queen' && e.def.behavior !== 'reaper' && e.hopY <= 0 && resolveCircleVsBoxes(e, e.radius, ctx.colliders);
       if (walled && rigid && e.def.behavior === 'charger') {
         // Rhinos stop (and wobble) when they hit a wall mid-charge.
         this.enter(e, 'recover', aggro(e, e.def.charge!.recover), -7);
@@ -679,19 +749,40 @@ export class Enemies {
     if (s === 'windup' && ctx) ctx.onWindup(e);
   }
 
-  /** Boss move speed; also flips the boss into its enraged phase at low HP. */
+  /** Boss move speed; also advances the boss phase (enrage) as HP drops. */
   private bossSpeed(e: Enemy, ctx: EnemyCtx, speed: number): number {
-    if (!e.enraged && e.hp < e.maxHp * bossTuning.enrageAt) {
+    const f = e.hp / e.maxHp;
+    const o = omegaTuning;
+    const phase = e.def.behavior === 'omega' ? (f < o.phase3At ? 3 : f < o.phase2At ? 2 : 1) : f < bossTuning.enrageAt ? 2 : 1;
+    if (phase > e.phase) {
+      e.phase = phase;
       e.enraged = true;
       e.squash(-10);
       ctx.onEnrage(e);
     }
-    return speed * bossTuning.speed * (e.enraged ? bossTuning.enrageSpeed : 1);
+    return speed * bossTuning.speed * (e.enraged ? bossTuning.enrageSpeed : 1) * (e.phase >= 3 ? o.phase3Speed : 1);
   }
 
   /** Multiplier on boss pauses and recovery (smaller = more aggressive). */
   private pace(e: Enemy): number {
-    return bossTuning.pace * (e.enraged ? bossTuning.enragePace : 1);
+    return bossTuning.pace * (e.enraged ? bossTuning.enragePace : 1) * (e.phase >= 3 ? omegaTuning.phase3Pace : 1);
+  }
+
+  /** Telegraphed ground strike on (x, z) plus `n` more scattered around it, landing one after another. */
+  private rain(ctx: EnemyCtx, x: number, z: number, n: number, damage: number): void {
+    ctx.strike(x, z, 2.2, 1.1, damage);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random();
+      const d = 3.5 + Math.random() * 3;
+      ctx.strike(x + Math.cos(a) * d, z + Math.sin(a) * d, 2.2, 1.1 + i * 0.12, damage);
+    }
+  }
+
+  private ring(e: Enemy, ctx: EnemyCtx, n: number, speed: number, damage: number, off: number): void {
+    for (let i = 0; i < n; i++) {
+      const a = off + (i / n) * Math.PI * 2;
+      ctx.fireBullet(e, Math.cos(a), Math.sin(a), speed, damage);
+    }
   }
 
   private lockOn(e: Enemy, nx: number, nz: number, dx: number, dz: number): void {
@@ -897,13 +988,7 @@ export class Enemies {
         e.spin = 0;
         this.enter(e, 'attack', 1.2, 4);
       } else if (e.action === 'rain') {
-        ctx.strike(tgt.x, tgt.z, 2.2, 1.1, 18);
-        const strikes = e.enraged ? 9 : 6;
-        for (let i = 0; i < strikes; i++) {
-          const a = (i / strikes) * Math.PI * 2 + Math.random();
-          const d = 3.5 + Math.random() * 3;
-          ctx.strike(tgt.x + Math.cos(a) * d, tgt.z + Math.sin(a) * d, 2.2, 1.1 + i * 0.12, 18);
-        }
+        this.rain(ctx, tgt.x, tgt.z, e.enraged ? 9 : 6, 18);
         this.enter(e, 'recover', 1.0 * this.pace(e), 6);
       } else {
         for (let i = 0; i < 6; i++) {
@@ -933,6 +1018,151 @@ export class Enemies {
       e.state = 'move';
       e.timerA = 1.6 * this.pace(e);
     }
+  }
+
+  /**
+   * Omega Overlord, the final boss. Phase 1 mixes the other bosses' attacks:
+   * staggered rings, charge chains, strike rain, jump slams and summons. Phase 2
+   * (omegaTuning.phase2At) adds a counter-rotating bullet spiral, gap waves and
+   * aimed fans, and its charges end in a burst. Phase 3 (phase3At) is faster and
+   * rains strikes on you with every attack. Every attack winds up for at least
+   * 0.4 s and every pattern leaves gaps. Returns true while charging or airborne.
+   */
+  private updateOmega(e: Enemy, dt: number, ctx: EnemyCtx, nx: number, nz: number, dist: number, speed: number): boolean {
+    const tgt = ctx.target;
+    const ph = e.phase;
+    const C = e.def.charge!;
+    if (e.state === 'move') {
+      e.facing = Math.atan2(nx, nz);
+      e.vx = nx * speed;
+      e.vz = nz * speed;
+      e.timerA -= dt;
+      if (e.timerA <= 0 && ctx.targetAlive) {
+        const order = OMEGA_ORDER[ph - 1];
+        // Far away: close in with a charge or a jump.
+        e.action = dist > C.range ? (e.step % 2 ? 'slam' : 'charge') : order[e.step % order.length];
+        e.step++;
+        e.vx = e.vz = 0;
+        e.burst = e.action === 'slam' ? ph : ph + 1; // slams, charges, rings, waves, fans
+        e.targetX = tgt.x;
+        e.targetZ = tgt.z;
+        if (e.action === 'charge') this.lockOn(e, nx, nz, nx, nz);
+        if (ph === 3 && e.action !== 'rain') this.rain(ctx, tgt.x, tgt.z, 2, 22);
+        this.enter(e, 'windup', e.action === 'charge' ? C.windup : e.action === 'slam' ? 1.0 : 0.7, -6, ctx);
+      }
+      return false;
+    }
+    if (e.state === 'windup') {
+      e.vx = e.vz = 0;
+      if (e.action === 'charge' && e.t > 0.35) this.lockOn(e, nx, nz, nx, nz);
+      if (e.action === 'slam' && e.t > 0.45) {
+        e.targetX += (tgt.x - e.targetX) * Math.min(1, dt * 3);
+        e.targetZ += (tgt.z - e.targetZ) * Math.min(1, dt * 3);
+      }
+      if (e.t > 0) return false;
+      if (e.action === 'charge') this.enter(e, 'attack', C.duration, 9);
+      else if (e.action === 'slam') {
+        e.fromX = e.x;
+        e.fromZ = e.z;
+        this.enter(e, 'attack', 0.6, 10);
+      } else if (e.action === 'rain') {
+        this.rain(ctx, tgt.x, tgt.z, 4 + ph * 2, 22);
+        this.enter(e, 'recover', this.pace(e), 6);
+      } else if (e.action === 'summon') {
+        const n = 6 + ph * 2;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          ctx.spawnChild(ph >= 2 && i % 2 ? 'exploder' : 'zippy', e.x + Math.cos(a) * 3.2, e.z + Math.sin(a) * 3.2, e);
+        }
+        this.enter(e, 'recover', 0.8 * this.pace(e), 8);
+      } else {
+        // Timed patterns (ring, spiral, waves, volley) play out in 'attack'.
+        e.timerB = 0;
+        e.spin = Math.atan2(nz, nx);
+        this.enter(e, 'attack', e.action === 'spiral' ? 2 + ph * 0.5 : e.burst * (e.action === 'waves' ? 0.5 : 0.35), 6);
+      }
+      return false;
+    }
+    if (e.state === 'attack') {
+      if (e.action === 'charge') {
+        e.vx = e.lungeX * C.speed;
+        e.vz = e.lungeZ * C.speed;
+        if (e.t <= 0) {
+          e.vx = e.vz = 0;
+          if (ph >= 2) this.ring(e, ctx, ph === 3 ? 16 : 10, 6, 14, Math.random());
+          if (--e.burst > 0) {
+            this.lockOn(e, nx, nz, nx, nz);
+            this.enter(e, 'windup', 0.45, -5, ctx);
+          } else this.enter(e, 'recover', C.recover * this.pace(e), -8);
+        }
+        return true;
+      }
+      if (e.action === 'slam') {
+        const k = 1 - Math.max(0, e.t) / 0.6;
+        e.x = e.fromX + (e.targetX - e.fromX) * k;
+        e.z = e.fromZ + (e.targetZ - e.fromZ) * k;
+        e.hopY = Math.sin(k * Math.PI) * 6;
+        e.vx = e.vz = 0;
+        if (e.t <= 0) {
+          e.hopY = 0;
+          ctx.slam(e);
+          if (--e.burst > 0) {
+            e.targetX = tgt.x;
+            e.targetZ = tgt.z;
+            this.enter(e, 'windup', 0.6, -6, ctx);
+          } else this.enter(e, 'recover', this.pace(e), -10);
+        }
+        return true;
+      }
+      e.vx = e.vz = 0;
+      e.timerB -= dt;
+      if (e.action === 'spiral') {
+        // Fast arms one way, slower sparse arms the other: weave through the lattice.
+        while (e.timerB <= 0) {
+          e.timerB += 0.1;
+          e.burst = e.burst ? 0 : 1;
+          for (let k = 0; k < 3; k++) {
+            const a = e.spin + (k / 3) * Math.PI * 2;
+            ctx.fireBullet(e, Math.cos(a), Math.sin(a), 7, 13);
+            const b = -e.spin + (k / 3) * Math.PI * 2 + Math.PI / 3;
+            if (e.burst) ctx.fireBullet(e, Math.cos(b), Math.sin(b), 5, 13);
+          }
+          e.spin += 0.22;
+        }
+      } else if (e.timerB <= 0 && e.burst > 0) {
+        e.timerB = e.action === 'waves' ? 0.5 : 0.35;
+        e.burst--;
+        const aim = Math.atan2(nz, nx);
+        if (e.action === 'ring') {
+          // Each ring sits in the gaps of the last: slip through, then sidestep.
+          this.ring(e, ctx, 22, 7.5, 15, e.spin + (e.burst % 2) * (Math.PI / 22));
+          e.squash(5);
+        } else if (e.action === 'waves') {
+          // Shockwave rings with a wide gap that moves each wave.
+          const n = 24;
+          const gap = aim + e.burst * 1.3;
+          for (let i = 0; i < n; i++) {
+            const a = gap + ((i + 1.5) / (n + 2)) * Math.PI * 2;
+            ctx.fireBullet(e, Math.cos(a), Math.sin(a), 6.5, 15);
+          }
+          e.squash(-6);
+        } else {
+          for (let i = 0; i < 7; i++) {
+            const a = aim + (i / 6 - 0.5) * 0.9;
+            ctx.fireBullet(e, Math.cos(a), Math.sin(a), 10, 14);
+          }
+          e.squash(5);
+        }
+      }
+      if (e.t <= 0) this.enter(e, 'recover', 0.8 * this.pace(e), 6);
+      return false;
+    }
+    e.vx = e.vz = 0;
+    if (e.t <= 0) {
+      e.state = 'move';
+      e.timerA = 2.0 * this.pace(e);
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------- render
@@ -967,7 +1197,7 @@ export class Enemies {
 
       // Telegraphs drawn on the ground.
       if (e.state === 'windup' && e.frozen <= 0) {
-        if (e.def.behavior === 'charger' || (e.def.behavior === 'rex' && e.action === 'charge')) {
+        if (e.def.behavior === 'charger' || ((e.def.behavior === 'rex' || e.def.behavior === 'omega') && e.action === 'charge')) {
           const C = e.def.charge ?? { speed: 24, duration: 0.5 };
           const len = C.speed * C.duration + 1;
           this.q.setFromAxisAngle(this.up, Math.atan2(e.lungeX, e.lungeZ));
@@ -982,7 +1212,7 @@ export class Enemies {
           d.zones.setMatrixAt(d.zones.count++, this.m4);
         }
       }
-      if (e.def.behavior === 'boss' && e.action === 'slam' && (e.state === 'windup' || e.state === 'attack')) {
+      if ((e.def.behavior === 'boss' || e.def.behavior === 'omega') && e.action === 'slam' && (e.state === 'windup' || e.state === 'attack')) {
         this.m4.makeScale(3.8, 1, 3.8).setPosition(e.targetX, 0.05, e.targetZ);
         d.zones.setMatrixAt(d.zones.count++, this.m4);
       }

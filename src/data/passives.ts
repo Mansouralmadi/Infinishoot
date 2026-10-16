@@ -12,6 +12,8 @@ export interface PassiveDef {
   rarity: Rarity;
   add: Partial<Stats>;
   healOnPick?: number;
+  /** Co-op only: offered only when 2+ players are in the run. */
+  coop?: boolean;
 }
 
 export const PASSIVES: Record<string, PassiveDef> = {
@@ -175,5 +177,101 @@ export const PASSIVES: Record<string, PassiveDef> = {
     desc: '+1 dash in a row before recharging',
     maxLevel: 2,
     add: { dashCharges: 1 },
+  },
+  focus_lens: {
+    id: 'focus_lens',
+    rarity: 'uncommon',
+    name: 'Focus Lens',
+    icon: '◎',
+    color: '#ffcd75',
+    desc: 'Critical hits deal +25% more',
+    maxLevel: 5,
+    add: { critMult: 0.25 },
+  },
+  boxing_glove: {
+    id: 'boxing_glove',
+    rarity: 'common',
+    name: 'Boxing Glove',
+    icon: '●',
+    color: '#ef7d57',
+    desc: '+30% knockback: hits shove enemies further away',
+    maxLevel: 5,
+    add: { knockbackMul: 0.3 },
+  },
+  spiked_shell: {
+    id: 'spiked_shell',
+    rarity: 'uncommon',
+    name: 'Spiked Shell',
+    icon: '✱',
+    color: '#a7f070',
+    desc: 'When you get hit, spikes burst out for +25 damage (+25% per Armor)',
+    maxLevel: 5,
+    add: { thorns: 25 },
+  },
+  tesla_boots: {
+    id: 'tesla_boots',
+    rarity: 'common',
+    name: 'Tesla Boots',
+    icon: 'ϟ',
+    color: '#73eff7',
+    desc: 'Dashing releases a pulse: +15 damage and Shock to enemies around you',
+    maxLevel: 5,
+    add: { dashZap: 15 },
+  },
+  cryo_rounds: {
+    id: 'cryo_rounds',
+    rarity: 'rare',
+    name: 'Cryo Rounds',
+    icon: '❄',
+    color: '#9fe8ff',
+    desc: 'Hits have a +3% chance to Freeze enemies for 1s (kill them frozen to Shatter)',
+    maxLevel: 3,
+    add: { freezeChance: 0.03 },
+  },
+
+  // ---------------------------------------------------------------- co-op only (2+ players)
+  medic_link: {
+    id: 'medic_link',
+    coop: true,
+    rarity: 'common',
+    name: 'Medic Link',
+    icon: '+',
+    color: '#38b764',
+    desc: 'CO-OP: teammates within 7m regenerate +0.4 life per second',
+    maxLevel: 5,
+    add: { teamHeal: 0.4 },
+  },
+  rally_banner: {
+    id: 'rally_banner',
+    coop: true,
+    rarity: 'uncommon',
+    name: 'Rally Banner',
+    icon: '⚑',
+    color: '#b13e53',
+    desc: 'CO-OP: teammates within 7m deal +10% damage',
+    maxLevel: 5,
+    add: { teamDmgAura: 0.1 },
+  },
+  guardian_angel: {
+    id: 'guardian_angel',
+    coop: true,
+    rarity: 'rare',
+    name: 'Guardian Angel',
+    icon: '♰',
+    color: '#f4f4f4',
+    desc: 'CO-OP: revive teammates 50% faster; they get up with +20% life',
+    maxLevel: 3,
+    add: { reviveSpeed: 0.5, reviveHp: 0.2 },
+  },
+  bond_of_steel: {
+    id: 'bond_of_steel',
+    coop: true,
+    rarity: 'common',
+    name: 'Bond of Steel',
+    icon: '∞',
+    color: '#94b0c2',
+    desc: 'CO-OP: take 1 less damage per hit while a teammate is within 7m',
+    maxLevel: 5,
+    add: { nearMateArmor: 1 },
   },
 };
