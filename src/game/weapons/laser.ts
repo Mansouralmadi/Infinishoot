@@ -10,7 +10,7 @@ const FAN = 0.24; // radians between side beams
 const MAX_BEAMS = 5;
 /** Beam i's angle offset in FAN steps: centre, then alternating sides. */
 const SLOT = [0, -1, 1, -2, 2];
-const PRISM = ['#ff7af0', '#5cf2ff', '#fff35c'];
+const PRISM = ['#fff35c', '#5cf2ff', '#a7f070'];
 
 /**
  * Primary arm weapon: a held beam that damages everything along it.

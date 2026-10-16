@@ -111,7 +111,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     tags: ['projectile', 'orbit'],
     name: 'Boomer Disc',
     icon: '◐',
-    color: '#ff3df0',
+    color: '#3de0c8',
     desc: 'Throws a disc that slices out and back.',
     starter: true,
     levels: [
@@ -194,7 +194,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   // ---------------------------------------------------------------- arm weapons
   scatter: {
     id: 'scatter',
-    rarity: 'legendary',
+    rarity: 'uncommon',
     slot: 'primary',
     evo: { name: "Dragon's Breath", color: '#ff5e3a' },
     tags: ['projectile'],
@@ -216,7 +216,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     id: 'laser',
     rarity: 'legendary',
     slot: 'primary',
-    evo: { name: 'Prism Lance', color: '#ff7af0' },
+    evo: { name: 'Prism Lance', color: '#fff35c' },
     tags: ['projectile', 'area'],
     name: 'Pulse Laser',
     icon: '═',
@@ -316,7 +316,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     id: 'rail',
     rarity: 'legendary',
     slot: 'primary',
-    evo: { name: 'Ion Rail', color: '#ff3df0' },
+    evo: { name: 'Ion Rail', color: '#9b6bff' },
     tags: ['projectile'],
     name: 'Rail Driver',
     icon: '⟶',

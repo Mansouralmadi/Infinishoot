@@ -97,6 +97,7 @@ export class Grenade extends Weapon {
         continue;
       }
       ctx.blast(s.x, s.z, p.radius * area, dmg, this.color, 'grenade');
+      ctx.shake(s.x, s.z, 0.3);
       ctx.sound('explode');
       for (let b = 0; b < p.bomblets; b++) {
         const a = (b / p.bomblets) * Math.PI * 2 + ctx.rng.next() * 0.5;
@@ -106,9 +107,10 @@ export class Grenade extends Weapon {
     }
 
     this.cd -= dt;
+    this.tickReady();
     const pl = ctx.player;
     if (!ctx.charging || pl.dead || this.cd > 0 || ctx.flags.busterDisabled) return;
-    this.cd = (p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx);
+    this.startCooldown((p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx));
     pl.muzzle(this.mz);
     // Mega Buster: extra grenades in a fan.
     const n = 1 + ctx.flags.chargeSplit;
@@ -117,9 +119,8 @@ export class Grenade extends Weapon {
       const a = base + (n > 1 ? (k / (n - 1) - 0.5) * 0.6 : 0);
       this.lob(this.mz.x, this.mz.z, pl.x + Math.cos(a) * p.range, pl.z + Math.sin(a) * p.range, false);
     }
-    this.muzzleT = 0.08;
-    pl.recoil = 1.4;
-    ctx.sound('mine');
+    this.armFx(ctx, this.color, 0.9);
+    ctx.sound('lob');
     ctx.particles.burst(this.mz.x, 1.05, this.mz.z, { count: 8, color: '#d8def0', color2: this.color, speed: [2, 5], size: [0.15, 0.3], life: [0.2, 0.4], dir: { x: pl.aim.x, z: pl.aim.z, spread: 1.2 }, up: 2 });
   }
 

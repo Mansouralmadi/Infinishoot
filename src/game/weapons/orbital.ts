@@ -80,6 +80,8 @@ export class OrbitalStrike extends Weapon {
       s.t += dt;
       if (before < s.delay && s.t >= s.delay) {
         ctx.blast(s.x, s.z, s.r, dmg, this.color, 'orbital');
+        ctx.sound('beam');
+        ctx.shake(s.x, s.z, 0.55);
         ctx.fx.ring(s.x, s.z, s.r, s.r * 3, '#ffffff', 0.35);
         ctx.particles.burst(s.x, 0.5, s.z, { count: 30, color: this.color, color2: '#ffffff', speed: [4, 12], size: [0.2, 0.45], life: [0.3, 0.7], up: 9, gravity: 14 });
       }
@@ -97,9 +99,10 @@ export class OrbitalStrike extends Weapon {
     }
 
     this.cd -= dt;
+    this.tickReady();
     const pl = ctx.player;
     if (!ctx.charging || pl.dead || this.cd > 0 || ctx.flags.busterDisabled) return;
-    this.cd = (p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx);
+    this.startCooldown((p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx));
     const r = p.radius * Math.sqrt(ctx.stats.areaMul) * (over ? 1.3 : 1);
     // Mega Buster: extra beams side by side.
     const n = 1 + ctx.flags.chargeSplit;
@@ -108,8 +111,8 @@ export class OrbitalStrike extends Weapon {
       if (this.strikes.length >= MAX) this.strikes.shift();
       this.strikes.push({ x: pl.x + pl.aim.x * p.range - pl.aim.z * side, z: pl.z + pl.aim.z * p.range + pl.aim.x * side, t: 0, delay: p.delay + k * 0.08, r, tickT: 0 });
     }
-    this.muzzleT = 0.06;
-    ctx.sound('charge');
+    this.armFx(ctx, this.color, 0.8);
+    ctx.sound('uplink');
   }
 
   render(_alpha: number, ctx: WeaponCtx): void {

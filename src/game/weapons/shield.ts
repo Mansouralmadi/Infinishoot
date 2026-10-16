@@ -78,8 +78,15 @@ export class Shield extends Weapon {
       ctx.sound('freeze');
     }
     if (this.broken && this.energy >= 0.35) this.broken = false;
+    const wasUp = this.up;
     this.up = want && !this.broken ? 1 : 0;
+    this.ready = this.energy;
     if (!this.up) return;
+    if (!wasUp) {
+      this.armFx(ctx, this.color, 1.2);
+      ctx.fx.ring(pl.x, pl.z, 0.6, this.radius(ctx) * 4, this.color, 0.25);
+      ctx.sound('shieldUp');
+    }
 
     const r = this.radius(ctx);
     // Bullets: blocked, or reflected by the Mirror Aegis (or with Overcharge).
@@ -107,8 +114,11 @@ export class Shield extends Weapon {
         b.blast[i] = 0;
         b.setColor(i, '#ffd23f');
         ctx.fx.star(b.x[i], BULLET_Y, b.z[i], 0.8, this.color, 0.08);
+        ctx.sound('block');
       } else {
-        ctx.particles.burst(b.x[i], BULLET_Y, b.z[i], { count: 3, color: this.color, color2: '#ffffff', speed: [2, 5], size: [0.08, 0.16], life: [0.1, 0.2] });
+        ctx.particles.burst(b.x[i], BULLET_Y, b.z[i], { count: 5, color: this.color, color2: '#ffffff', speed: [2, 6], size: [0.1, 0.2], life: [0.1, 0.25] });
+        ctx.fx.star(b.x[i], BULLET_Y, b.z[i], 0.7, '#ffffff', 0.08);
+        ctx.sound('block');
         b.kill(i--);
       }
     }

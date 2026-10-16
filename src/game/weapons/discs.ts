@@ -34,11 +34,12 @@ export class Discs extends Weapon {
 
   constructor(def: WeaponDef, private scene: THREE.Scene) {
     super(def);
-    // Saw-blade look: magenta disc, white rim, yellow hub and teeth, so the
-    // spin reads from the top-down camera. Merged into one vertex-coloured mesh.
+    // Saw-blade look: steel-teal disc, white rim, yellow hub and teeth, so the
+    // spin reads from the top-down camera (never the enemy-bullet magenta).
+    // Merged into one vertex-coloured mesh.
     const part = (geo: THREE.BufferGeometry, color: string) => paint(geo.index ? geo.toNonIndexed() : geo, color);
     const parts = [
-      part(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 12), '#ff3df0'),
+      part(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 12), '#3de0c8'),
       part(new THREE.TorusGeometry(0.44, 0.06, 4, 12).rotateX(Math.PI / 2), '#ffffff'),
       part(new THREE.CylinderGeometry(0.13, 0.13, 0.16, 6), '#ffd23f'),
     ];

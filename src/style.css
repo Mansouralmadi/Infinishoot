@@ -209,8 +209,20 @@ div.mod-card.sold,
 
 #reticle[data-charge='on']::before,
 #reticle[data-charge='full']::before,
-#reticle[data-charge='over']::before {
+#reticle[data-charge='over']::before,
+#reticle[data-charge='reload']::before,
+#reticle[data-charge='ready']::before {
   opacity: 1;
+}
+
+/* Right-click weapons: the bar refills while reloading, then flashes ready. */
+#reticle[data-charge='reload'] {
+  --rc: var(--sky);
+}
+
+#reticle[data-charge='ready'] {
+  --rc: var(--lime);
+  animation: blink2 0.1s steps(1) infinite;
 }
 
 #reticle[data-charge='full'] {
@@ -2550,4 +2562,54 @@ h1.ko {
   --ring: var(--yellow);
   outline: none;
   z-index: 31;
+}
+
+/* ---------------------------------------------------------------- new vs upgrade
+ * New items get a NEW ribbon; upgrades say UPGRADE, show "LV 2 > 3" and
+ * level pips (owned filled, this pick flashing). */
+.card .tag.upgrade {
+  color: var(--cyan);
+}
+
+.card .ribbon {
+  position: absolute;
+  top: calc(-4 * var(--p));
+  right: calc(-4 * var(--p));
+  padding: 4px 8px 3px;
+  font: 14px var(--label);
+  letter-spacing: 1px;
+  color: var(--ink);
+  background: var(--yellow);
+  box-shadow:
+    0 0 0 var(--p) var(--ink),
+    var(--p) var(--p) 0 var(--p) var(--ink);
+  animation: hop 0.5s steps(1) infinite;
+  z-index: 2;
+}
+
+.card .lvl {
+  font: 11px var(--label);
+  letter-spacing: 1px;
+  color: var(--slate);
+}
+
+.card .pips {
+  display: flex;
+  gap: var(--p);
+}
+
+.card .pips i {
+  width: calc(3 * var(--p));
+  height: calc(3 * var(--p));
+  background: var(--mist);
+  box-shadow: 0 0 0 calc(var(--p) / 2) var(--ink);
+}
+
+.card .pips i.on {
+  background: var(--kc);
+}
+
+.card .pips i.next {
+  background: var(--yellow);
+  animation: flash 0.4s steps(1) infinite;
 }

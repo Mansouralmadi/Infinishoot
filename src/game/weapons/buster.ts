@@ -9,7 +9,8 @@ export const chargeTuning = {
   overBlast: 3.6,
 };
 
-const CHARGE_COLORS = ['#7df9ff', '#3dffb0', '#ff3df0']; // partial, full, overcharged
+// Partial, full, overcharged. Never magenta: that's the enemy bullet colour.
+const CHARGE_COLORS = ['#7df9ff', '#3dffb0', '#ff7a2f'];
 
 /**
  * The aimed arm cannon. Hold fire for rapid shots; hold charge (right mouse /
@@ -129,9 +130,10 @@ export class Buster extends Weapon {
         blast,
       });
     }
-    this.muzzleT = 0.1;
-    pl.recoil = 1.6;
+    this.muzzleT = 0.1 + 0.05 * level;
+    pl.recoil = 1.6 + 0.6 * level;
     ctx.sound(level >= 1 ? 'chargeShot' : 'shoot');
+    if (level >= 1) ctx.shake(this.mz.x, this.mz.z, 0.2 * level);
     ctx.particles.burst(this.mz.x, BULLET_Y, this.mz.z, {
       count: 6 + level * 6,
       color,

@@ -219,6 +219,8 @@ export class Game implements HeroWorld {
   private tmp = new THREE.Vector3();
   private scratch: Enemy[] = [];
   private shownCharge = 0;
+  private lastReady = 1;
+  private readyFlashT = 0;
   /** Telegraphed ground strikes (Hive Queen) counting down. */
   private strikes: { x: number; z: number; r: number; t: number; dmg: number }[] = [];
 
@@ -385,6 +387,7 @@ export class Game implements HeroWorld {
       damage: (e, base, o) => this.damage(e, base, o, hero),
       nearest: (x, z, r, skip) => this.nearestEnemy(x, z, r, skip),
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),
+      shake: (x, z, amount) => this.vfx.shake(x, z, amount),
       hitBarrels: (dmg, inside) => this.barrels.hitWhere(dmg, hero.index, inside),
       blast: (x, z, r, base, color, source) => this.blast(x, z, r, base, color, source, WEAPONS[source]?.tags ?? ['explosive'], false, hero),
       sound: (name) => this.vfx.sound('w:' + name, hero.player.x, hero.player.z),
@@ -2060,7 +2063,7 @@ export class Game implements HeroWorld {
           hf: r2(p.hurtFlash),
           rv: r2(h.reviveT / REVIVE_TIME),
           area: r2(h.stats.areaMul),
-          w: h.weapons.map((w) => [w.def.id, w.level, ...w.net()]),
+          w: h.weapons.map((w) => [w.def.id, w.level, Math.round(w.ready * 20) / 20, ...w.net()]),
         };
       }),
       you: {
@@ -2348,7 +2351,7 @@ export class Game implements HeroWorld {
   private syncWeapons(h: Hero, list: (string | number)[][]): void {
     let changed = h.weapons.length !== list.length;
     for (let i = 0; i < list.length; i++) {
-      const [id, level, ...state] = list[i] as [string, number, ...number[]];
+      const [id, level, ready, ...state] = list[i] as [string, number, number, ...number[]];
       let w = h.weapons[i];
       if (!w || w.def.id !== id) {
         w?.dispose();
@@ -2360,6 +2363,7 @@ export class Game implements HeroWorld {
         w.level = level;
         changed = true;
       }
+      w.ready = ready;
       w.setNet(state);
     }
     while (h.weapons.length > list.length) h.weapons.pop()!.dispose();
@@ -2428,12 +2432,28 @@ export class Game implements HeroWorld {
       this.reticle.style.transform = `translate(${input.mouse.x}px, ${input.mouse.y}px)`;
       this.reticle.style.display = input.mouse.inside ? '' : 'none';
     }
-    // Charge meter: a ring that fills around the crosshair.
-    const charge = (local.weapons[0] as Buster | undefined)?.charge ?? 0;
-    if (charge !== this.shownCharge) {
-      this.shownCharge = charge;
-      this.reticle.style.setProperty('--charge', String(Math.min(1, charge)));
-      this.reticle.dataset.charge = charge >= 2 ? 'over' : charge >= 1 ? 'full' : charge > 0 ? 'on' : '';
+    // Crosshair meter: the Buster's charge, or the right-click weapon reloading.
+    const sec = local.weapons.find((w) => w.def.slot === 'secondary');
+    let meter: number;
+    let state: string;
+    if (sec) {
+      // Ping when a long reload finishes, so you know it's ready without looking.
+      if (sec.ready >= 1 && this.lastReady < 1 && !p.dead && this.isCombatMode) {
+        this.readyFlashT = 0.4;
+        if (sec.def.id !== 'shield' && sec.def.levels[sec.level - 1].p.cd >= 2) sfx.weapon('ready');
+      }
+      this.lastReady = sec.ready;
+      this.readyFlashT = Math.max(0, this.readyFlashT - frameDt);
+      meter = this.readyFlashT > 0 ? 1 : sec.ready;
+      state = this.readyFlashT > 0 ? 'ready' : sec.ready < 1 ? 'reload' : '';
+    } else {
+      meter = (local.weapons[0] as Buster | undefined)?.charge ?? 0;
+      state = meter >= 2 ? 'over' : meter >= 1 ? 'full' : meter > 0 ? 'on' : '';
+    }
+    if (meter !== this.shownCharge || state !== this.reticle.dataset.charge) {
+      this.shownCharge = meter;
+      this.reticle.style.setProperty('--charge', String(Math.min(1, meter)));
+      this.reticle.dataset.charge = state;
     }
 
     // Client-side stage fade (the host fades itself in updateTransition).

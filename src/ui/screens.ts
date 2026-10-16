@@ -71,6 +71,9 @@ export interface Offer {
   text: string;
   tags?: readonly Tag[];
   rarity?: Rarity;
+  /** Level owned now (0 = new) and the item's max, for the upgrade pips. */
+  level?: number;
+  maxLevel?: number;
 }
 
 export interface RunSummary {
@@ -91,6 +94,19 @@ const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60
 /** Title letters as separate spans so a hop can ripple across them. */
 function logoWord(word: string, start: number): string {
   return `<span>${[...word].map((ch, k) => `<i style="--i:${start + k}">${ch}</i>`).join('')}</span>`;
+}
+
+/** A level-up card is a new item, an upgrade of one you own, an evolution or a bonus. */
+function cardMode(o: Offer): 'new' | 'upgrade' | 'evo' | 'bonus' {
+  return o.tag === 'NEW!' ? 'new' : o.tag === 'EVOLVE!' ? 'evo' : o.kind === 'gold' || o.kind === 'heal' ? 'bonus' : 'upgrade';
+}
+
+/** Upgrades show owned levels as filled pips and this pick as a flashing one. */
+function levelPips(o: Offer): string {
+  if (!o.maxLevel || !o.level) return '';
+  const pips = Array.from({ length: o.maxLevel }, (_, k) => `<i class="${k < o.level! ? 'on' : k === o.level ? 'next' : ''}"></i>`).join('');
+  const next = o.level + 1 === o.maxLevel && o.tag === 'EVOLVE!' ? 'EVOLVE' : `LV ${o.level + 1}`;
+  return `<div class="lvl">LV ${o.level} ▸ ${next}</div><div class="pips">${pips}</div>`;
 }
 
 /** Hover card: name, rarity and what it does. */
@@ -437,10 +453,12 @@ export class Screens {
     el.querySelector('h1')!.textContent = title;
     el.querySelector('.cards')!.innerHTML = offers
       .map(
-        (o, i) => `<button class="card ${o.kind} ${o.rarity ? 'r-' + o.rarity : ''}" data-nav data-act="pick" data-index="${i}">
-          <div class="tag ${o.tag === 'NEW!' ? 'new' : o.tag === 'EVOLVE!' ? 'evo' : ''}">${o.tag}</div>
+        (o, i) => `<button class="card ${o.kind} ${o.rarity ? 'r-' + o.rarity : ''} ${cardMode(o)}" data-nav data-act="pick" data-index="${i}">
+          <div class="tag ${cardMode(o)}">${cardMode(o) === 'upgrade' ? '▲ UPGRADE' : o.tag}</div>
+          ${cardMode(o) === 'new' ? '<div class="ribbon">NEW</div>' : ''}
           <div class="icon" style="--c:${o.color}">${iconHtml(o.id, o.color, o.icon)}</div>
           <div class="name">${o.name}</div>
+          ${levelPips(o)}
           <div class="desc">${o.text}</div>
           ${o.tags ? `<div class="chips">${tagChips(o.tags)}</div>` : ''}
           <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : 'BONUS'}</div>

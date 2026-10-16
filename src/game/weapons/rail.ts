@@ -91,7 +91,7 @@ export class Rail extends Weapon {
     for (let k = 0; k < n; k++) this.fire(ctx, base + (n > 1 ? (k / (n - 1) - 0.5) * FAN * (n - 1) : 0), mega);
     this.muzzleT = 0.12;
     pl.recoil = 2.4;
-    ctx.sound('chargeShot');
+    ctx.sound('rail');
   }
 
   private fire(ctx: WeaponCtx, angle: number, mega: boolean): void {

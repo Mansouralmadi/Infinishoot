@@ -92,7 +92,11 @@ export class GravityWell extends Weapon {
       const w = this.wells[i];
       w.t += dt;
       if (w.t < THROW) continue;
-      if (w.t - dt < THROW) ctx.fx.ring(w.x, w.z, r * 0.3, r, this.color, 0.3);
+      if (w.t - dt < THROW) {
+        ctx.fx.ring(w.x, w.z, r * 0.3, r, this.color, 0.3);
+        ctx.fx.ring(w.x, w.z, r * 3, 0.15, '#ffffff', 0.35); // implodes inward
+        ctx.shake(w.x, w.z, 0.2);
+      }
       for (const e of ctx.inRadius(w.x, w.z, r, this.hits)) {
         const dx = w.x - e.x;
         const dz = w.z - e.z;
@@ -119,9 +123,10 @@ export class GravityWell extends Weapon {
     }
 
     this.cd -= dt;
+    this.tickReady();
     const pl = ctx.player;
     if (!ctx.charging || pl.dead || this.cd > 0 || ctx.flags.busterDisabled) return;
-    this.cd = (p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx);
+    this.startCooldown((p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx));
     // Mega Buster: extra vortexes side by side.
     const n = 1 + ctx.flags.chargeSplit;
     for (let k = 0; k < n; k++) {
@@ -129,9 +134,8 @@ export class GravityWell extends Weapon {
       if (this.wells.length >= MAX) this.wells.shift();
       this.wells.push({ fx: pl.x, fz: pl.z, x: pl.x + pl.aim.x * RANGE - pl.aim.z * side, z: pl.z + pl.aim.z * RANGE + pl.aim.x * side, t: 0, tickT: 0 });
     }
-    this.muzzleT = 0.08;
-    pl.recoil = 1.2;
-    ctx.sound('freeze');
+    this.armFx(ctx, this.color, 1.1);
+    ctx.sound('vortex');
   }
 
   render(_alpha: number, ctx: WeaponCtx): void {

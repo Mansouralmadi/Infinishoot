@@ -70,7 +70,11 @@ export interface WeaponCtx {
   hitBarrels(dmg: number, inside: (x: number, z: number) => boolean): void;
   /** Area blast that damages enemies (never the player). */
   blast(x: number, z: number, r: number, base: number, color: string, source: string): void;
-  sound(name: 'zap' | 'disc' | 'missile' | 'mine' | 'freeze' | 'explode' | 'shoot' | 'flame' | 'charge' | 'chargeFull' | 'chargeShot'): void;
+  sound(
+    name: 'zap' | 'disc' | 'missile' | 'mine' | 'freeze' | 'explode' | 'shoot' | 'flame' | 'charge' | 'chargeFull' | 'chargeShot' | 'lob' | 'vortex' | 'shieldUp' | 'block' | 'uplink' | 'beam' | 'rail',
+  ): void;
+  /** Screen shake at a world point (scaled by distance to each player). */
+  shake(x: number, z: number, amount: number): void;
 }
 
 /** Base class for an owned weapon. Levels are 1-based. */
@@ -79,6 +83,10 @@ export abstract class Weapon {
   protected cd = 0.5;
   /** Muzzle flash timer (arm weapons; drives the flash and camera kick). */
   muzzleT = 0;
+  /** Right-click weapons: 0..1 readiness for the crosshair meter (synced to clients). */
+  ready = 1;
+  /** Length of the last cooldown, for `ready`. */
+  protected cdMax = 1;
 
   constructor(readonly def: WeaponDef) {}
 
@@ -107,6 +115,27 @@ export abstract class Weapon {
   /** Right-click arm weapons: recharge speed from Quick Draw / Capacitor. */
   protected rightClickSpeed(ctx: WeaponCtx): number {
     return ctx.stats.chargeSpeed * (1 + ctx.flags.chargeSpeed);
+  }
+
+  /** Right-click weapons: start a cooldown and update `ready` as it runs. */
+  protected startCooldown(seconds: number): void {
+    this.cd = this.cdMax = seconds;
+    this.ready = 0;
+  }
+  protected tickReady(): void {
+    this.ready = this.cd <= 0 ? 1 : 1 - this.cd / this.cdMax;
+  }
+
+  /** Big right-click moment: ring and sparks at the hand, recoil and camera kick. */
+  protected armFx(ctx: WeaponCtx, color: string, size = 1): void {
+    const pl = ctx.player;
+    const m = { x: 0, z: 0 };
+    pl.muzzle(m);
+    ctx.fx.ring(m.x, m.z, 0.4, 2.6 * size, color, 0.22);
+    ctx.fx.star(m.x, 1.05, m.z, 1.2 * size, '#ffffff', 0.1);
+    ctx.particles.burst(m.x, 1.05, m.z, { count: Math.round(10 * size), color, color2: '#ffffff', speed: [3, 9], size: [0.12, 0.28], life: [0.12, 0.3], dir: { x: pl.aim.x, z: pl.aim.z, spread: 1.3 } });
+    pl.recoil = Math.max(pl.recoil, 2);
+    this.muzzleT = Math.max(this.muzzleT, 0.1);
   }
 
   /** Left-click arm weapons: Hair Trigger makes every Nth shot a MEGA shot. */

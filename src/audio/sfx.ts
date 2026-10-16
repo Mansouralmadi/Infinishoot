@@ -271,6 +271,48 @@ class Sfx {
         this.tone(ctx, 'sawtooth', 220 * p, 60, 0.3, 0.16);
         this.noise(ctx, 0.25, 0.25, 900, 3000, 2);
         break;
+      case 'flame':
+        this.noise(ctx, 0.22, 0.3, 700, 2200, 1);
+        this.tone(ctx, 'sawtooth', 160 * p, 90, 0.18, 0.08);
+        break;
+      // Right-click weapons: each gets a heavy, distinct report.
+      case 'lob':
+        this.tone(ctx, 'sine', 190 * p, 80, 0.14, 0.28);
+        this.noise(ctx, 0.1, 0.3, 700, 300, 1);
+        this.tone(ctx, 'square', 900 * p, 600, 0.05, 0.05, 0.05);
+        break;
+      case 'vortex':
+        this.noise(ctx, 0.45, 0.3, 250, 2400, 3);
+        this.tone(ctx, 'sine', 140 * p, 50, 0.45, 0.25);
+        this.tone(ctx, 'triangle', 600 * p, 1500, 0.3, 0.05, 0.1);
+        break;
+      case 'shieldUp':
+        this.tone(ctx, 'triangle', 280 * p, 840, 0.16, 0.14);
+        this.tone(ctx, 'square', 560, 560, 0.2, 0.04, 0.12);
+        this.noise(ctx, 0.2, 0.12, 4000, 6000, 5);
+        break;
+      case 'block':
+        this.tone(ctx, 'square', 1400 * p, 900, 0.05, 0.06);
+        break;
+      case 'uplink':
+        this.tone(ctx, 'square', 1320, 1320, 0.05, 0.07);
+        this.tone(ctx, 'square', 1760, 1760, 0.05, 0.07, 0.07);
+        this.tone(ctx, 'sine', 400, 1800, 0.4, 0.06, 0.14);
+        break;
+      case 'beam':
+        this.tone(ctx, 'sawtooth', 110 * p, 30, 0.7, 0.3);
+        this.noise(ctx, 0.7, 0.45, 2600, 150, 0.7);
+        this.tone(ctx, 'sine', 70, 35, 0.6, 0.35);
+        break;
+      case 'rail':
+        this.noise(ctx, 0.06, 0.4, 7000, 3000, 2);
+        this.tone(ctx, 'sawtooth', 2600 * p, 180, 0.18, 0.14);
+        this.tone(ctx, 'sine', 90, 40, 0.25, 0.25);
+        break;
+      case 'ready':
+        this.tone(ctx, 'triangle', 1568, 1568, 0.06, 0.06);
+        this.tone(ctx, 'triangle', 2093, 2093, 0.12, 0.06, 0.05);
+        break;
     }
   }
 

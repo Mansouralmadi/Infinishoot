@@ -239,10 +239,10 @@ export class Hero implements SynergyHost {
       const rarity = w.def.rarity;
       if (w.def.evo && w.level + 1 === w.def.levels.length) {
         const evo = w.def.evo;
-        cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, rarity, w: 4 * upgrade(rarity) });
+        cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.levels.length, w: 4 * upgrade(rarity) });
         continue;
       }
-      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, w: 3 * upgrade(rarity) });
+      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.evo ? w.def.levels.length - 1 : w.def.levels.length, w: 3 * upgrade(rarity) });
     }
     // Arm weapons don't use auto-weapon slots; one per arm slot.
     const autoCount = this.weapons.filter((w) => !w.def.slot).length;
@@ -256,7 +256,7 @@ export class Hero implements SynergyHost {
     for (const [id, d] of Object.entries(PASSIVES)) {
       const lv = this.passives[id] ?? 0;
       if (lv >= d.maxLevel || (lv === 0 && owned >= MAX_PASSIVES)) continue;
-      cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, w: lv ? 1.8 * upgrade(d.rarity) : 1.1 * fresh(d.rarity) });
+      cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, level: lv, maxLevel: d.maxLevel, w: lv ? 1.8 * upgrade(d.rarity) : 1.1 * fresh(d.rarity) });
     }
     const out: Offer[] = [];
     while (out.length < 3 && cands.length) {
