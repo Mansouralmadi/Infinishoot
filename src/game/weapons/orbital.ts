@@ -106,10 +106,11 @@ export class OrbitalStrike extends Weapon {
     const r = p.radius * Math.sqrt(ctx.stats.areaMul) * (over ? 1.3 : 1);
     // Mega Buster: extra beams side by side.
     const n = 1 + ctx.flags.chargeSplit;
+    const d = pl.landDist(2.5, p.range);
     for (let k = 0; k < n; k++) {
       const side = (k - (n - 1) / 2) * r * 1.8;
       if (this.strikes.length >= MAX) this.strikes.shift();
-      this.strikes.push({ x: pl.x + pl.aim.x * p.range - pl.aim.z * side, z: pl.z + pl.aim.z * p.range + pl.aim.x * side, t: 0, delay: p.delay + k * 0.08, r, tickT: 0 });
+      this.strikes.push({ x: pl.x + pl.aim.x * d - pl.aim.z * side, z: pl.z + pl.aim.z * d + pl.aim.x * side, t: 0, delay: p.delay + k * 0.08, r, tickT: 0 });
     }
     this.armFx(ctx, this.color, 0.8);
     ctx.sound('uplink');

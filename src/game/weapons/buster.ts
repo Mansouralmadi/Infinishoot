@@ -116,7 +116,7 @@ export class Buster extends Weapon {
         dirX: Math.cos(a),
         dirZ: Math.sin(a),
         speed: p.speed * 0.85,
-        life: 0.9,
+        life: 0.55,
         radius: 0.2 * size,
         damage: dmg,
         knockback: 6 + 10 * k,

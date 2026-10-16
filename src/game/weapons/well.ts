@@ -6,7 +6,7 @@ import { Weapon, type WeaponCtx } from './base';
 
 const MAX = 9;
 const THROW = 0.35;
-const RANGE = 7;
+const RANGE = 9; // max throw distance (lands at the cursor inside this)
 const TICK = 0.25;
 
 interface Vortex {
@@ -129,10 +129,11 @@ export class GravityWell extends Weapon {
     this.startCooldown((p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx));
     // Mega Buster: extra vortexes side by side.
     const n = 1 + ctx.flags.chargeSplit;
+    const d = pl.landDist(2.5, RANGE);
     for (let k = 0; k < n; k++) {
       const side = (k - (n - 1) / 2) * r * 1.6;
       if (this.wells.length >= MAX) this.wells.shift();
-      this.wells.push({ fx: pl.x, fz: pl.z, x: pl.x + pl.aim.x * RANGE - pl.aim.z * side, z: pl.z + pl.aim.z * RANGE + pl.aim.x * side, t: 0, tickT: 0 });
+      this.wells.push({ fx: pl.x, fz: pl.z, x: pl.x + pl.aim.x * d - pl.aim.z * side, z: pl.z + pl.aim.z * d + pl.aim.x * side, t: 0, tickT: 0 });
     }
     this.armFx(ctx, this.color, 1.1);
     ctx.sound('vortex');

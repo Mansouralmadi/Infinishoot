@@ -71,7 +71,7 @@ export class Shield extends Weapon {
     const speed = this.rightClickSpeed(ctx);
     const want = ctx.charging && !pl.dead && !this.broken && !ctx.flags.busterDisabled;
     if (want) this.energy -= dt / (p.dur * speed);
-    else this.energy = Math.min(1, this.energy + (dt * speed) / (p.dur * 1.5));
+    else this.energy = Math.min(1, this.energy + (dt * speed) / (p.dur * 0.75));
     if (this.energy <= 0) {
       this.energy = 0;
       this.broken = true;
@@ -109,7 +109,7 @@ export class Shield extends Weapon {
         b.life[i] = 1;
         b.owner[i] = ctx.owner;
         b.kind[i] = 4;
-        b.lastHit[i] = -1;
+        b.clearHits(i);
         b.pierce[i] = 1;
         b.blast[i] = 0;
         b.setColor(i, '#ffd23f');

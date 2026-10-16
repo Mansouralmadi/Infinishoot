@@ -39,6 +39,8 @@ export class Player {
   readonly vel = { x: 0, z: 0 };
   /** Aim direction on the XZ plane (unit). */
   readonly aim = { x: 0, z: 1 };
+  /** Distance to the aim point (mouse); Infinity when aiming by direction (stick). Lobbed weapons land here. */
+  aimDist = Infinity;
 
   hp = playerTuning.maxHp;
   /** Upgrade-derived stats; the game replaces this object when upgrades change. */
@@ -186,9 +188,16 @@ export class Player {
       this.aim.x = dx / l;
       this.aim.z = dz / l;
     }
+    this.aimDist = l;
   }
 
-  setAimDir(x: number, z: number): void {
+  /** Where lobbed and called-in weapons land: the cursor, clamped to [min, max]. */
+  landDist(min: number, max: number): number {
+    return Math.max(min, Math.min(max, this.aimDist));
+  }
+
+  setAimDir(x: number, z: number, dist = Infinity): void {
+    this.aimDist = dist;
     const l = Math.hypot(x, z);
     if (l > 0) {
       this.aim.x = x / l;

@@ -17,8 +17,8 @@ export const directorTuning = {
   spawnPerSecond: 14, // max spawn rate when below target
   // Stage scaling is 1 + per * (stage - 1) + per2 * (stage - 1)^2, so each stage hits harder than the last.
   hpPerStage: 0.9, // enemy HP multiplier growth per stage
-  hpPerStage2: 0.15,
-  hpPerMinute: 0.12, // and within a stage
+  hpPerStage2: 0.25,
+  hpPerMinute: 0.1, // and within a stage
   dmgPerStage: 0.3,
   dmgPerStage2: 0.03,
   speedPerStage: 0.04,

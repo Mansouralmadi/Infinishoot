@@ -1128,7 +1128,7 @@ export class Game implements HeroWorld {
         p.pos.z += (r.z - p.pos.z) * 0.5;
         p.vel.x = r.vx;
         p.vel.z = r.vz;
-        p.setAimDir(r.ax, r.az);
+        p.setAimDir(r.ax, r.az, r.ad < 0 ? Infinity : r.ad);
         if (r.dashing) {
           p.dashT = Math.max(p.dashT, 0.05);
           p.invuln = Math.max(p.invuln, 0.08);
@@ -1531,9 +1531,10 @@ export class Game implements HeroWorld {
     // Napalm: an explosion that catches a burning enemy sets the whole blast alight.
     const napalm = explosive && !noStatus && targets.some((e) => e.burnT > 0);
     if (napalm) this.vfx.ring(x, z, 1, r * 2.2, '#ff5e3a', 0.35);
+    let n = 0;
     for (const e of targets) {
       const d = Math.hypot(e.x - x, e.z - z) || 1;
-      this.damage(e, base, { source, tags, dirX: (e.x - x) / d, dirZ: (e.z - z) / d, knockback: 8, canCrit: true, noStatus }, by);
+      this.damage(e, base, { source, tags, dirX: (e.x - x) / d, dirZ: (e.z - z) / d, knockback: 8, canCrit: true, noStatus, loud: n++ < 2 }, by);
       if (napalm && e.active) this.ignite(e, statusTuning.napalmDps, by);
     }
   }
@@ -1767,9 +1768,8 @@ export class Game implements HeroWorld {
       }
       let hit = null as Enemy | null;
       const r = b.radius[i];
-      const last = b.lastHit[i];
       this.hash.query(x, z, r, (e) => {
-        if (hit || !e.alive || e.hp <= 0 || e.uid === last) return;
+        if (hit || !e.alive || e.hp <= 0 || b.hasHit(i, e.uid)) return;
         const rr = e.radius + r;
         if ((e.x - x) ** 2 + (e.z - z) ** 2 < rr * rr) hit = e;
       });
@@ -1780,7 +1780,7 @@ export class Game implements HeroWorld {
         this.damage(hit, b.damage[i], { source: kind.source, tags: kind.tags, dirX: b.vx[i] / sp, dirZ: b.vz[i] / sp, knockback: b.knockback[i], hx: x, hz: z, canCrit: true, loud: true }, by);
         if (b.pierce[i] > 0) {
           b.pierce[i]--;
-          b.lastHit[i] = hit.uid;
+          b.markHit(i, hit.uid);
         } else {
           this.bulletBlast(i);
           b.kill(i--);
@@ -1971,6 +1971,7 @@ export class Game implements HeroWorld {
         vz: Number(m.vz),
         ax: Number(m.ax),
         az: Number(m.az),
+        ad: Number(m.ad ?? -1),
         firing: !!m.f,
         charging: !!m.c,
         dashing: !!m.d,
@@ -2229,7 +2230,7 @@ export class Game implements HeroWorld {
     const charging = control && (input.mouseDown(2) || input.padButton(2));
     if (this.stepN % INPUT_EVERY === 0 && this.client) {
       const r2 = (v: number) => Math.round(v * 100) / 100;
-      this.client.send({ t: 'i', x: r2(p.x), z: r2(p.z), vx: r2(p.vel.x), vz: r2(p.vel.z), ax: r2(p.aim.x), az: r2(p.aim.z), f: firing, c: charging, d: p.dashing });
+      this.client.send({ t: 'i', x: r2(p.x), z: r2(p.z), vx: r2(p.vel.x), vz: r2(p.vel.z), ax: r2(p.aim.x), az: r2(p.aim.z), ad: Number.isFinite(p.aimDist) ? r2(p.aimDist) : -1, f: firing, c: charging, d: p.dashing });
     }
     if (this.mode !== 'levelup' && this.mode !== 'shop') {
       this.bullets.integrate(dt);

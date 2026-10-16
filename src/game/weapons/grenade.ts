@@ -117,7 +117,8 @@ export class Grenade extends Weapon {
     const base = Math.atan2(pl.aim.z, pl.aim.x);
     for (let k = 0; k < n; k++) {
       const a = base + (n > 1 ? (k / (n - 1) - 0.5) * 0.6 : 0);
-      this.lob(this.mz.x, this.mz.z, pl.x + Math.cos(a) * p.range, pl.z + Math.sin(a) * p.range, false);
+      const d = pl.landDist(2.5, p.range);
+      this.lob(this.mz.x, this.mz.z, pl.x + Math.cos(a) * d, pl.z + Math.sin(a) * d, false);
     }
     this.armFx(ctx, this.color, 0.9);
     ctx.sound('lob');

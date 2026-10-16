@@ -49,6 +49,8 @@ export interface RemoteInput {
   vx: number;
   vz: number;
   ax: number;
+  /** Aim distance (mouse cursor), -1 for stick aim. */
+  ad: number;
   az: number;
   firing: boolean;
   charging: boolean;
@@ -233,6 +235,7 @@ export class Hero implements SynergyHost {
     const luck = this.stats.luck;
     const fresh = (r: Rarity) => rarityWeight(r, luck);
     const upgrade = (r: Rarity) => Math.max(fresh(r), fresh('uncommon'));
+    // The Buster's own upgrades weigh a little less than others', so runs don't all go Buster-first.
     for (const w of this.weapons) {
       if (w.maxed) continue;
       const next = w.def.levels[w.level];
@@ -242,7 +245,7 @@ export class Hero implements SynergyHost {
         cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.levels.length, w: 4 * upgrade(rarity) });
         continue;
       }
-      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.evo ? w.def.levels.length - 1 : w.def.levels.length, w: 3 * upgrade(rarity) });
+      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.evo ? w.def.levels.length - 1 : w.def.levels.length, w: (w.def.id === 'buster' ? 2 : 3) * upgrade(rarity) });
     }
     // Arm weapons don't use auto-weapon slots; one per arm slot.
     const autoCount = this.weapons.filter((w) => !w.def.slot).length;

@@ -22,11 +22,12 @@ export class Nova extends Weapon {
       life: [0.25, 0.45],
       drag: 5,
     });
+    let n = 0;
     for (const e of ctx.inRadius(pl.x, pl.z, r, this.hits)) {
       // Bosses shrug off most of the freeze.
       e.frozen = Math.max(e.frozen, p.freeze * (e.def.behavior === 'boss' ? 0.15 : 1));
       e.shatter = p.shatter;
-      ctx.damage(e, p.dmg, { source: 'nova' });
+      ctx.damage(e, p.dmg, { source: 'nova', canCrit: true, loud: n++ < 3 });
     }
   }
 }

@@ -78,7 +78,8 @@ export class Discs extends Weapon {
     if (!pl.dead && this.tick(dt, ctx, p.cd)) {
       const base = Math.atan2(pl.aim.z, pl.aim.x);
       for (let i = 0; i < p.count && this.discs.length < MAX; i++) {
-        const a = base + (p.count > 1 ? (i / p.count) * Math.PI * 2 : 0);
+        // Fan around the aim (about ±25°) so every disc goes where you point.
+        const a = base + (p.count > 1 ? (i / (p.count - 1) - 0.5) * 0.9 : 0);
         this.discs.push({ x: pl.x, z: pl.z, px: pl.x, pz: pl.z, dx: Math.cos(a), dz: Math.sin(a), dist: 0, back: false, spin: 0, hits: new Map() });
       }
       ctx.sound('disc');
