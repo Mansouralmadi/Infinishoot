@@ -1,5 +1,5 @@
 import type { Rng } from '../core/rng';
-import { ENEMIES, bossForStage, type EnemyDef } from '../data/enemies';
+import { ENEMIES, VETERAN_OF, bossForStage, type EnemyDef } from '../data/enemies';
 import { bossTuning } from './enemies';
 
 /**
@@ -25,6 +25,9 @@ export const directorTuning = {
   eliteEvery: 48, // seconds
   ringEvery: 36, // seconds between encircling swarm rings
   minuteHead: 1.5, // later stages unlock enemy types this many minutes earlier per stage
+  veteranFrom: 3, // first stage where veterans (tougher, recoloured enemies) mix in
+  veteranPerStage: 0.15, // share of spawns that are veterans, per stage from veteranFrom (capped)
+  veteranMax: 0.6,
 };
 
 export type SpawnRequest =
@@ -105,6 +108,17 @@ export class Director {
     return Object.values(ENEMIES).filter((d) => d.minMinute >= 0 && d.minMinute <= minute && d.weight > 0);
   }
 
+  /** Chance a spawn is swapped for its veteran: 15% on stage 3, 30% on 4... up to 60%. */
+  get veteranChance(): number {
+    const t = directorTuning;
+    return this.stage < t.veteranFrom ? 0 : Math.min(t.veteranMax, t.veteranPerStage * (this.stage - t.veteranFrom + 1));
+  }
+
+  private vet(def: EnemyDef, rng: Rng): EnemyDef {
+    const v = VETERAN_OF[def.id];
+    return v && rng.chance(this.veteranChance) ? ENEMIES[v] : def;
+  }
+
   private pick(rng: Rng): EnemyDef {
     const pool = this.pool();
     let r = rng.next() * pool.reduce((a, d) => a + d.weight, 0);
@@ -129,13 +143,13 @@ export class Director {
     if (this.time >= this.nextElite && !this.bossSpawned) {
       this.nextElite += t.eliteEvery;
       const choices = this.pool().filter((d) => d.behavior !== 'spawner' && d.id !== 'swarmer');
-      this.queue.push({ kind: 'enemy', def: rng.pick(choices.length ? choices : this.pool()), elite: true });
+      this.queue.push({ kind: 'enemy', def: this.vet(rng.pick(choices.length ? choices : this.pool()), rng), elite: true });
     }
 
     if (this.time >= this.nextRing && !this.bossSpawned) {
       this.nextRing += t.ringEvery * rng.range(0.8, 1.2);
       const minute = this.paceMinute;
-      this.queue.push({ kind: 'ring', def: minute > 2.5 && rng.chance(0.4) ? ENEMIES.zippy : ENEMIES.swarmer, count: Math.round(18 + minute * 6 + this.stage * 6) });
+      this.queue.push({ kind: 'ring', def: this.vet(minute > 2.5 && rng.chance(0.4) ? ENEMIES.zippy : ENEMIES.swarmer, rng), count: Math.round(18 + minute * 6 + this.stage * 6) });
     }
 
     // Keep the field topped up toward the target (lighter during the boss).
@@ -144,7 +158,7 @@ export class Director {
       this.spawnBudget = Math.min(this.spawnBudget + t.spawnPerSecond * dt * (1 + (this.stage - 1) * 0.3), 6);
       while (this.spawnBudget >= 1) {
         this.spawnBudget -= 1;
-        const def = this.pick(rng);
+        const def = this.vet(this.pick(rng), rng);
         if (def.maxAlive !== undefined && count(def.id) >= def.maxAlive) continue;
         const n = def.pack ? rng.int(def.pack[0], def.pack[1]) : 1;
         for (let i = 0; i < n; i++) this.queue.push({ kind: 'enemy', def });

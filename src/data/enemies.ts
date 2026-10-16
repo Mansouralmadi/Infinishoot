@@ -275,6 +275,56 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
 };
 
+/**
+ * Veterans: tougher versions of the regular enemies that the director mixes in
+ * from stage 3 (see director.ts veteranChance). Same models and behaviours,
+ * a darker armoured palette so they read as dangerous, more life and damage.
+ */
+export const veteranTuning = { hp: 2.6, dmg: 1.6, speed: 1.08, size: 1.12, reward: 2.5 };
+
+/** Base id -> [body, accent] for its veteran. */
+const VETERAN_LOOK: Record<string, [string, string]> = {
+  swarmer: ['#29366f', '#ff3d5a'],
+  bopper: ['#5d275d', '#ffcd75'],
+  zippy: ['#257179', '#ef7d57'],
+  shooter: ['#b13e53', '#73eff7'],
+  charger: ['#333c57', '#ff7a2f'],
+  chonk: ['#566c86', '#ff3d5a'],
+  exploder: ['#ef7d57', '#1a1c2c'],
+  splitter: ['#257179', '#ffcd75'],
+  jellet: ['#38b764', '#5d275d'],
+  spawner: ['#29366f', '#ffcd75'],
+};
+
+/** Regular enemy id -> its veteran's id. */
+export const VETERAN_OF: Record<string, string> = {};
+
+for (const [id, [bodyColor, accentColor]] of Object.entries(VETERAN_LOOK)) {
+  const b = ENEMIES[id];
+  const t = veteranTuning;
+  const vid = 'v_' + id;
+  VETERAN_OF[id] = vid;
+  ENEMIES[vid] = {
+    ...b,
+    id: vid,
+    name: 'Veteran ' + b.name,
+    hp: Math.round(b.hp * t.hp),
+    speed: b.speed * t.speed,
+    radius: b.radius * t.size,
+    bodyColor,
+    accentColor,
+    contactDamage: Math.round(b.contactDamage * t.dmg),
+    xp: Math.round(b.xp * t.reward),
+    score: Math.round(b.score * t.reward),
+    minMinute: -1, // only spawned by swapping in for the regular one
+    weight: 0,
+    shoot: b.shoot && { ...b.shoot, damage: Math.round(b.shoot.damage * t.dmg) },
+    fuse: b.fuse && { ...b.fuse, damage: Math.round(b.fuse.damage * t.dmg) },
+    split: b.split && { ...b.split, into: 'v_' + b.split.into },
+    spawn: b.spawn && { ...b.spawn, into: 'v_' + b.spawn.into },
+  };
+}
+
 /** Bosses rotate by stage: King, Rex, Queen, King... */
 export const BOSS_ORDER = ['king', 'rex', 'queen'];
 export function bossForStage(stage: number): EnemyDef {
