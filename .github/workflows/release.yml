@@ -17,6 +17,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # npm may skip Electron's postinstall download; electronDist needs it.
+      - run: node node_modules/electron/install.js
       - name: Build exe
         shell: bash
         run: npm run dist 2>&1 | tee dist.log; exit ${PIPESTATUS[0]}
