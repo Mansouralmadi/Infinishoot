@@ -10,7 +10,7 @@ import { exportFile, importFile, loadoutUnlockBy, resetSave, save, unlockedLoado
 import { settings, saveSettings } from '../game/settings';
 import { sfx } from '../audio/sfx';
 import { RARITY, type Rarity } from '../data/rarity';
-import { decoys, fmtScore, reduceMotion, reelAt, reelSteps, type LoadoutItem } from './hud';
+import { SLOT_LABEL, decoys, fmtScore, reduceMotion, reelAt, reelSteps, slotPicto, type LoadoutItem, type Slot } from './hud';
 import { MenuNav } from './menu';
 import { iconHtml } from './pixelIcons';
 
@@ -76,6 +76,8 @@ export interface Offer {
   pick?: string;
   /** Loadout upgrades: which item it upgrades, shown at the card's foot. */
   label?: string;
+  /** What it upgrades or adds: the coloured ribbon at the card's foot. */
+  slot?: Slot;
   name: string;
   icon: string;
   color: string;
@@ -135,8 +137,8 @@ function tip(name: string, rarity: Rarity, desc: string, extra = ''): string {
 }
 
 function badge(i: LoadoutItem): string {
-  const level = i.evo ? ' · EVOLVED' : i.max ? ' · MAX' : ` · LV ${i.level}`;
-  return `<span class="badge r-${i.rarity ?? 'common'}" style="--c:${i.color}" tabindex="0">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'E' : i.max ? 'M' : i.level}</i>${tip(i.name, i.rarity ?? 'common', i.desc ?? '', level)}</span>`;
+  const level = (i.slot ? ` · ${SLOT_LABEL[i.slot]}` : '') + (i.evo ? ' · EVOLVED' : i.max ? ' · MAX' : ` · LV ${i.level}`);
+  return `<span class="badge r-${i.rarity ?? 'common'} ${i.slot ? 's-' + i.slot : ''}" style="--c:${i.color}" tabindex="0">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'E' : i.max ? 'M' : i.level}</i>${tip(i.name, i.rarity ?? 'common', i.desc ?? '', level)}</span>`;
 }
 
 function modChip({ def: m, level }: { def: ModDef; level: number }): string {
@@ -612,7 +614,8 @@ export class Screens {
           <div class="desc">${o.text}</div>
           ${o.tags ? `<div class="chips">${tagChips(o.tags)}</div>` : ''}
           ${o.replaces ? replaceStrip(o.replaces) : ''}
-          <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.label ?? (o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : o.kind === 'special' ? 'SPECIAL (Q/E)' : 'BONUS')}</div>
+          <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span>${o.label ? ` · ${o.label}` : ''}</div>
+          ${o.slot ? `<div class="slot-ribbon s-${o.slot}">${slotPicto(o.slot)}${SLOT_LABEL[o.slot]}</div>` : ''}
           <div class="key">${i + 1}</div>
           <i class="lock"></i>
         </button>`,

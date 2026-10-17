@@ -78,6 +78,41 @@ export interface HudState {
   lowHp: boolean;
 }
 
+/** What an item or upgrade belongs to: a click, the special, an auto weapon, a passive item or a bonus. */
+export type Slot = 'left' | 'right' | 'special' | 'auto' | 'item' | 'bonus';
+
+export const SLOT_LABEL: Record<Slot, string> = {
+  left: 'LEFT CLICK',
+  right: 'RIGHT CLICK',
+  special: 'SPECIAL Q/E',
+  auto: 'AUTO WEAPON',
+  item: 'ITEM',
+  bonus: 'BONUS',
+};
+
+// Tiny pixel pictograms for the slot ribbon: '#' = outline, 'o' = lit part.
+const PICTO: Record<Slot, string[]> = {
+  left: ['.#####.', '#oo#..#', '#oo#..#', '#######', '#.....#', '#.....#', '#.....#', '.#####.'],
+  right: ['.#####.', '#..#oo#', '#..#oo#', '#######', '#.....#', '#.....#', '#.....#', '.#####.'],
+  special: ['#######', '#.....#', '#.ooo.#', '#.o.o.#', '#.o.o.#', '#.ooo.#', '#...o.#', '#######'],
+  auto: ['...#...', '.#####.', '##ooo##', '#oo.oo#', '#oo.oo#', '##ooo##', '.#####.', '...#...'],
+  item: ['..###..', '...#...', '..###..', '.#ooo#.', '#ooooo#', '#ooooo#', '#ooooo#', '.#####.'],
+  bonus: ['.#####.', '##ooo##', '#oo#oo#', '#o###o#', '#oo#oo#', '##ooo##', '.#####.', '.......'],
+};
+
+/** Inline pixel SVG for a slot's pictogram. */
+export function slotPicto(slot: Slot): string {
+  const rows = PICTO[slot];
+  let rects = '';
+  rows.forEach((r, y) =>
+    [...r].forEach((c, x) => {
+      if (c === '#') rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="currentColor"/>`;
+      else if (c === 'o') rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="currentColor" opacity=".55"/>`;
+    }),
+  );
+  return `<svg class="picto" viewBox="0 0 ${rows[0].length} ${rows.length}" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+}
+
 export interface LoadoutItem {
   /** Item id (picks its pixel icon). */
   id: string;
@@ -92,6 +127,8 @@ export interface LoadoutItem {
   /** What it does (pause-screen tooltip). */
   desc?: string;
   kind: 'weapon' | 'passive';
+  /** Which slot it fills (colour tag in the HUD, label in tooltips). */
+  slot?: Slot;
 }
 
 /** Minimap input: world positions on the XZ plane; the arena spans -half..half on both axes. */
@@ -302,7 +339,7 @@ export class Hud {
         .filter((i) => i.kind === kind)
         .map(
           (i) =>
-            `<div class="slot ${i.max ? 'max' : ''} r-${i.rarity ?? 'common'}" style="--c:${i.color}" title="${i.name}">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'EVO' : i.max ? 'MAX' : i.level}</i></div>`,
+            `<div class="slot ${i.max ? 'max' : ''} r-${i.rarity ?? 'common'} ${i.slot ? 's-' + i.slot : ''}" style="--c:${i.color}" title="${i.name}${i.slot ? ' (' + SLOT_LABEL[i.slot] + ')' : ''}">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'EVO' : i.max ? 'MAX' : i.level}</i></div>`,
         )
         .join('');
     this.el('#loadout .weapons').innerHTML = html('weapon');

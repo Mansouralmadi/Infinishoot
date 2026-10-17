@@ -3277,7 +3277,7 @@ h1.ko {
   width: 200px;
   padding: 8px 10px;
   display: grid;
-  grid-template-columns: 40px 1fr;
+  grid-template-columns: 48px 1fr;
   column-gap: 8px;
   align-items: center;
   text-align: left;
@@ -3286,13 +3286,14 @@ h1.ko {
 
 .lo-card .icon {
   grid-row: span 3;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
 }
 
+/* Icons are 24-pixel sprites: show them at whole multiples (24, 48, 72) so pixels stay square. */
 .lo-card .icon .px-icon {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
 }
 
 .lo-card .name {
@@ -3339,4 +3340,74 @@ h1.ko {
 .lobby-player .kit {
   font: 9px var(--label);
   color: var(--mist);
+}
+
+/* What an upgrade is for, at a glance: a coloured ribbon with a pixel pictogram at the foot of level-up cards,
+   and the same colour as a corner tag on HUD and build slots. */
+.s-left {
+  --slot: var(--sky);
+}
+.s-right {
+  --slot: var(--orange);
+}
+.s-special {
+  --slot: var(--plum);
+}
+.s-auto {
+  --slot: var(--green);
+}
+.s-item {
+  --slot: var(--slate);
+}
+.s-bonus {
+  --slot: var(--yellow);
+}
+
+.card .slot-ribbon {
+  align-self: stretch;
+  margin: 8px -14px -16px;
+  padding: 5px 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: 13px var(--label);
+  letter-spacing: 2px;
+  color: var(--white);
+  text-shadow: var(--o) var(--o) 0 var(--ink);
+  background: var(--slot);
+  box-shadow: inset 0 var(--p) 0 var(--ink);
+}
+
+.card .slot-ribbon.s-bonus {
+  color: var(--ink);
+  text-shadow: none;
+}
+
+.slot-ribbon .picto {
+  width: 14px;
+  height: 16px;
+  flex: none;
+  filter: drop-shadow(var(--o) var(--o) 0 var(--ink));
+}
+
+.slot-ribbon.s-bonus .picto {
+  filter: none;
+}
+
+#loadout .slot[class*='s-']::before,
+.badge[class*='s-']::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 9px;
+  height: 9px;
+  background: var(--slot);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.badge[class*='s-']::before {
+  width: 7px;
+  height: 7px;
 }

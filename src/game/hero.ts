@@ -8,7 +8,7 @@ import { RARITY, rarityWeight, type Rarity } from '../data/rarity';
 import type { Tag } from '../data/tags';
 import { RANK_RARITY, buildKey, buildMaxed, buildParams, canEvolve, newBuild, parseBuild, totalRanks, trackTuning, type Build, type Upgradable } from '../data/tracks';
 import { WEAPONS } from '../data/weapons';
-import type { LoadoutItem } from '../ui/hud';
+import type { LoadoutItem, Slot } from '../ui/hud';
 import type { Offer, ShopView } from '../ui/screens';
 import type { Enemy } from './enemies';
 import { modMaxLevel, type ModDef } from './modTypes';
@@ -50,6 +50,11 @@ export interface ChestFind {
 
 /** A loadout item with upgrade tracks, as the level-up cards need it. */
 type UpgradeItem = Upgradable & { name: string; icon: string; color: string; iconBase: string };
+
+/** The slot a weapon fills: its click, or an auto-weapon slot. */
+function weaponSlot(slot: string | undefined): Slot {
+  return slot === 'primary' ? 'left' : slot === 'secondary' ? 'right' : 'auto';
+}
 
 /** Icon id for an item's evolution: `<id>_evo` for the first, `<id>_evo2` for the second. */
 function evoIconId(base: string, evo: number): string {
@@ -314,8 +319,9 @@ export class Hero implements SynergyHost {
         evo: !!this.specialEvo,
         name: sv.name,
         rarity: sp.rarity,
-        desc: `SPECIAL (Q/E): ${sp.desc} ${spNow} Cooldown ${cooldownText(this.specialCooldown)}.`,
+        desc: `${sp.desc} ${spNow} Cooldown ${cooldownText(this.specialCooldown)}.`,
         kind: 'weapon' as const,
+        slot: 'special' as const,
       },
       ...this.weapons.map((w) => ({
         id: w.iconId,
@@ -326,12 +332,13 @@ export class Hero implements SynergyHost {
         evo: w.evolved,
         name: w.name,
         rarity: w.def.rarity,
-        desc: `${w.def.desc} ${w.build ? trackSummary(w.def, w.build) : `Now: ${w.def.levels[w.level - 1].text}`}`,
+        desc: `${w.def.desc.replace(/^(LEFT|RIGHT) CLICK: /, '')} ${w.build ? trackSummary(w.def, w.build) : `Now: ${w.def.levels[w.level - 1].text}`}`,
         kind: 'weapon' as const,
+        slot: weaponSlot(w.def.slot),
       })),
       ...Object.entries(this.passives).map(([id, lv]) => {
         const d = PASSIVES[id];
-        return { id, icon: d.icon, color: d.color, level: lv, max: lv >= d.maxLevel, name: d.name, rarity: d.rarity, desc: `${d.desc} (x${lv})`, kind: 'passive' as const };
+        return { id, icon: d.icon, color: d.color, level: lv, max: lv >= d.maxLevel, name: d.name, rarity: d.rarity, desc: `${d.desc} (x${lv})`, kind: 'passive' as const, slot: 'item' as const };
       }),
     ];
   }
@@ -360,29 +367,29 @@ export class Hero implements SynergyHost {
     const upgrade = fresh;
     // The loadout's upgrade tracks; the first item that can evolve forces its two-way choice.
     let fork: Offer[] = [];
-    const upgradable = (ref: string, def: UpgradeItem, b: Build, label: string) => {
+    const upgradable = (ref: string, def: UpgradeItem, b: Build, label: string, slot: Slot) => {
       if (canEvolve(def, b)) {
         if (!fork.length) {
-          fork = def.evos!.map((e, k) => ({ kind: 'evo' as const, id: evoIconId(def.iconBase, k), pick: `${ref}|e|${k}`, name: e.name, icon: def.icon, color: e.color, tag: 'EVOLVE!', text: e.text, tags: e.tags, rarity: 'legendary' as const, label: `${label} EVOLUTION` }));
+          fork = def.evos!.map((e, k) => ({ kind: 'evo' as const, id: evoIconId(def.iconBase, k), pick: `${ref}|e|${k}`, name: e.name, icon: def.icon, color: e.color, tag: 'EVOLVE!', text: e.text, tags: e.tags, rarity: 'legendary' as const, label: `${label} EVOLUTION`, slot }));
         }
         return;
       }
       const color = def.evos?.[b.evo]?.color ?? def.color;
       if (buildMaxed(def, b)) {
         const text = `+${Math.round(trackTuning.overdrive * 100)}% damage, repeatable.`;
-        cands.push({ kind: 'overdrive', id: evoIconId(def.iconBase, b.evo), pick: `${ref}|od`, name: 'Overdrive', icon: def.icon, color, tag: `OVERDRIVE ${b.od + 1}`, text, rarity: 'uncommon', label, w: 1.2 * upgrade('uncommon') });
+        cands.push({ kind: 'overdrive', id: evoIconId(def.iconBase, b.evo), pick: `${ref}|od`, name: 'Overdrive', icon: def.icon, color, tag: `OVERDRIVE ${b.od + 1}`, text, rarity: 'uncommon', label, slot, w: 1.2 * upgrade('uncommon') });
         return;
       }
       (def.tracks ?? []).forEach((t, k) => {
         const r = b.ranks[k];
         if (r >= t.ranks.length) return;
         const rarity = RANK_RARITY[Math.min(r, RANK_RARITY.length - 1)];
-        cands.push({ kind: 'track', id: evoIconId(def.iconBase, b.evo), pick: `${ref}|t|${k}`, name: t.name, icon: def.icon, color, tag: `RANK ${r + 1}`, text: t.ranks[r].text, rarity, level: r, maxLevel: t.ranks.length, label, w: 4 * upgrade(rarity) });
+        cands.push({ kind: 'track', id: evoIconId(def.iconBase, b.evo), pick: `${ref}|t|${k}`, name: t.name, icon: def.icon, color, tag: `RANK ${r + 1}`, text: t.ranks[r].text, rarity, level: r, maxLevel: t.ranks.length, label, slot, w: 4 * upgrade(rarity) });
       });
     };
     for (const w of this.weapons) {
       if (w.build) {
-        upgradable(w.def.id, { ...w.def, iconBase: w.def.id }, w.build, `${w.def.name.toUpperCase()} · ${w.def.slot === 'primary' ? 'LEFT' : 'RIGHT'} CLICK`);
+        upgradable(w.def.id, { ...w.def, iconBase: w.def.id }, w.build, w.def.name.toUpperCase(), weaponSlot(w.def.slot));
         continue;
       }
       if (w.maxed) continue;
@@ -390,40 +397,40 @@ export class Hero implements SynergyHost {
       const rarity = w.def.rarity;
       if (w.def.evo && w.level + 1 === w.def.levels.length) {
         const evo = w.def.evo;
-        cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.levels.length, w: 4 * upgrade(rarity) });
+        cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.levels.length, slot: weaponSlot(w.def.slot), w: 4 * upgrade(rarity) });
         continue;
       }
       // Loadout weapons without tracks yet weigh more, so they keep up with track ranks.
       const kindW = w.def.slot ? 4 : 3;
-      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.evo ? w.def.levels.length - 1 : w.def.levels.length, w: kindW * upgrade(rarity) });
+      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.evo ? w.def.levels.length - 1 : w.def.levels.length, slot: weaponSlot(w.def.slot), w: kindW * upgrade(rarity) });
     }
     // New auto weapons, while slots are free. Loadout weapons are picked before the run.
     const autoCount = this.weapons.filter((w) => !w.def.slot).length;
     for (const id of this.unlocked) {
       const d = WEAPONS[id];
       if (!d || d.slot || autoCount >= MAX_WEAPONS || this.weapons.some((w) => w.def.id === id)) continue;
-      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, w: 2.4 * fresh(d.rarity) });
+      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, slot: 'auto', w: 2.4 * fresh(d.rarity) });
     }
     // The special: its tracks, or its next level.
     const sp = this.specialDef;
-    if (this.specialBuild) upgradable('sp', { ...sp, iconBase: 'sp_' + sp.id }, this.specialBuild, `${sp.name.toUpperCase()} · SPECIAL (Q/E)`);
+    if (this.specialBuild) upgradable('sp', { ...sp, iconBase: 'sp_' + sp.id }, this.specialBuild, sp.name.toUpperCase(), 'special');
     else if (this.special.level < sp.levels.length) {
       const lv = this.special.level;
       const cd = cooldownText(specialCooldown(sp.levels[lv].p, this.stats.specialCooldownMul));
-      cands.push({ kind: 'special', id: 'sp_' + sp.id, name: sp.name, icon: sp.icon, color: sp.color, tag: `LV ${lv + 1}`, text: `${sp.levels[lv].text} Cooldown ${cd}.`, rarity: sp.rarity, level: lv, maxLevel: sp.levels.length, w: 4 * upgrade(sp.rarity) });
+      cands.push({ kind: 'special', id: 'sp_' + sp.id, name: sp.name, icon: sp.icon, color: sp.color, tag: `LV ${lv + 1}`, text: `${sp.levels[lv].text} Cooldown ${cd}.`, rarity: sp.rarity, level: lv, maxLevel: sp.levels.length, slot: 'special', w: 4 * upgrade(sp.rarity) });
     }
     const owned = Object.keys(this.passives).length;
     for (const [id, d] of Object.entries(PASSIVES)) {
       if (d.coop && !this.world.coop) continue;
       const lv = this.passives[id] ?? 0;
       if (lv >= d.maxLevel || (lv === 0 && owned >= MAX_PASSIVES)) continue;
-      cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, level: lv, maxLevel: d.maxLevel, w: lv ? 1.8 * upgrade(d.rarity) : 0.8 * fresh(d.rarity) });
+      cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, level: lv, maxLevel: d.maxLevel, slot: 'item', w: lv ? 1.8 * upgrade(d.rarity) : 0.8 * fresh(d.rarity) });
     }
     // Late runs: when the pool runs dry, mix in gold and healing.
     if (cands.length + fork.length < 3) {
       cands.push(
-        { kind: 'gold', id: 'gold', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: `+${2 * this.skipGold} gold`, w: 2 },
-        { kind: 'heal', id: 'heal', name: 'Snack', icon: '♥', color: '#ff5e7a', tag: 'BONUS', text: 'Heal 40 life', w: 2 },
+        { kind: 'gold', id: 'gold', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: `+${2 * this.skipGold} gold`, slot: 'bonus', w: 2 },
+        { kind: 'heal', id: 'heal', name: 'Snack', icon: '♥', color: '#ff5e7a', tag: 'BONUS', text: 'Heal 40 life', slot: 'bonus', w: 2 },
       );
     }
     const out: Offer[] = [...fork];
@@ -510,7 +517,7 @@ export class Hero implements SynergyHost {
       const w = weapons[Math.floor(this.rng.next() * weapons.length)];
       w.levelUp();
       this.loadoutDirty = true;
-      return { id: w.iconId, name: w.name, color: w.color, icon: w.def.icon, text: `LV ${w.level}`, rarity: w.def.rarity };
+      return { id: w.iconId, name: w.name, color: w.color, icon: w.def.icon, text: `AUTO WEAPON LV ${w.level}`, rarity: w.def.rarity };
     }
     return this.chestGold();
   }
