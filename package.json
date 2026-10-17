@@ -1,7 +1,7 @@
 {
   "name": "infinishoot",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "A colorful twin-stick survivors-style roguelike",
   "author": "Mansour Almadi",
   "type": "module",

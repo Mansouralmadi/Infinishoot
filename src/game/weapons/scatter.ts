@@ -2,8 +2,9 @@ import { BULLET_Y, Team } from '../bullets';
 import { Weapon, type WeaponCtx } from './base';
 
 /**
- * Primary arm weapon: a pellet fan on left click. Evolved (Dragon's Breath)
- * it spits long flame pellets that ignite, with a fire plume at the muzzle.
+ * Left-click loadout weapon: a pellet fan. Evolutions: Dragon's Breath spits
+ * long flame pellets that ignite, with a fire plume at the muzzle; Flak Cannon
+ * pellets burst in small blasts on their first hit.
  */
 export class Scatter extends Weapon {
   private shotCd = 0;
@@ -32,7 +33,8 @@ export class Scatter extends Weapon {
   private fire(ctx: WeaponCtx): void {
     const p = this.p;
     const pl = ctx.player;
-    const evo = this.evolved;
+    const evo = this.evoId === 'dragon';
+    const flak = this.evoId === 'flak';
     pl.muzzle(this.mz);
     const base = Math.atan2(pl.aim.z, pl.aim.x);
     // Hair Trigger makes MEGA blasts.
@@ -52,22 +54,23 @@ export class Scatter extends Weapon {
         life: p.life,
         radius: 0.18 * size,
         damage: p.dmg * (mega ? 4 : 1),
-        knockback: mega ? 8 : 3,
+        knockback: (p.knock ?? 3) * (mega ? 2.5 : 1),
         team: Team.Player,
-        color: mega ? '#ff7a2f' : evo ? '#ff5e3a' : '#ffe9a8',
-        width: (evo ? 0.34 : 0.2) * size,
-        length: (evo ? 1.3 : 0.45) * size,
+        color: mega ? '#ff7a2f' : evo ? '#ff5e3a' : flak ? '#ffb627' : '#ffe9a8',
+        width: (evo ? 0.34 : flak ? 0.26 : 0.2) * size,
+        length: (evo ? 1.3 : flak ? 0.35 : 0.45) * size,
         pierce: p.pierce + (mega ? 5 : 0),
         owner: ctx.owner,
-        kind: evo ? 3 : 2,
+        kind: evo ? 3 : flak ? 5 : 2,
+        blast: flak ? p.blast * Math.sqrt(ctx.stats.areaMul) : 0,
       });
     }
     this.muzzleT = 0.08;
     pl.recoil = 1.8;
     ctx.sound(evo ? 'flame' : 'shoot');
     ctx.particles.burst(this.mz.x, BULLET_Y, this.mz.z, {
-      count: evo ? 14 : 6,
-      color: evo ? '#ff7a2f' : '#ffe9a8',
+      count: evo ? 14 : flak ? 9 : 6,
+      color: evo ? '#ff7a2f' : flak ? '#ffb627' : '#ffe9a8',
       color2: evo ? '#ffd23f' : '#ffffff',
       speed: evo ? [4, 12] : [3, 8],
       size: evo ? [0.2, 0.45] : [0.08, 0.18],

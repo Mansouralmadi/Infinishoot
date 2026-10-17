@@ -2,6 +2,7 @@ import { loadJson, saveJson } from '../core/storage';
 import { audioSettings } from '../audio/sfx';
 import { applyRetroStrength } from '../render/retroSettings';
 import { juiceTuning } from './juice';
+import { DEFAULT_LOADOUT, validLoadout, type Loadout } from '../data/loadout';
 
 /** Player-facing settings, persisted between sessions. */
 export interface Settings {
@@ -10,6 +11,8 @@ export interface Settings {
   shake: number;
   autoFire: boolean;
   showFps: boolean;
+  /** Last loadout picked (left click, right click, special). */
+  loadout: Loadout;
 }
 
 const KEY = 'settings.v1';
@@ -20,7 +23,9 @@ export const settings: Settings = loadJson<Settings>(KEY, {
   shake: 1,
   autoFire: false,
   showFps: false,
+  loadout: { ...DEFAULT_LOADOUT },
 });
+settings.loadout = validLoadout(settings.loadout);
 
 /** Push settings into the systems that use them. */
 export function applySettings(): void {

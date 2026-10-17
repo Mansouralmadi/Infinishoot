@@ -1,10 +1,12 @@
 import type * as THREE from 'three';
 import type { Rng } from '../core/rng';
+import { DEFAULT_LOADOUT, type Loadout } from '../data/loadout';
 import { MOD_RARITY_WEIGHT, MODS } from '../data/mods';
 import { PASSIVES } from '../data/passives';
 import { SPECIALS, cooldownText, specialCooldown, type SpecialDef } from '../data/specials';
 import { RARITY, rarityWeight, type Rarity } from '../data/rarity';
 import type { Tag } from '../data/tags';
+import { RANK_RARITY, buildKey, buildMaxed, buildParams, canEvolve, newBuild, parseBuild, totalRanks, trackTuning, type Build, type Upgradable } from '../data/tracks';
 import { WEAPONS } from '../data/weapons';
 import type { LoadoutItem } from '../ui/hud';
 import type { Offer, ShopView } from '../ui/screens';
@@ -15,7 +17,8 @@ import { computeStats, type Stats } from './stats';
 import { MAX_MOD_SLOTS, Synergy, type SynergyHost } from './synergy';
 import { createWeapon, type Weapon, type WeaponCtx } from './weapons';
 
-export const MAX_WEAPONS = 6;
+/** Auto-weapon slots (the loadout's clicks don't use them). */
+export const MAX_WEAPONS = 4;
 export const MAX_PASSIVES = 6;
 /** Gears are spent to reroll level-up cards; you can carry this many. */
 export const MAX_GEARS = 5;
@@ -30,6 +33,36 @@ export const economyTuning = {
   healCost: 3,
   shopOffers: 4,
 };
+
+export const chestTuning = {
+  goldShare: 0.5, // chance a chest holds gold instead of an item level
+  gold: 10,
+};
+
+export interface ChestFind {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  text: string;
+  rarity: Rarity;
+}
+
+/** A loadout item with upgrade tracks, as the level-up cards need it. */
+type UpgradeItem = Upgradable & { name: string; icon: string; color: string; iconBase: string };
+
+/** Icon id for an item's evolution: `<id>_evo` for the first, `<id>_evo2` for the second. */
+function evoIconId(base: string, evo: number): string {
+  return evo < 0 ? base : evo === 0 ? `${base}_evo` : `${base}_evo${evo + 1}`;
+}
+
+/** "Buckshot 2/4 · Choke 1/4", plus the evolution once chosen. */
+function trackSummary(def: Upgradable, b: Build): string {
+  const parts = (def.tracks ?? []).map((t, i) => `${t.name} ${b.ranks[i]}/${t.ranks.length}`);
+  const evo = def.evos?.[b.evo];
+  if (evo) parts.push(`${evo.name}${b.od ? ` + Overdrive ${b.od}` : ''}`);
+  return parts.join(' · ') + '.';
+}
 
 /** What a hero needs from the game (combat, world, randomness). */
 export interface HeroWorld {
@@ -89,16 +122,26 @@ export class Hero implements SynergyHost {
   shopRerolls = 0;
   shopHealed = false;
   shopDone = true;
-  // Bomb
+  /** Left click, right click and special picked before the run. */
+  loadoutPick: Loadout = { ...DEFAULT_LOADOUT };
+  // Special (Q/E)
   bombCharge = 0;
-  /** The special on Q/E (the Bomb by default); level-up cards upgrade or replace it. */
+  /** The special on Q/E, from the loadout; level-up cards upgrade it. */
   special = { id: 'bomb', level: 1 };
+  /** Specials with upgrade tracks: ranks, evolution and Overdrive taken. */
+  specialBuild: Build | null = null;
+  private spParams: Record<string, number> | null = null;
   bombT = -1;
   /** The current wave is a Nuke pickup, not the bomb. */
   bombNuke = false;
   bombId = 0;
   bombX = 0;
   bombZ = 0;
+  /** Implosion: which wave is running (1 pulls in, 2 blasts) and the pause before wave 2. */
+  bombWave = 1;
+  bombNext = 0;
+  /** Cluster Bomb: bomblets waiting to pop. */
+  bomblets: { x: number; z: number; t: number }[] = [];
   // Downed in co-op
   reviveT = 0;
   /** The player disconnected; the hero stays out of play. */
@@ -152,18 +195,21 @@ export class Hero implements SynergyHost {
 
   // ---------------------------------------------------------------- run lifecycle
 
-  /** Fresh run: Buster only, no passives or Mods. */
+  /** Fresh run: the loadout's two clicks and special, no passives or Mods. */
   startRun(): void {
     this.disposeWeapons();
-    this.weapons = [createWeapon('buster', this.world.scene)];
+    const lo = this.loadoutPick;
+    this.weapons = [createWeapon(lo.primary, this.world.scene), createWeapon(lo.secondary, this.world.scene)];
     this.passives = {};
     this.synergy.reset();
     this.gold = this.dashes = 0;
     this.damageBy = {};
     this.pendingLevels = this.chestsPending = 0;
-    this.special = { id: 'bomb', level: 1 };
+    this.setSpecial(lo.special);
     this.bombCharge = 0;
     this.bombT = -1;
+    this.bombNext = 0;
+    this.bomblets.length = 0;
     this.reviveT = 0;
     this.shopDone = true;
     this.recomputeStats();
@@ -199,53 +245,73 @@ export class Hero implements SynergyHost {
     this.stats.dashCooldownMul *= dashLevelMul(this.world.level);
   }
 
-  /**
-   * Taking a left-click weapon retires the Buster: its rapid fire and upgrades
-   * are gone (it stays only as the default charge shot, at level 1, unless a
-   * right-click weapon replaces that too), and it leaves the loadout.
-   */
   get specialDef(): SpecialDef {
     return SPECIALS[this.special.id] ?? SPECIALS.bomb;
   }
 
-  /** Seconds for the special's meter to refill (level and Battery Pack). */
+  setSpecial(id: string): void {
+    this.special = { id, level: 1 };
+    this.specialBuild = SPECIALS[id]?.tracks ? newBuild(SPECIALS[id]) : null;
+    this.spParams = null;
+  }
+
+  /** Client: mirror the host's special build. */
+  setSpecialBuild(key: string): void {
+    if (!this.specialBuild || key === buildKey(this.specialBuild)) return;
+    this.specialBuild = parseBuild(key, this.specialDef);
+    this.spParams = null;
+    this.loadoutDirty = true;
+  }
+
+  /** Seconds for the special's meter to refill (upgrades and Battery Pack). */
   get specialCooldown(): number {
-    return specialCooldown(this.specialDef, Math.min(this.special.level, this.specialDef.levels.length), this.stats.specialCooldownMul);
+    return specialCooldown(this.specialP, this.stats.specialCooldownMul);
   }
 
-  /** Params for the special's current level. */
+  /** Params for the special's current level (or build). */
   get specialP(): Record<string, number> {
-    return this.specialDef.levels[Math.min(this.special.level, this.specialDef.levels.length) - 1].p;
+    const def = this.specialDef;
+    if (this.specialBuild) return (this.spParams ??= buildParams(def.levels[0].p, def, this.specialBuild));
+    return def.levels[Math.min(this.special.level, def.levels.length) - 1].p;
   }
 
-  get busterRetired(): boolean {
-    return this.weapons.some((w) => w.def.slot === 'primary');
+  /** The special's chosen evolution ('' before evolving or for level-ladder specials). */
+  get specialEvo(): string {
+    return (this.specialBuild && this.specialDef.evos?.[this.specialBuild.evo]?.id) || '';
   }
 
-  /** The weapon a new arm weapon would replace, for the card's warning. */
-  private replacedBy(slot: 'primary' | 'secondary'): string {
-    const cur = this.weapons.find((w) => w.def.slot === slot);
-    if (cur) return `${cur.name} LV ${cur.level}`;
-    if (slot === 'secondary') return 'Charge Shot';
-    return `Buster LV ${this.weapons.find((w) => w.def.id === 'buster')?.level ?? 1}`;
+  private get specialView(): { name: string; color: string; iconId: string; level: number; max: boolean } {
+    const def = this.specialDef;
+    const b = this.specialBuild;
+    if (!b) return { name: def.name, color: def.color, iconId: 'sp_' + def.id, level: this.special.level, max: this.special.level >= def.levels.length };
+    const evo = def.evos?.[b.evo];
+    return {
+      name: evo?.name ?? def.name,
+      color: evo?.color ?? def.color,
+      iconId: evoIconId('sp_' + def.id, b.evo),
+      level: 1 + totalRanks(b) + (b.evo >= 0 ? 1 : 0) + b.od,
+      max: buildMaxed(def, b),
+    };
   }
 
   loadout(): LoadoutItem[] {
     const sp = this.specialDef;
-    const spLv = this.special.level;
+    const sv = this.specialView;
+    const spNow = this.specialBuild ? trackSummary(sp, this.specialBuild) : `Now: ${sp.levels[this.special.level - 1].text}`;
     return [
       {
-        id: 'sp_' + sp.id,
+        id: sv.iconId,
         icon: sp.icon,
-        color: sp.color,
-        level: spLv,
-        max: spLv >= sp.levels.length,
-        name: sp.name,
+        color: sv.color,
+        level: sv.level,
+        max: sv.max,
+        evo: !!this.specialEvo,
+        name: sv.name,
         rarity: sp.rarity,
-        desc: `SPECIAL (Q/E): ${sp.desc} Now: ${sp.levels[spLv - 1].text} Cooldown ${cooldownText(this.specialCooldown)}.`,
+        desc: `SPECIAL (Q/E): ${sp.desc} ${spNow} Cooldown ${cooldownText(this.specialCooldown)}.`,
         kind: 'weapon' as const,
       },
-      ...this.weapons.filter((w) => !(w.def.id === 'buster' && this.busterRetired)).map((w) => ({
+      ...this.weapons.map((w) => ({
         id: w.iconId,
         icon: w.def.icon,
         color: w.color,
@@ -254,7 +320,7 @@ export class Hero implements SynergyHost {
         evo: w.evolved,
         name: w.name,
         rarity: w.def.rarity,
-        desc: `${w.def.desc} Now: ${w.def.levels[w.level - 1].text}`,
+        desc: `${w.def.desc} ${w.build ? trackSummary(w.def, w.build) : `Now: ${w.def.levels[w.level - 1].text}`}`,
         kind: 'weapon' as const,
       })),
       ...Object.entries(this.passives).map(([id, lv]) => {
@@ -286,9 +352,34 @@ export class Hero implements SynergyHost {
     const luck = this.stats.luck;
     const fresh = (r: Rarity) => rarityWeight(r, luck);
     const upgrade = fresh;
-    // The Buster's own upgrades weigh a little less than others', so runs don't all go Buster-first.
+    // The loadout's upgrade tracks; the first item that can evolve forces its two-way choice.
+    let fork: Offer[] = [];
+    const upgradable = (ref: string, def: UpgradeItem, b: Build, label: string) => {
+      if (canEvolve(def, b)) {
+        if (!fork.length) {
+          fork = def.evos!.map((e, k) => ({ kind: 'evo' as const, id: evoIconId(def.iconBase, k), pick: `${ref}|e|${k}`, name: e.name, icon: def.icon, color: e.color, tag: 'EVOLVE!', text: e.text, tags: e.tags, rarity: 'legendary' as const, label: `${label} EVOLUTION` }));
+        }
+        return;
+      }
+      const color = def.evos?.[b.evo]?.color ?? def.color;
+      if (buildMaxed(def, b)) {
+        const text = `+${Math.round(trackTuning.overdrive * 100)}% damage, repeatable.`;
+        cands.push({ kind: 'overdrive', id: evoIconId(def.iconBase, b.evo), pick: `${ref}|od`, name: 'Overdrive', icon: def.icon, color, tag: `OVERDRIVE ${b.od + 1}`, text, rarity: 'uncommon', label, w: 1.2 * upgrade('uncommon') });
+        return;
+      }
+      (def.tracks ?? []).forEach((t, k) => {
+        const r = b.ranks[k];
+        if (r >= t.ranks.length) return;
+        const rarity = RANK_RARITY[Math.min(r, RANK_RARITY.length - 1)];
+        cands.push({ kind: 'track', id: evoIconId(def.iconBase, b.evo), pick: `${ref}|t|${k}`, name: t.name, icon: def.icon, color, tag: `RANK ${r + 1}`, text: t.ranks[r].text, rarity, level: r, maxLevel: t.ranks.length, label, w: 3 * upgrade(rarity) });
+      });
+    };
     for (const w of this.weapons) {
-      if (w.maxed || (w.def.id === 'buster' && this.busterRetired)) continue;
+      if (w.build) {
+        upgradable(w.def.id, { ...w.def, iconBase: w.def.id }, w.build, `${w.def.name.toUpperCase()} · ${w.def.slot === 'primary' ? 'LEFT' : 'RIGHT'} CLICK`);
+        continue;
+      }
+      if (w.maxed) continue;
       const next = w.def.levels[w.level];
       const rarity = w.def.rarity;
       if (w.def.evo && w.level + 1 === w.def.levels.length) {
@@ -296,31 +387,24 @@ export class Hero implements SynergyHost {
         cands.push({ kind: 'weapon', id: w.def.id + '_evo', name: evo.name, icon: w.def.icon, color: evo.color, tag: 'EVOLVE!', text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.levels.length, w: 4 * upgrade(rarity) });
         continue;
       }
-      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.evo ? w.def.levels.length - 1 : w.def.levels.length, w: (w.def.id === 'buster' ? 2 : 3) * upgrade(rarity) });
+      // Loadout weapons without tracks yet weigh more, so they keep up with track ranks.
+      const kindW = w.def.slot ? 4 : 3;
+      cands.push({ kind: 'weapon', id: w.def.id, name: w.def.name, icon: w.def.icon, color: w.def.color, tag: `LV ${w.level + 1}`, text: next.text, tags: w.def.tags, rarity, level: w.level, maxLevel: w.def.evo ? w.def.levels.length - 1 : w.def.levels.length, w: kindW * upgrade(rarity) });
     }
-    // Arm weapons don't use auto-weapon slots. A new one replaces whatever holds
-    // its click (the Buster's rapid fire / charge shot, or another arm weapon),
-    // and the card says so.
-    const autoCount = this.weapons.filter((w) => !w.def.slot && !(w.def.id === 'buster' && this.busterRetired)).length;
+    // New auto weapons, while slots are free. Loadout weapons are picked before the run.
+    const autoCount = this.weapons.filter((w) => !w.def.slot).length;
     for (const id of this.unlocked) {
       const d = WEAPONS[id];
-      if (!d || this.weapons.some((w) => w.def.id === id)) continue;
-      if (!d.slot && autoCount >= MAX_WEAPONS) continue;
-      const replaces = d.slot ? this.replacedBy(d.slot) : undefined;
-      const held = d.slot ? this.weapons.find((w) => w.def.slot === d.slot) : undefined;
-      const kindW = held && held.level >= 2 ? 0.6 : 2.4; // swapping a levelled arm weapon is rarely the pick
-      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, replaces, w: kindW * fresh(d.rarity) });
+      if (!d || d.slot || autoCount >= MAX_WEAPONS || this.weapons.some((w) => w.def.id === id)) continue;
+      cands.push({ kind: 'weapon', id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, tags: d.tags, rarity: d.rarity, w: 2.4 * fresh(d.rarity) });
     }
-    // Specials: upgrade the one you hold, or swap it for another (the card warns).
-    const cur = this.specialDef;
-    for (const d of Object.values(SPECIALS)) {
-      if (d.id === cur.id) {
-        const lv = this.special.level;
-        if (lv >= d.levels.length) continue;
-        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: `LV ${lv + 1}`, text: `${d.levels[lv].text} Cooldown ${cooldownText(specialCooldown(d, lv + 1, this.stats.specialCooldownMul))}.`, rarity: d.rarity, level: lv, maxLevel: d.levels.length, w: 1.6 * upgrade(d.rarity) });
-      } else {
-        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: `${d.desc} Cooldown ${cooldownText(specialCooldown(d, 1, this.stats.specialCooldownMul))}.`, rarity: d.rarity, replaces: `${cur.name} LV ${this.special.level}`, w: (this.special.level >= 2 ? 0.25 : 1.0) * fresh(d.rarity) });
-      }
+    // The special: its tracks, or its next level.
+    const sp = this.specialDef;
+    if (this.specialBuild) upgradable('sp', { ...sp, iconBase: 'sp_' + sp.id }, this.specialBuild, `${sp.name.toUpperCase()} · SPECIAL (Q/E)`);
+    else if (this.special.level < sp.levels.length) {
+      const lv = this.special.level;
+      const cd = cooldownText(specialCooldown(sp.levels[lv].p, this.stats.specialCooldownMul));
+      cands.push({ kind: 'special', id: 'sp_' + sp.id, name: sp.name, icon: sp.icon, color: sp.color, tag: `LV ${lv + 1}`, text: `${sp.levels[lv].text} Cooldown ${cd}.`, rarity: sp.rarity, level: lv, maxLevel: sp.levels.length, w: 4 * upgrade(sp.rarity) });
     }
     const owned = Object.keys(this.passives).length;
     for (const [id, d] of Object.entries(PASSIVES)) {
@@ -329,14 +413,14 @@ export class Hero implements SynergyHost {
       if (lv >= d.maxLevel || (lv === 0 && owned >= MAX_PASSIVES)) continue;
       cands.push({ kind: 'passive', id, name: d.name, icon: d.icon, color: d.color, tag: lv ? `LV ${lv + 1}` : 'NEW!', text: d.desc, rarity: d.rarity, level: lv, maxLevel: d.maxLevel, w: lv ? 1.8 * upgrade(d.rarity) : 0.8 * fresh(d.rarity) });
     }
-    // Late runs: once only swaps are left, mix in gold and healing so cards aren't all downgrades.
-    if (cands.filter((c) => !c.replaces).length < 3) {
+    // Late runs: when the pool runs dry, mix in gold and healing.
+    if (cands.length + fork.length < 3) {
       cands.push(
         { kind: 'gold', id: 'gold', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: `+${2 * this.skipGold} gold`, w: 2 },
         { kind: 'heal', id: 'heal', name: 'Snack', icon: '♥', color: '#ff5e7a', tag: 'BONUS', text: 'Heal 40 life', w: 2 },
       );
     }
-    const out: Offer[] = [];
+    const out: Offer[] = [...fork];
     while (out.length < 3 && cands.length) {
       let r = this.rng.next() * cands.reduce((a, c) => a + c.w, 0);
       let i = 0;
@@ -344,36 +428,35 @@ export class Hero implements SynergyHost {
       const { w: _w, ...offer } = cands.splice(i, 1)[0];
       out.push(offer);
     }
-    if (out.length === 0) {
-      out.push(
-        { kind: 'gold', id: 'gold', name: 'Gold Bag', icon: '●', color: '#ffb627', tag: 'BONUS', text: `+${2 * this.skipGold} gold` },
-        { kind: 'heal', id: 'heal', name: 'Snack', icon: '♥', color: '#ff5e7a', tag: 'BONUS', text: 'Heal 40 life' },
-      );
-    }
     return out;
   }
 
   /** Apply a level-up card. Returns its color (for the pickup burst). */
   applyOffer(o: Offer): string {
-    if (o.kind === 'weapon') {
+    if (o.kind === 'track' || o.kind === 'evo' || o.kind === 'overdrive') {
+      const [ref, what, k] = (o.pick ?? '').split('|');
+      const n = Number(k);
+      if (ref === 'sp') {
+        const b = this.specialBuild;
+        if (b) {
+          if (what === 't') b.ranks[n] = Math.min(this.specialDef.tracks![n].ranks.length, b.ranks[n] + 1);
+          else if (what === 'e' && b.evo < 0) b.evo = n;
+          else if (what === 'od') b.od++;
+          this.spParams = null;
+        }
+      } else {
+        const w = this.weapons.find((x) => x.def.id === ref);
+        if (what === 't') w?.addRank(n);
+        else if (what === 'e') w?.evolve(n);
+        else if (what === 'od') w?.overdrive();
+      }
+    } else if (o.kind === 'weapon') {
       const id = o.id.replace(/_evo$/, '');
       const w = this.weapons.find((x) => x.def.id === id);
       if (w) w.levelUp();
-      else {
-        // A new arm weapon replaces the one holding its click, upgrades and all.
-        const slot = WEAPONS[id].slot;
-        if (slot) {
-          const old = this.weapons.findIndex((x) => x.def.slot === slot);
-          if (old >= 0) this.weapons.splice(old, 1)[0].dispose();
-          const buster = this.weapons.find((x) => x.def.id === 'buster');
-          if (slot === 'primary' && buster) buster.level = 1;
-        }
-        this.weapons.push(createWeapon(id, this.world.scene));
-      }
+      else this.weapons.push(createWeapon(id, this.world.scene));
     } else if (o.kind === 'special') {
-      const id = o.id.replace(/^sp_/, '');
-      if (id === this.special.id) this.special.level = Math.min(this.specialDef.levels.length, this.special.level + 1);
-      else this.special = { id, level: 1 };
+      this.special.level = Math.min(this.specialDef.levels.length, this.special.level + 1);
     } else if (o.kind === 'passive') {
       this.passives[o.id] = (this.passives[o.id] ?? 0) + 1;
       this.recomputeStats();
@@ -396,7 +479,9 @@ export class Hero implements SynergyHost {
    * A treasure chest's item, applied on the spot: a random passive this hero
    * can take, else a level for an owned weapon, else gold.
    */
-  chestItem(): { id: string; name: string; color: string; icon: string; text: string; rarity: Rarity } {
+  chestItem(): ChestFind {
+    // Half of all chests are a gold stash: chests every 30 s were maxing builds by stage 3 (user).
+    if (this.rng.next() < chestTuning.goldShare) return this.chestGold();
     const passives = Object.values(PASSIVES).filter((d) => {
       if (d.coop && !this.world.coop) return false;
       const lv = this.passives[d.id] ?? 0;
@@ -413,16 +498,20 @@ export class Hero implements SynergyHost {
       this.applyOffer({ kind: 'passive', id: d.id, name: d.name, icon: d.icon, color: d.color, tag: '', text: d.desc });
       return { id: d.id, name: d.name, color: d.color, icon: d.icon, text: lv > 1 ? `LV ${lv}` : 'NEW', rarity: d.rarity };
     }
-    // Evolutions are always a level-up choice, never a chest surprise.
-    const weapons = this.weapons.filter((w) => !w.maxed && !(w.def.evo && w.level + 1 === w.def.levels.length) && !(w.def.id === 'buster' && this.busterRetired));
+    // Auto weapons only: the loadout grows through level-up choices. Evolutions are never a chest surprise.
+    const weapons = this.weapons.filter((w) => !w.def.slot && !w.maxed && !(w.def.evo && w.level + 1 === w.def.levels.length));
     if (weapons.length) {
       const w = weapons[Math.floor(this.rng.next() * weapons.length)];
       w.levelUp();
       this.loadoutDirty = true;
-      return { id: w.iconId, name: w.name, color: w.color, icon: w.def.icon, text: w.evolved ? 'EVOLVED' : `LV ${w.level}`, rarity: w.def.rarity };
+      return { id: w.iconId, name: w.name, color: w.color, icon: w.def.icon, text: `LV ${w.level}`, rarity: w.def.rarity };
     }
-    this.gold += 10;
-    return { id: 'gold', name: 'Gold', color: '#ffb627', icon: '●', text: '+10', rarity: 'common' };
+    return this.chestGold();
+  }
+
+  private chestGold(): ChestFind {
+    this.gold += chestTuning.gold;
+    return { id: 'gold', name: 'Gold', color: '#ffb627', icon: '●', text: `+${chestTuning.gold}`, rarity: 'common' };
   }
 
   // ---------------------------------------------------------------- shop

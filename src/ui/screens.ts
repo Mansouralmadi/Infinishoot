@@ -2,6 +2,8 @@ import type { Input } from '../core/input';
 import { ACHIEVEMENTS } from '../data/meta';
 import { tagChips, type Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
+import { SPECIALS } from '../data/specials';
+import { loadoutOptions, type LoadoutSlot } from '../data/loadout';
 import { modDesc, modMaxLevel, type ModDef } from '../game/modTypes';
 import type { ScoreEntry } from '../game/highscores';
 import { exportFile, importFile, resetSave, save } from '../game/save';
@@ -13,7 +15,7 @@ import { MenuNav } from './menu';
 import { iconHtml } from './pixelIcons';
 
 /** Full-screen menus. Plain DOM; every navigable element has `data-nav`. */
-export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'shop' | 'gameover' | 'unlocks' | 'savedata' | 'online' | 'wait';
+export type ScreenName = 'none' | 'title' | 'pause' | 'settings' | 'levelup' | 'shop' | 'gameover' | 'unlocks' | 'savedata' | 'online' | 'wait' | 'loadout';
 
 export interface ScreenActions {
   start(): void;
@@ -36,11 +38,13 @@ export interface ScreenActions {
   mpJoin(name: string, code: string): void;
   mpStart(): void;
   mpLeave(): void;
+  /** The loadout changed (online: tell the host). */
+  loadoutChanged(): void;
 }
 
 export interface LobbyView {
   code: string;
-  players: { name: string; color: string }[];
+  players: { name: string; color: string; kit?: string }[];
   isHost: boolean;
   status: string;
 }
@@ -65,8 +69,13 @@ export interface ShopView {
 }
 
 export interface Offer {
-  kind: 'weapon' | 'passive' | 'special' | 'gold' | 'heal';
+  kind: 'weapon' | 'passive' | 'special' | 'gold' | 'heal' | 'track' | 'evo' | 'overdrive';
+  /** Icon id. */
   id: string;
+  /** Loadout upgrades: what the pick does, "<item>|t|<track>", "<item>|e|<evo>" or "<item>|od". */
+  pick?: string;
+  /** Loadout upgrades: which item it upgrades, shown at the card's foot. */
+  label?: string;
   name: string;
   icon: string;
   color: string;
@@ -166,7 +175,7 @@ export class Screens {
 
   private root: HTMLElement;
 
-  constructor(root: HTMLElement, actions: ScreenActions) {
+  constructor(root: HTMLElement, private readonly actions: ScreenActions) {
     this.root = root;
     root.insertAdjacentHTML(
       'beforeend',
@@ -175,14 +184,14 @@ export class Screens {
   <div class="logo">${logoWord('INFINI', 0)}${logoWord('SHOOT', 6)}</div>
   <div class="tagline">TWIN-STICK ARCADE ROGUELIKE</div>
   <div class="menu">
-    <button data-nav data-act="start">PLAY SOLO</button>
+    <button data-nav data-act="play">PLAY SOLO</button>
     <button data-nav data-act="online">PLAY ONLINE</button>
     <button data-nav data-act="unlocks">UNLOCKS</button>
     <button data-nav data-act="settings">SETTINGS</button>
   </div>
   <div class="wallet"></div>
   <div class="hiscores"></div>
-  <div class="controls">WASD / L-stick move &middot; Mouse / R-stick aim &amp; shoot &middot; Hold right click / X charge shot &middot; Space / LB dash &middot; Q / RB bomb &middot; Esc / Start pause</div>
+  <div class="controls">WASD / L-stick move &middot; Mouse / R-stick aim &amp; shoot &middot; Hold right click / X right-click weapon &middot; Space / LB dash &middot; Q / RB bomb &middot; Esc / Start pause</div>
   <div class="credits">Icons: game-icons.net by Lorc, Delapouite &amp; contributors (CC BY 3.0) &middot; Fonts: Jersey, Silkscreen (OFL) &middot; Palette: Sweetie 16 by GrafxKid</div>
   <div class="version">v${__APP_VERSION__}</div>
 </div>
@@ -230,8 +239,18 @@ export class Screens {
   </div>
   <div class="msg mp-status"></div>
   <div class="menu row">
+    <button data-nav data-act="lo-online">LOADOUT</button>
     <button data-nav data-act="mp-start" hidden>START GAME</button>
     <button data-nav data-act="mp-leave">BACK</button>
+  </div>
+</div>
+<div id="scr-loadout" class="screen dim" hidden>
+  <h1>LOADOUT</h1>
+  <p class="note">Pick your left click, right click and special. You keep them all run; level-ups upgrade them.</p>
+  <div class="lo-rows"></div>
+  <div class="menu row">
+    <button data-nav data-act="lo-start" class="continue">START &#9654;</button>
+    <button data-nav data-act="lo-back">BACK</button>
   </div>
 </div>
 <div id="scr-wait" class="screen dim" hidden>
@@ -286,7 +305,7 @@ export class Screens {
   <div class="hiscores"></div>
 </div>`,
     );
-    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'shop', 'unlocks', 'savedata', 'gameover', 'online', 'wait'];
+    const names: Named[] = ['title', 'pause', 'settings', 'levelup', 'shop', 'unlocks', 'savedata', 'gameover', 'online', 'wait', 'loadout'];
     for (const n of names) this.els[n] = root.querySelector<HTMLElement>(`#scr-${n}`)!;
     this.navs = {
       title: new MenuNav(this.els.title),
@@ -299,6 +318,7 @@ export class Screens {
       gameover: new MenuNav(this.els.gameover, { horizontal: true }),
       online: new MenuNav(this.els.online, { onBack: () => actions.mpLeave() }),
       wait: new MenuNav(this.els.wait),
+      loadout: new MenuNav(this.els.loadout, { columns: 5, onBack: () => this.loadoutBack() }),
     };
 
     // Keep buttons from taking DOM focus on click, so Enter/Space don't fire twice.
@@ -312,6 +332,18 @@ export class Screens {
       switch (btn.dataset.act) {
         case 'start':
           return actions.start();
+        case 'play':
+          return this.showLoadout('solo');
+        case 'lo-online':
+          return this.showLoadout('online');
+        case 'lo-pick':
+          return this.pickLoadout(btn.dataset.slot as LoadoutSlot, btn.dataset.id!);
+        case 'lo-start':
+          if (this.loadoutFor === 'solo') return actions.start();
+          this.actions.loadoutChanged();
+          return this.show('online');
+        case 'lo-back':
+          return this.loadoutBack();
         case 'online':
           return actions.online();
         case 'mp-host':
@@ -413,6 +445,63 @@ export class Screens {
     this.tickLock();
   }
 
+  // ---------------------------------------------------------------- loadout
+
+  /** Where the loadout screen goes back to: the title (solo) or the online lobby. */
+  private loadoutFor: 'solo' | 'online' = 'solo';
+
+  showLoadout(forWhat: 'solo' | 'online'): void {
+    this.loadoutFor = forWhat;
+    const el = this.els.loadout;
+    el.querySelector<HTMLElement>('[data-act=lo-start]')!.innerHTML = forWhat === 'solo' ? 'START &#9654;' : 'DONE';
+    el.querySelector<HTMLElement>('[data-act=lo-back]')!.hidden = forWhat === 'online';
+    this.renderLoadout();
+    this.show('loadout');
+  }
+
+  private loadoutBack(): void {
+    if (this.loadoutFor === 'online') {
+      this.actions.loadoutChanged();
+      this.show('online');
+    } else this.show('title');
+  }
+
+  private pickLoadout(slot: LoadoutSlot, id: string): void {
+    if (!loadoutOptions(slot).includes(id)) return;
+    settings.loadout = { ...settings.loadout, [slot]: id };
+    saveSettings();
+    sfx.menuSelect();
+    const focus = this.navs.loadout.focus;
+    this.renderLoadout();
+    this.navs.loadout.refresh(focus);
+  }
+
+  private renderLoadout(): void {
+    const rows: [LoadoutSlot, string][] = [
+      ['primary', 'LEFT CLICK'],
+      ['secondary', 'RIGHT CLICK'],
+      ['special', 'SPECIAL (Q/E)'],
+    ];
+    this.els.loadout.querySelector('.lo-rows')!.innerHTML = rows
+      .map(([slot, label]) => {
+        const cards = loadoutOptions(slot)
+          .map((id) => {
+            const d = slot === 'special' ? SPECIALS[id] : WEAPONS[id];
+            const on = settings.loadout[slot] === id;
+            const icon = slot === 'special' ? 'sp_' + id : id;
+            return `<button class="lo-card r-${d.rarity} ${on ? 'on' : ''}" data-nav data-act="lo-pick" data-slot="${slot}" data-id="${id}" style="--c:${d.color}">
+              <div class="icon">${iconHtml(icon, d.color, d.icon)}</div>
+              <div class="name">${d.name}</div>
+              <div class="desc">${d.desc.replace(/^(LEFT|RIGHT) CLICK: /, '')}</div>
+              ${d.tracks ? '<div class="tree">UPGRADE TREE + 2 EVOLUTIONS</div>' : ''}
+            </button>`;
+          })
+          .join('');
+        return `<div class="lo-row"><div class="lo-label">${label}</div><div class="lo-cards">${cards}</div></div>`;
+      })
+      .join('');
+  }
+
   // ---------------------------------------------------------------- online
 
   private get nameField(): HTMLInputElement {
@@ -435,7 +524,7 @@ export class Screens {
     el.querySelector<HTMLElement>('.field')!.hidden = inLobby;
     el.querySelector('.code-big')!.textContent = v.code;
     el.querySelector('.players')!.innerHTML = v.players
-      .map((p, i) => `<div class="lobby-player" style="--c:${p.color}"><span class="dot"></span>${p.name}${i === 0 ? ' <small>HOST</small>' : ''}</div>`)
+      .map((p, i) => `<div class="lobby-player" style="--c:${p.color}"><span class="dot"></span>${p.name}${i === 0 ? ' <small>HOST</small>' : ''}${p.kit ? ` <small class="kit">${p.kit}</small>` : ''}</div>`)
       .join('');
     el.querySelector<HTMLElement>('[data-act=mp-start]')!.hidden = !(v.isHost && v.code);
     el.querySelector('.mp-status')!.textContent = v.status;
@@ -506,7 +595,7 @@ export class Screens {
           <div class="desc">${o.text}</div>
           ${o.tags ? `<div class="chips">${tagChips(o.tags)}</div>` : ''}
           ${o.replaces ? replaceStrip(o.replaces) : ''}
-          <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : o.kind === 'special' ? 'SPECIAL (Q/E)' : 'BONUS'}</div>
+          <div class="kind"><span class="r-text-${o.rarity ?? 'common'}">${o.rarity ? RARITY[o.rarity].label : ''}</span> ${o.label ?? (o.kind === 'weapon' ? 'WEAPON' : o.kind === 'passive' ? 'ITEM' : o.kind === 'special' ? 'SPECIAL (Q/E)' : 'BONUS')}</div>
           <div class="key">${i + 1}</div>
           <i class="lock"></i>
         </button>`,

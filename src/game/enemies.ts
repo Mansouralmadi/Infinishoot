@@ -300,6 +300,8 @@ export class Enemy {
   /** Hero index credited for burn damage. */
   burnOwner = 0;
   shockT = 0;
+  /** Exposed by a right-click hit: takes more damage from everyone. */
+  exposeT = 0;
   lungeX = 0;
   lungeZ = 0;
   facing = 0;
@@ -344,7 +346,7 @@ export class Enemy {
     this.dmgMul = (o.dmgMul ?? 1) * (this.elite ? 1.3 : 1);
     this.bombStamp = 0;
     this.flash = this.frozen = this.slowT = this.shatter = 0;
-    this.burnT = this.burnDps = this.burnAcc = this.shockT = this.burnOwner = 0;
+    this.burnT = this.burnDps = this.burnAcc = this.shockT = this.burnOwner = this.exposeT = 0;
     this.sq = this.sqV = this.hopY = 0;
     this.timerA = this.def.boss ? bossTuning.firstAttack : aggro(this, 1 + Math.random() * 2);
     this.enraged = false;
@@ -1237,6 +1239,7 @@ export class Enemies {
       } else if (e.burnT > 0 && e.shockT > 0) b.flash.setXYZW(i, 1, 0.9, 0.3, 0.5);
       else if (e.burnT > 0) b.flash.setXYZW(i, 1, 0.45, 0.1, 0.3 + 0.2 * Math.sin(time * 18 + e.uid));
       else if (e.shockT > 0) b.flash.setXYZW(i, 1, 1, 0.4, Math.sin(time * 50 + e.uid) > 0.3 ? 0.55 : 0.1);
+      else if (e.exposeT > 0) b.flash.setXYZW(i, 0.8, 0.6, 1, 0.3 + 0.15 * Math.sin(time * 12 + e.uid));
       else if (e.elite) b.flash.setXYZW(i, 1, 0.85, 0.2, 0.25 + 0.15 * Math.sin(time * 6));
       else b.flash.setXYZW(i, 0, 0, 0, 0);
 

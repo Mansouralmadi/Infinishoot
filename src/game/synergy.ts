@@ -14,8 +14,6 @@ export interface SynergyHost {
   readonly level: number;
   readonly gold: number;
   readonly weapons: Weapon[];
-  /** A left-click arm weapon is owned, so the Buster's tags no longer count. */
-  readonly busterRetired: boolean;
   readonly rng: Rng;
   blast(x: number, z: number, r: number, dmg: number, color: string, source: string, tags: Tag[]): void;
   zap(from: Enemy, hops: number, dmg: number): void;
@@ -62,18 +60,19 @@ export class Synergy implements ModApi {
   get gold(): number {
     return this.host.gold;
   }
-  /** Owned weapons whose tags count (a retired Buster doesn't). */
-  private counted(w: Weapon): boolean {
-    return !(w.def.id === 'buster' && this.host.busterRetired);
+  /** A weapon's tags, plus its evolution's (Dragon's Breath adds Fire...). */
+  private tagsOf(w: Weapon): readonly Tag[] {
+    const evo = w.build && w.def.evos?.[w.build.evo];
+    return evo?.tags ? [...w.def.tags, ...evo.tags] : w.def.tags;
   }
   tagCount(tag: Tag): number {
     let n = 0;
-    for (const w of this.host.weapons) if (this.counted(w) && w.def.tags.includes(tag)) n++;
+    for (const w of this.host.weapons) if (this.tagsOf(w).includes(tag)) n++;
     return n;
   }
   distinctTags(): number {
     const set = new Set<Tag>();
-    for (const w of this.host.weapons) if (this.counted(w)) for (const t of w.def.tags) set.add(t);
+    for (const w of this.host.weapons) for (const t of this.tagsOf(w)) set.add(t);
     return set.size;
   }
   topTag(): Tag | null {
@@ -81,8 +80,7 @@ export class Synergy implements ModApi {
     let best: Tag | null = null;
     let bestN = 0;
     for (const w of this.host.weapons) {
-      if (!this.counted(w)) continue;
-      for (const t of w.def.tags) {
+      for (const t of this.tagsOf(w)) {
         const n = (counts.get(t) ?? 0) + 1;
         counts.set(t, n);
         if (n > bestN) {

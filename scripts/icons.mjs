@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const ART = {
   // weapons
   buster: 'ray-gun',
+  charge: 'plasma-bolt',
   drones: 'delivery-drone',
   aura: 'aura',
   lightning: 'electric',
@@ -18,12 +19,14 @@ const ART = {
   // arm weapons (and their evolved forms)
   scatter: 'shotgun',
   scatter_evo: 'dragon-breath',
+  scatter_evo2: 'burst-blob',
   laser: 'laser-blast',
   laser_evo: 'laser-precision',
   orb: 'unstable-orb',
   orb_evo: 'lightning-storm',
   grenade: 'grenade',
   grenade_evo: 'rolling-bomb',
+  grenade_evo2: 'thunderball',
   well: 'vortex',
   well_evo: 'black-hole-bolas',
   shield: 'energy-shield',
@@ -60,6 +63,8 @@ const ART = {
   bond_of_steel: 'linked-rings',
   // specials (Q/E)
   sp_bomb: 'unlit-bomb',
+  sp_bomb_evo: 'cluster-bomb',
+  sp_bomb_evo2: 'implosion',
   sp_storm: 'thunder-struck',
   sp_blizzard: 'snowing',
   sp_meteor: 'meteor-impact',

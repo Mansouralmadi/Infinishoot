@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import type { SpatialHash } from '../../core/spatialHash';
 import type { Tag } from '../../data/tags';
+import { buildKey, buildMaxed, buildParams, newBuild, parseBuild, totalRanks, type Build } from '../../data/tracks';
 import type { WeaponDef } from '../../data/weapons';
 import type { ModFlags } from '../modTypes';
 import type { Bullets } from '../bullets';
@@ -57,9 +58,6 @@ export interface WeaponCtx {
   firing: boolean;
   /** Charge shot held (right mouse / X). */
   charging: boolean;
-  /** An arm weapon has taken over the Buster's rapid fire / charge shot. */
-  readonly armPrimary: boolean;
-  readonly armSecondary: boolean;
   /** Summed Mod flags (Hair Trigger, Pacifist Core, Lightning Rod...). */
   readonly flags: ModFlags;
   /** Apply base damage (scaled by stats, crits, shatter). Returns the dealt amount. */
@@ -77,9 +75,16 @@ export interface WeaponCtx {
   shake(x: number, z: number, amount: number): void;
 }
 
-/** Base class for an owned weapon. Levels are 1-based. */
+/**
+ * Base class for an owned weapon. Levels are 1-based. Loadout weapons with
+ * upgrade tracks keep a `build` (ranks, evolution, Overdrive) instead, and
+ * `level` just counts what was taken.
+ */
 export abstract class Weapon {
   level = 1;
+  /** Track weapons: what's been taken (null for level-ladder weapons). */
+  readonly build: Build | null;
+  private params: Record<string, number> | null = null;
   protected cd = 0.5;
   /** Muzzle flash timer (arm weapons; drives the flash and camera kick). */
   muzzleT = 0;
@@ -88,28 +93,69 @@ export abstract class Weapon {
   /** Length of the last cooldown, for `ready`. */
   protected cdMax = 1;
 
-  constructor(readonly def: WeaponDef) {}
+  constructor(readonly def: WeaponDef) {
+    this.build = def.tracks ? newBuild(def) : null;
+  }
 
-  /** Parameters for the current level. */
+  /** Parameters for the current level (or build). */
   get p(): Record<string, number> {
-    return this.def.levels[this.level - 1].p;
+    if (!this.build) return this.def.levels[this.level - 1].p;
+    return (this.params ??= buildParams(this.def.levels[0].p, this.def, this.build));
   }
 
   get maxed(): boolean {
-    return this.level >= this.def.levels.length;
+    return this.build ? buildMaxed(this.def, this.build) : this.level >= this.def.levels.length;
   }
 
-  /** Reached the evolution level (the def's last level). */
+  /** Evolved: the chosen evolution (track weapons) or the def's last level. */
   get evolved(): boolean {
-    return !!this.def.evo && this.maxed;
+    return this.build ? this.build.evo >= 0 : !!this.def.evo && this.maxed;
+  }
+
+  /** Track weapons: the chosen evolution's id ('' before evolving). */
+  get evoId(): string {
+    return (this.build && this.def.evos?.[this.build.evo]?.id) || '';
   }
 
   get name(): string {
+    if (this.build) return this.def.evos?.[this.build.evo]?.name ?? this.def.name;
     return this.evolved ? this.def.evo!.name : this.def.name;
   }
 
   get color(): string {
+    if (this.build) return this.def.evos?.[this.build.evo]?.color ?? this.def.color;
     return this.evolved ? this.def.evo!.color : this.def.color;
+  }
+
+  /** Track weapons: take a rank, the evolution or an Overdrive rank. */
+  addRank(track: number): void {
+    if (!this.build) return;
+    this.build.ranks[track] = Math.min(this.def.tracks![track].ranks.length, this.build.ranks[track] + 1);
+    this.rebuilt();
+  }
+  evolve(i: number): void {
+    if (!this.build || this.build.evo >= 0) return;
+    this.build.evo = i;
+    this.rebuilt();
+  }
+  overdrive(): void {
+    if (!this.build) return;
+    this.build.od++;
+    this.rebuilt();
+  }
+  private rebuilt(): void {
+    this.params = null;
+    this.level = 1 + totalRanks(this.build!) + (this.build!.evo >= 0 ? 1 : 0) + this.build!.od;
+  }
+
+  /** Network form of the build ('' for level-ladder weapons). */
+  get buildKey(): string {
+    return this.build ? buildKey(this.build) : '';
+  }
+  setBuildKey(key: string): void {
+    if (!this.build || key === this.buildKey) return;
+    Object.assign(this.build, parseBuild(key, this.def));
+    this.rebuilt();
   }
 
   /** Right-click arm weapons: recharge speed from Quick Draw / Capacitor. */
@@ -147,13 +193,15 @@ export abstract class Weapon {
     return true;
   }
 
-  /** Pixel icon id (evolved weapons get their own icon). */
+  /** Pixel icon id (evolved weapons get their own icon; a second evolution `_evo2`). */
   get iconId(): string {
+    if (this.build && this.build.evo >= 1) return `${this.def.id}_evo${this.build.evo + 1}`;
     return this.evolved ? this.def.id + '_evo' : this.def.id;
   }
 
+  /** Level-ladder weapons: next level. */
   levelUp(): void {
-    if (!this.maxed) this.level++;
+    if (!this.build && !this.maxed) this.level++;
   }
 
   /** Counts down a cooldown scaled by stats; returns true when it fires. */

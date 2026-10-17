@@ -1,15 +1,16 @@
 import type { Rarity } from './rarity';
+import type { Upgradable } from './tracks';
 
 /**
  * Specials: the screen-clearing ability on Q/E/middle click (pad RB/Y), on a
- * cooldown. You hold one at a time: a new special from a level-up card
- * replaces the current one (and its levels). Each has 5 levels with full
- * params per level; `charge` divides the cooldown (higher levels recharge
- * faster), and Battery Pack (`stats.specialCooldownMul`) lowers it for any special.
+ * cooldown, picked in the loadout before the run. Each has 5 levels with full
+ * params per level, or upgrade tracks (src/data/tracks.ts, `levels[0]` is the
+ * base). `charge` divides the cooldown (upgrades recharge faster), and Battery
+ * Pack (`stats.specialCooldownMul`) lowers it for any special.
  * Behaviour: the Bomb lives in Game (tryBomb/updateBomb); the others in
  * src/game/specials.ts.
  */
-export interface SpecialDef {
+export interface SpecialDef extends Upgradable {
   id: string;
   name: string;
   /** Short label for the HUD meter. */
@@ -25,9 +26,9 @@ export const specialTuning = {
   cooldown: 15, // seconds for a level-1 special, before Battery Pack
 };
 
-/** Cooldown in seconds of a special at a level (1-based), times the hero's specialCooldownMul. */
-export function specialCooldown(def: SpecialDef, lv: number, mul = 1): number {
-  return (specialTuning.cooldown / (def.levels[lv - 1]?.p.charge ?? 1)) * mul;
+/** Cooldown in seconds of a special with these params, times the hero's specialCooldownMul. */
+export function specialCooldown(p: Record<string, number>, mul = 1): number {
+  return (specialTuning.cooldown / (p.charge ?? 1)) * mul;
 }
 
 /** Cooldown for card text: "12.5s". */
@@ -44,12 +45,43 @@ export const SPECIALS: Record<string, SpecialDef> = {
     color: '#ef7d57',
     rarity: 'common',
     desc: 'A shockwave that blasts everything around you and clears enemy bullets.',
-    levels: [
-      { text: 'Shockwave around you.', p: { dmg: 80, radius: 10, charge: 1 } },
-      { text: 'Bigger, harder blast.', p: { dmg: 110, radius: 11, charge: 1.1 } },
-      { text: 'Recharges faster.', p: { dmg: 140, radius: 12, charge: 1.25 } },
-      { text: 'Wider shockwave.', p: { dmg: 180, radius: 13.5, charge: 1.35 } },
-      { text: 'Mega bomb!', p: { dmg: 240, radius: 15, charge: 1.5 } },
+    levels: [{ text: 'Shockwave around you.', p: { dmg: 80, radius: 10, charge: 1, bomblets: 0, implode: 0 } }],
+    tracks: [
+      {
+        id: 'payload',
+        name: 'Payload',
+        ranks: [
+          { text: '+30 damage.', p: { dmg: 30 } },
+          { text: '+30 damage.', p: { dmg: 30 } },
+          { text: '+30 damage.', p: { dmg: 30 } },
+          { text: '+40 damage.', p: { dmg: 40 } },
+        ],
+      },
+      {
+        id: 'wave',
+        name: 'Shockwave',
+        ranks: [
+          { text: 'Wider wave.', p: { radius: 1.25 } },
+          { text: 'Wider wave.', p: { radius: 1.25 } },
+          { text: 'Wider wave.', p: { radius: 1.25 } },
+          { text: 'Huge wave.', p: { radius: 1.5 } },
+        ],
+      },
+      {
+        id: 'recharge',
+        name: 'Recharge',
+        ranks: [
+          { text: 'Recharges 10% faster.', p: { charge: 0.1 } },
+          { text: 'Recharges 10% faster.', p: { charge: 0.1 } },
+          { text: 'Recharges 12% faster.', p: { charge: 0.12 } },
+          { text: 'Recharges 15% faster.', p: { charge: 0.15 } },
+        ],
+      },
+    ],
+    evoAt: 8,
+    evos: [
+      { id: 'cluster', name: 'Cluster Bomb', color: '#ff7a2f', text: 'The wave drops 8 bomblets that pop all around you (Explosive).', p: { bomblets: 8 } },
+      { id: 'implode', name: 'Implosion', color: '#b48cff', text: 'The wave pulls enemies in, then a second, bigger blast hits them.', p: { implode: 1 } },
     ],
   },
   storm: {

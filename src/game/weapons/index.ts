@@ -3,6 +3,7 @@ import { WEAPONS } from '../../data/weapons';
 import { Aura } from './aura';
 import type { Weapon } from './base';
 import { Buster } from './buster';
+import { ChargeShot } from './charge';
 import { Discs } from './discs';
 import { Drones } from './drones';
 import { Fire } from './fire';
@@ -22,6 +23,7 @@ import { Shield } from './shield';
 export { Weapon } from './base';
 export type { WeaponCtx, DamageOpts } from './base';
 export { Buster } from './buster';
+export { ChargeShot } from './charge';
 
 /** Create a weapon instance by id. */
 export function createWeapon(id: string, scene: THREE.Scene): Weapon {
@@ -29,6 +31,8 @@ export function createWeapon(id: string, scene: THREE.Scene): Weapon {
   switch (id) {
     case 'buster':
       return new Buster(def);
+    case 'charge':
+      return new ChargeShot(def);
     case 'drones':
       return new Drones(def, scene);
     case 'aura':

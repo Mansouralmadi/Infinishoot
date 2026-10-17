@@ -3243,3 +3243,94 @@ h1.ko {
   color: var(--yellow);
   text-align: center;
 }
+
+/* Loadout: three rows of cards (left click, right click, special); the picked card is lit. */
+#scr-loadout .lo-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1100px;
+  width: 100%;
+}
+
+#scr-loadout .lo-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#scr-loadout .lo-label {
+  font: 12px var(--label);
+  color: var(--yellow);
+}
+
+#scr-loadout .lo-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.screen button.lo-card {
+  --bg: var(--night);
+  --hi: var(--slate);
+  --lo: var(--ink);
+  width: 200px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  column-gap: 8px;
+  align-items: center;
+  text-align: left;
+  font-size: 20px;
+}
+
+.lo-card .icon {
+  grid-row: span 3;
+  width: 40px;
+  height: 40px;
+}
+
+.lo-card .icon .px-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.lo-card .name {
+  line-height: 1;
+}
+
+.lo-card .desc {
+  font-size: 14px;
+  line-height: 1.05;
+  color: var(--mist);
+  text-shadow: none;
+}
+
+.lo-card .tree {
+  font: 8px var(--label);
+  color: var(--lime);
+  text-shadow: none;
+}
+
+.screen button.lo-card.on {
+  --bg: var(--teal);
+  --hi: var(--cyan);
+  --lo: var(--ink);
+  --ring: var(--yellow);
+}
+
+.screen button.lo-card.on .desc {
+  color: var(--white);
+}
+
+.screen button.lo-card.focused {
+  --bg: var(--orange);
+  --hi: var(--yellow);
+  --lo: var(--red);
+  --ring: var(--white);
+}
+
+.lobby-player .kit {
+  font: 9px var(--label);
+  color: var(--mist);
+}

@@ -1,25 +1,28 @@
 import type { Rarity } from './rarity';
 import type { Tag } from './tags';
+import type { Upgradable } from './tracks';
 
 /**
  * Weapon definitions. Each level lists its full parameter set (not deltas)
- * plus the text shown on the level-up card. Behaviour lives in
- * src/game/weapons/. Damage, cooldown and area are further scaled by stats.
+ * plus the text shown on the level-up card. Loadout weapons with `tracks`
+ * use upgrade tracks instead (src/data/tracks.ts): `levels[0]` is their base.
+ * Behaviour lives in src/game/weapons/. Damage, cooldown and area are further
+ * scaled by stats.
  */
 export interface WeaponLevel {
   text: string;
   p: Record<string, number>;
 }
 
-/** Arm weapons replace the Buster's rapid fire (primary) or charge shot (secondary). */
+/** Loadout slot: left click (primary) or right click (secondary), picked before the run. */
 export type ArmSlot = 'primary' | 'secondary';
 
-export interface WeaponDef {
+export interface WeaponDef extends Upgradable {
   id: string;
   rarity: Rarity;
-  /** Arm weapon slot; arm weapons don't take an auto-weapon slot. */
+  /** Loadout slot; loadout weapons don't take an auto-weapon slot. */
   slot?: ArmSlot;
-  /** The last level is an evolution: new name, colour and look. */
+  /** Weapons without tracks: the last level is an evolution (new name, colour and look). */
   evo?: { name: string; color: string };
   tags: Tag[];
   name: string;
@@ -40,11 +43,12 @@ export const WEAPONS: Record<string, WeaponDef> = {
   buster: {
     id: 'buster',
     rarity: 'common',
+    slot: 'primary',
     tags: ['projectile'],
     name: 'Buster',
     icon: '▶',
     color: '#ffd23f',
-    desc: 'Your trusty arm cannon. Aim and fire.',
+    desc: 'LEFT CLICK: your trusty arm cannon. Rapid shots where you aim.',
     starter: true,
     levels: [
       { text: 'Rapid shots where you aim.', p: { dmg: 10, rate: 7, shots: 1, arc: 0, pierce: 0, size: 1, speed: 28 } },
@@ -52,6 +56,24 @@ export const WEAPONS: Record<string, WeaponDef> = {
       { text: 'Fires 2 shots.', p: { dmg: 12, rate: 8.5, shots: 2, arc: 10, pierce: 0, size: 1.1, speed: 30 } },
       { text: 'Shots pierce 1 enemy.', p: { dmg: 14, rate: 9.5, shots: 2, arc: 10, pierce: 1, size: 1.2, speed: 32 } },
       { text: 'Triple mega shots!', p: { dmg: 16, rate: 10.5, shots: 3, arc: 16, pierce: 2, size: 1.45, speed: 34 } },
+    ],
+  },
+  charge: {
+    id: 'charge',
+    rarity: 'common',
+    slot: 'secondary',
+    tags: ['projectile'],
+    name: 'Charge Shot',
+    icon: '◆',
+    color: '#3dffb0',
+    desc: 'RIGHT CLICK: hold to charge, release for a big piercing shot.',
+    starter: true,
+    levels: [
+      { text: 'Hold to charge a piercing shot; a full charge explodes.', p: { dmg: 10, speed: 28 } },
+      { text: 'Harder charged shots.', p: { dmg: 12, speed: 30 } },
+      { text: 'Harder, faster shots.', p: { dmg: 14, speed: 31 } },
+      { text: 'Heavier charge.', p: { dmg: 16, speed: 32 } },
+      { text: 'Mega charge!', p: { dmg: 19, speed: 34 } },
     ],
   },
   drones: {
@@ -196,20 +218,49 @@ export const WEAPONS: Record<string, WeaponDef> = {
     id: 'scatter',
     rarity: 'uncommon',
     slot: 'primary',
-    evo: { name: "Dragon's Breath", color: '#ff5e3a' },
     tags: ['projectile'],
     name: 'Scattergun',
     icon: '⁂',
     color: '#ffe9a8',
     desc: 'LEFT CLICK: a close-range blast of pellets.',
     starter: true,
-    levels: [
-      { text: 'Blasts 8 pellets where you aim.', p: { dmg: 12, rate: 2.2, pellets: 8, spread: 40, life: 0.32, speed: 26, pierce: 0 } },
-      { text: 'Faster, harder blasts.', p: { dmg: 15, rate: 2.3, pellets: 8, spread: 40, life: 0.32, speed: 26, pierce: 0 } },
-      { text: '+1 pellet, pellets pierce 1.', p: { dmg: 18, rate: 2.4, pellets: 9, spread: 42, life: 0.34, speed: 27, pierce: 1 } },
-      { text: '+1 pellet, wider blast.', p: { dmg: 22, rate: 2.6, pellets: 10, spread: 46, life: 0.34, speed: 28, pierce: 1 } },
-      { text: '11 pellets that pierce 2!', p: { dmg: 27, rate: 2.8, pellets: 11, spread: 50, life: 0.36, speed: 28, pierce: 2 } },
-      { text: 'EVOLVE: breathes fire that sets enemies ablaze.', p: { dmg: 32, rate: 3.2, pellets: 13, spread: 50, life: 0.42, speed: 30, pierce: 3 } },
+    levels: [{ text: 'Blasts 8 pellets where you aim.', p: { dmg: 12, rate: 2.2, pellets: 8, spread: 40, life: 0.32, speed: 26, pierce: 0, knock: 3, blast: 0 } }],
+    tracks: [
+      {
+        id: 'buckshot',
+        name: 'Buckshot',
+        ranks: [
+          { text: '+1 pellet, +3 damage.', p: { pellets: 1, dmg: 3 } },
+          { text: '+1 pellet, +3 damage.', p: { pellets: 1, dmg: 3 } },
+          { text: '+1 pellet, +3 damage, wider blast.', p: { pellets: 1, dmg: 3, spread: 4 } },
+          { text: '+1 pellet, +3 damage.', p: { pellets: 1, dmg: 3 } },
+        ],
+      },
+      {
+        id: 'pump',
+        name: 'Pump Action',
+        ranks: [
+          { text: 'Fires 15% faster.', p: { rate: 0.33 } },
+          { text: 'Fires faster, +2 damage.', p: { rate: 0.3, dmg: 2 } },
+          { text: 'Fires 15% faster.', p: { rate: 0.33 } },
+          { text: 'Fires faster, +3 damage.', p: { rate: 0.3, dmg: 3 } },
+        ],
+      },
+      {
+        id: 'choke',
+        name: 'Choke',
+        ranks: [
+          { text: 'Tighter blast that reaches further.', p: { spread: -6, life: 0.06 } },
+          { text: 'Pellets pierce 1 more enemy.', p: { pierce: 1, life: 0.04 } },
+          { text: 'Tighter, harder-hitting blast.', p: { spread: -6, life: 0.05, knock: 2, dmg: 2 } },
+          { text: 'Pellets pierce 1 more enemy.', p: { pierce: 1, life: 0.05 } },
+        ],
+      },
+    ],
+    evoAt: 8,
+    evos: [
+      { id: 'dragon', name: "Dragon's Breath", color: '#ff5e3a', text: 'Breathes fire: long flame pellets that set enemies ablaze (Fire). x1.25 damage.', tags: ['fire'], p: { pellets: 1, life: 0.08 }, mul: { dmg: 1.25 } },
+      { id: 'flak', name: 'Flak Cannon', color: '#ffb627', text: 'Pellets burst on impact in small blasts that hit the crowd behind (Explosive).', tags: ['explosive'], p: { blast: 1.2 }, mul: { dmg: 1.1 } },
     ],
   },
   laser: {
@@ -256,20 +307,49 @@ export const WEAPONS: Record<string, WeaponDef> = {
     id: 'grenade',
     rarity: 'rare',
     slot: 'secondary',
-    evo: { name: 'Cluster Mortar', color: '#ff3d5e' },
     tags: ['explosive'],
     name: 'Grenade Lobber',
     icon: '●',
     color: '#9be35a',
     desc: 'RIGHT CLICK: lob grenades over the crowd.',
     starter: true,
-    levels: [
-      { text: 'Lobs a grenade where you aim.', p: { cd: 1.2, dmg: 85, radius: 2.6, range: 8, bomblets: 0 } },
-      { text: 'Bigger boom.', p: { cd: 1.1, dmg: 100, radius: 2.8, range: 8.5, bomblets: 0 } },
-      { text: 'Faster reload.', p: { cd: 0.95, dmg: 120, radius: 3.0, range: 9, bomblets: 0 } },
-      { text: 'Heavier grenades.', p: { cd: 0.9, dmg: 140, radius: 3.3, range: 9, bomblets: 0 } },
-      { text: 'Huge blasts!', p: { cd: 0.8, dmg: 165, radius: 3.6, range: 9.5, bomblets: 0 } },
-      { text: 'EVOLVE: each shell scatters 6 bomblets.', p: { cd: 0.7, dmg: 190, radius: 3.8, range: 10, bomblets: 6 } },
+    levels: [{ text: 'Lobs a grenade where you aim.', p: { cd: 1.2, dmg: 85, radius: 2.6, range: 8, count: 1, bomblets: 0, after: 0 } }],
+    tracks: [
+      {
+        id: 'payload',
+        name: 'Payload',
+        ranks: [
+          { text: '+25 damage.', p: { dmg: 25 } },
+          { text: '+25 damage.', p: { dmg: 25 } },
+          { text: '+30 damage.', p: { dmg: 30 } },
+          { text: '+35 damage.', p: { dmg: 35 } },
+        ],
+      },
+      {
+        id: 'reload',
+        name: 'Quick Reload',
+        ranks: [
+          { text: 'Reloads 0.1s faster.', p: { cd: -0.1 } },
+          { text: 'Reloads 0.1s faster.', p: { cd: -0.1 } },
+          { text: 'Reloads 0.1s faster.', p: { cd: -0.1 } },
+          { text: 'Lobs 2 grenades at once.', p: { cd: -0.05, count: 1 } },
+        ],
+      },
+      {
+        id: 'wide',
+        name: 'Wide Blast',
+        ranks: [
+          { text: 'Bigger blasts.', p: { radius: 0.3 } },
+          { text: 'Bigger blasts, longer throws.', p: { radius: 0.3, range: 1 } },
+          { text: 'Bigger blasts.', p: { radius: 0.3 } },
+          { text: 'Huge blasts, longer throws.', p: { radius: 0.4, range: 1 } },
+        ],
+      },
+    ],
+    evoAt: 8,
+    evos: [
+      { id: 'cluster', name: 'Cluster Mortar', color: '#ff3d5e', text: 'Each shell scatters 6 bomblets into the crowd.', p: { bomblets: 6 } },
+      { id: 'thunder', name: 'Thunder Mortar', color: '#73eff7', text: 'Blasts Shock everything (Shock), then a thunderclap hits the spot again.', tags: ['shock'], p: { after: 0.6 } },
     ],
   },
   well: {

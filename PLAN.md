@@ -112,6 +112,13 @@ Known limits: some strict networks block direct WebRTC connections (would need a
 - [x] Slower levelling: enemies drop 45% less XP and the level curve is steeper (about level 14 at the end of stage 1 instead of 25-30)
 - [x] Dash recharge scales with team level: 1.6 s at level 1, down to 0.7 s by level 20
 
+## Milestone 4d: Loadouts and upgrade trees (in progress)
+Plan agreed with the user on 2026-10-17: pick left click, right click and special before the run and keep them; level-ups grow them through upgrade tracks and a forked evolution.
+- [x] Step 1, playable slice: LOADOUT screen (solo and co-op lobby), Buster split into Buster (left) and Charge Shot (right), no weapon or special swaps, 4 auto-weapon slots, track/fork/Overdrive data model (src/data/tracks.ts), fully authored Scattergun, Grenade Lobber and Bomb, Exposed on right-click hits, chests half gold, Momentum capped
+- [ ] Step 2, content: tracks and two evolutions for Buster, Charge Shot, Pulse Laser, Plasma Orb, Rail Driver, Gravity Well, Aegis Shield, Orbital Strike, Thunderstorm, Blizzard, Meteor Shower (about 130 ranks and 22 evolutions)
+- [ ] Step 3, balance: DPS bench and bot runs per track and evolution, difficulty re-tuned to the slower power curve; achievements unlock loadout options
+- **Playable:** pick a kit and grow it all run.
+
 ## Milestone 5: Heroes and content
 - [ ] 2-3 heroes with different starting weapons and stat quirks, unlocked through achievements; hero art with painted faces
 - [ ] More weapons (laser sweep, charge cannon) and passives
@@ -224,3 +231,9 @@ public/assets/         # models (glb), textures (png), audio
   - QA fixes: one hit can't take more than 35% of max life (stage 1 one-shots); boss HP x2.4 and x1.8 per loop, Reaper 15,000 HP, one every 60 s and kept in the arena (bosses and Reapers melted in loop 2); elite damage x1.3; King Bopper contact 25 -> 20 and slam 30 -> 24, Rhino and Chonk contact 18 -> 15 (the stage-1 King killed 4 of 6 bot runs); the dev bot now buys more than one Mod per shop; gems no longer crowd chests and hearts out of the pickup pool; the damage breakdown counts only damage actually dealt.
 - 2026-10-17: Mod upgrades explained (user: unclear what upgrading does). Every upgradable Mod's description now states its numbers at your level, the shop shows a NEXT LV line with the changing numbers highlighted, offer cards say how far a Mod upgrades, and pause tooltips show the level. Wildfire's extra levels did nothing (its burst gate blocked the second copy); every level now bursts on the same kill.
 - 2026-10-17: Specials (Q/E) run on a cooldown instead of filling from kill XP (user): 15 s at level 1, special levels shorten it (Bomb L5 10 s, others L5 11.5 s), and Battery Pack now lowers the cooldown of whichever special you hold (-12% per level, 3 levels, floor x0.5). Level-up cards show the cooldown. Grenade Lobber is rare instead of legendary (user).
+- 2026-10-17: v1.1.0, loadouts step 1 (user: "once my left click is strong I stop using right click", "stage 2-3 is too easy, I max everything"):
+  - Before the run each player picks a left click, right click and special and keeps them. No swap cards; auto weapons get 4 slots (was 6). The Buster's charge shot is now its own right-click weapon, Charge Shot, so every loadout has exactly one weapon per click.
+  - Upgrade trees: each authored item has 3 tracks of 4 ranks (rank rarity common, common, uncommon, rare), then after 8 ranks a forced two-card evolution fork (legendary), then repeatable Overdrive (+8% damage). Scattergun: Buckshot / Pump Action / Choke, then Dragon's Breath (fire) or Flak Cannon (pellets burst, explosive). Grenade Lobber: Payload / Quick Reload (last rank lobs 2) / Wide Blast, then Cluster Mortar or Thunder Mortar (Shock blasts plus a thunderclap 0.4 s later). Bomb: Payload / Shockwave / Recharge, then Cluster Bomb (8 bomblets) or Implosion (pulls enemies in, then a x1.6 blast). Evolution tags count for Mods (Dragon's Breath counts as Fire).
+  - Right click: every right-click hit Exposes the enemy for 4 s (+30% damage from everyone, violet tint), so the right click is worth using even when the left click carries.
+  - Power curve: 39 loadout picks plus auto weapons and passives instead of about 60 in all; chests are gold half the time and only level owned passives or auto weapons; Momentum caps at 20 levels. A bot run with Scattergun/Grenade/Bomb reached level 27 in stage 3 with 14 of 39 loadout ranks taken (before: everything maxed by stage 3-4).
+  - Not yet: tracks for the other 11 loadout items (they keep their level ladders and still evolve at their last level), loadout unlocks through achievements (everything is available), difficulty re-tune.

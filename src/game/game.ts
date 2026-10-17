@@ -9,7 +9,9 @@ import { MOD_BY_ID } from '../data/mods';
 import type { Tag } from '../data/tags';
 import { PASSIVES } from '../data/passives';
 import { SPECIALS } from '../data/specials';
-import { WEAPONS } from '../data/weapons';
+import { buildKey } from '../data/tracks';
+import { WEAPONS, isRightClick } from '../data/weapons';
+import { validLoadout, type Loadout } from '../data/loadout';
 import { passiveTuning } from './stats';
 import { isSpecialRunning, resetSpecials, startSpecial, updateSpecials, type SpecialApi } from './specials';
 import { sfx } from '../audio/sfx';
@@ -39,7 +41,7 @@ import { Portal } from './portal';
 import { grantAchievement, persist, save, unlockedWeapons } from './save';
 import { settings, saveSettings } from './settings';
 import { Vfx, type VfxEvent } from './vfx';
-import { createWeapon, type Buster, type DamageOpts, type WeaponCtx } from './weapons';
+import { ChargeShot, createWeapon, type DamageOpts, type WeaponCtx } from './weapons';
 
 export { economyTuning } from './hero';
 
@@ -57,6 +59,12 @@ export const scoreTuning = {
 export const bombTuning = {
   duration: 0.35,
   knockback: 18,
+  bombletRadius: 2.6, // Cluster Bomb
+  bombletDmg: 0.6, // x the bomb's damage, each
+  pullDmg: 0.4, // Implosion: first wave (pulls in)
+  pullKnock: 14,
+  implodeDelay: 0.3,
+  implodeDmg: 1.6, // Implosion: second wave
 };
 
 export const dropTuning = {
@@ -96,6 +104,9 @@ export const statusTuning = {
   overloadPerLevel: 3,
   napalmDps: 5,
   napalmPerLevel: 1,
+  // Right-click hits Expose: everyone's hits on that enemy deal more for a while (user: the right click got ignored).
+  exposeTime: 4,
+  exposeMult: 0.3,
 };
 
 export const cheats = { god: false };
@@ -114,7 +125,10 @@ const BULLET_KINDS: { source: string; tags?: Tag[] }[] = [
   { source: 'scatter' },
   { source: 'scatter', tags: ['projectile', 'fire'] },
   { source: 'shield', tags: ['projectile'] },
+  { source: 'scatter', tags: ['projectile', 'explosive'] }, // Flak Cannon
 ];
+/** Bullet kinds that burst on their first hit: the full-charge shot and Flak Cannon pellets. */
+const IMPACT_BLAST = [1, 5];
 const SNAP_EVERY = 3; // host snapshot every N sim steps (20 Hz)
 const INPUT_EVERY = 2; // client input every N sim steps (30 Hz)
 const INTEREST = 50; // only send entities this close to each client's hero (wide enough for a zoomed-out camera)
@@ -131,6 +145,12 @@ interface LobbyEntry {
   peerId: string; // '' = host
   name: string;
   unlocked: string[];
+  loadout: Loadout;
+}
+
+/** "Scattergun / Grenade Lobber / Bomb" for the lobby list. */
+function kitText(l: Loadout): string {
+  return `${WEAPONS[l.primary]?.name} / ${WEAPONS[l.secondary]?.name} / ${SPECIALS[l.special]?.name}`;
 }
 
 /** Shop view sent over the network (Mods referenced by id). */
@@ -254,6 +274,8 @@ export class Game implements HeroWorld {
   private specialApi: SpecialApi = this.makeSpecialApi();
   /** The free starting shop before stage 1 is open (its gold is not kept). */
   private preShop = false;
+  /** Last EXPOSED popup (run time), so a crowd doesn't spam it. */
+  private exposeTextT = -1;
   private shownCharge = 0;
   private lastReady = 1;
   private readyFlashT = 0;
@@ -293,6 +315,7 @@ export class Game implements HeroWorld {
     });
     this.screens = new Screens(hudRoot, {
       start: () => this.startSolo(),
+      loadoutChanged: () => this.onLoadoutChanged(),
       resume: () => this.resume(),
       quit: () => this.quitRun(),
       retry: () => this.retry(),
@@ -423,12 +446,6 @@ export class Game implements HeroWorld {
       owner: hero.index,
       firing: false,
       charging: false,
-      get armPrimary() {
-        return hero.weapons.some((w) => w.def.slot === 'primary');
-      },
-      get armSecondary() {
-        return hero.weapons.some((w) => w.def.slot === 'secondary');
-      },
       damage: (e, base, o) => this.damage(e, base, o, hero),
       nearest: (x, z, r, skip) => this.nearestEnemy(x, z, r, skip),
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),
@@ -583,6 +600,8 @@ export class Game implements HeroWorld {
     this.elitesRun = this.bossesRun = this.overloads = this.victories = 0;
     this.newAchievements = [];
     this.director.players = this.heroes.length;
+    // Everyone keeps the loadout they picked; this machine's comes from its settings.
+    if (this.role !== 'client') this.hero.loadoutPick = validLoadout(settings.loadout);
     for (const h of this.heroes) {
       h.left = false;
       h.startRun();
@@ -1482,6 +1501,7 @@ export class Game implements HeroWorld {
     let amount = o.fixed ? base : by.synergy.damage(ev, base * by.stats.damageMul);
     if (!o.fixed && e.frozen > 0 && e.shatter > 0) amount *= 1 + e.shatter;
     if (!o.fixed && e.shockT > 0) amount *= 1 + statusTuning.shockMult + by.synergy.flags.shockMult;
+    if (!o.fixed && e.exposeT > 0) amount *= 1 + statusTuning.exposeMult;
     if (crit) amount *= by.stats.critMult;
     amount = Math.max(1, Math.round(amount));
     const dealt = Math.min(amount, Math.max(0, e.hp));
@@ -1512,6 +1532,7 @@ export class Game implements HeroWorld {
     if (!o.noStatus && e.hp > 0) {
       if (tags.includes('fire')) this.ignite(e, Math.max(3, amount * 0.15), by);
       if (tags.includes('shock')) this.shock(e, by);
+      if (isRightClick(o.source)) this.expose(e);
     }
     if (!o.noStatus) {
       by.synergy.hit(ev);
@@ -1529,6 +1550,18 @@ export class Game implements HeroWorld {
     e.burnDps = Math.max(e.burnDps, dps);
     e.burnOwner = by.index;
     if (e.shockT > 0) this.overload(e, by);
+  }
+
+  /** Right-click hit: the enemy takes more damage from everyone for a few seconds. */
+  private expose(e: Enemy): void {
+    if (e.exposeT <= 0) {
+      this.vfx.ring(e.x, e.z, e.radius, e.radius * 2.6, '#c4b8ff', 0.25);
+      if (this.runTime - this.exposeTextT > 0.6) {
+        this.exposeTextT = this.runTime;
+        this.vfx.num(e.x, 2.2 * e.scale, e.z, 'EXPOSED', 'crit');
+      }
+    }
+    e.exposeT = statusTuning.exposeTime;
   }
 
   shock(e: Enemy, by: Hero): void {
@@ -1583,6 +1616,7 @@ export class Game implements HeroWorld {
     for (const e of this.enemies.list) {
       if (!e.active) continue;
       if (e.shockT > 0) e.shockT -= dt;
+      if (e.exposeT > 0) e.exposeT -= dt;
       if (e.burnT <= 0) continue;
       e.burnT -= dt;
       e.burnAcc += dt;
@@ -1881,7 +1915,8 @@ export class Game implements HeroWorld {
       const x = b.x[i];
       const z = b.z[i];
       if (b.life[i] <= 0) {
-        this.bulletBlast(i);
+        // Flak pellets only burst on something; a miss just fizzles.
+        if (b.kind[i] !== 5) this.bulletBlast(i);
         b.kill(i--);
         continue;
       }
@@ -1926,7 +1961,7 @@ export class Game implements HeroWorld {
         const by = this.heroes[b.owner[i]] ?? this.hero;
         const kind = BULLET_KINDS[b.kind[i]] ?? BULLET_KINDS[0];
         this.damage(hit, b.damage[i], { source: kind.source, tags: kind.tags, dirX: b.vx[i] / sp, dirZ: b.vz[i] / sp, knockback: b.knockback[i], hx: x, hz: z, canCrit: true, loud: true }, by);
-        if (b.blast[i] > 0 && b.kind[i] === 1) {
+        if (b.blast[i] > 0 && IMPACT_BLAST.includes(b.kind[i])) {
           this.bulletBlast(i);
           b.blast[i] = 0;
         }
@@ -1998,6 +2033,10 @@ export class Game implements HeroWorld {
     const b = this.bullets;
     if (b.team[i] !== Team.Player || b.blast[i] <= 0) return;
     const by = this.heroes[b.owner[i]] ?? this.hero;
+    if (b.kind[i] === 5) {
+      this.blast(b.x[i], b.z[i], b.blast[i], b.damage[i] * 0.5, this.bullets.colorOf(i), 'scatter', ['projectile', 'explosive'], false, by);
+      return;
+    }
     this.vfx.shake(b.x[i], b.z[i], 0.25);
     this.blast(b.x[i], b.z[i], b.blast[i], b.damage[i] * 0.6, this.bullets.colorOf(i), 'charge', ['projectile', 'explosive'], false, by);
   }
@@ -2029,25 +2068,46 @@ export class Game implements HeroWorld {
       startSpecial(h, h.specialDef, h.specialP, this.specialApi);
       return;
     }
-    if (h.bombT >= 0) return;
+    if (h.bombT >= 0 || h.bombNext > 0) return;
     const p = h.player;
     h.bombCharge = 0;
-    h.bombT = 0;
     h.bombNuke = false;
-    h.bombId = (h.bombId + 1) % 1000;
-    h.bombX = p.x;
-    h.bombZ = p.z;
+    h.bombWave = 1;
+    this.startBombWave(h, p.x, p.z);
     p.invuln = Math.max(p.invuln, 0.6);
-    this.vfx.sound('bomb', p.x, p.z);
     if (h === this.hero) this.hud.flash(0.9);
-    this.vfx.shake(p.x, p.z, 0.9);
     this.juice.freeze(0.06);
     const R = h.specialP.radius;
-    this.vfx.ring(p.x, p.z, 1, R * 2, '#ef7d57', bombTuning.duration + 0.15);
-    this.vfx.ring(p.x, p.z, 1, R * 1.6, '#ffffff', bombTuning.duration);
-    this.vfx.star(p.x, 1.2, p.z, 5, '#ffffff', 0.2);
     for (let i = 0; i < this.bullets.count; i++) {
       if (this.bullets.team[i] === Team.Enemy && Math.hypot(this.bullets.x[i] - p.x, this.bullets.z[i] - p.z) < R * 1.5) this.bullets.kill(i--);
+    }
+  }
+
+  /** One bomb wave from (x, z): Implosion's first wave pulls in (violet), everything else blasts out. */
+  private startBombWave(h: Hero, x: number, z: number): void {
+    h.bombT = 0;
+    h.bombId = (h.bombId + 1) % 1000;
+    h.bombX = x;
+    h.bombZ = z;
+    const R = h.specialP.radius;
+    const evo = h.specialEvo;
+    const pull = evo === 'implode' && h.bombWave === 1;
+    const color = pull ? '#b48cff' : evo === 'cluster' ? '#ff7a2f' : '#ef7d57';
+    this.vfx.sound('bomb', x, z);
+    this.vfx.shake(x, z, pull ? 0.5 : 0.9);
+    this.vfx.ring(x, z, 1, R * 2, color, bombTuning.duration + 0.15);
+    this.vfx.ring(x, z, 1, R * 1.6, '#ffffff', bombTuning.duration);
+    this.vfx.star(x, 1.2, z, pull ? 3 : 5, '#ffffff', 0.2);
+  }
+
+  /** Cluster Bomb's bomblets pop one by one after the wave. */
+  private updateBomblets(h: Hero, dt: number): void {
+    const p = h.specialP;
+    for (let i = h.bomblets.length - 1; i >= 0; i--) {
+      const b = h.bomblets[i];
+      if ((b.t -= dt) > 0) continue;
+      h.bomblets.splice(i, 1);
+      this.blast(b.x, b.z, bombTuning.bombletRadius, p.dmg * bombTuning.bombletDmg, '#ff7a2f', 'bomb', ['explosive'], false, h);
     }
   }
 
@@ -2076,11 +2136,23 @@ export class Game implements HeroWorld {
   }
 
   private updateBomb(h: Hero, dt: number): void {
+    if (h.bomblets.length) this.updateBomblets(h, dt);
+    // Implosion: the second, bigger blast after the pull.
+    if (h.bombNext > 0 && (h.bombNext -= dt) <= 0) {
+      h.bombWave = 2;
+      this.startBombWave(h, h.bombX, h.bombZ);
+      this.vfx.sound('explode', h.bombX, h.bombZ);
+      this.vfx.flash(0.5);
+    }
     if (h.bombT < 0) return;
     h.bombT += dt;
     const nuke = h.bombNuke;
+    const sp = h.specialP;
+    const implode = !nuke && sp.implode > 0;
+    const pull = implode && h.bombWave === 1;
+    const dmgMul = implode ? (pull ? bombTuning.pullDmg : bombTuning.implodeDmg) : 1;
     const k = Math.min(1, h.bombT / (nuke ? nukeTuning.duration : bombTuning.duration));
-    const r = (nuke ? nukeTuning.radius : h.specialP.radius) * (1 - (1 - k) * (1 - k));
+    const r = (nuke ? nukeTuning.radius : sp.radius) * (1 - (1 - k) * (1 - k));
     const stamp = h.index * 1000 + h.bombId + 1;
     for (const e of this.enemies.list) {
       if (!e.alive || e.hp <= 0 || e.bombStamp === stamp) continue;
@@ -2092,10 +2164,21 @@ export class Game implements HeroWorld {
       const n = d || 1;
       // The nuke over-kills normal enemies and takes a big bite out of bosses.
       const tough = e.def.boss || e.def.id === 'reaper';
-      const dmg = !nuke ? h.specialP.dmg : tough ? e.maxHp * nukeTuning.bossHpFrac : e.maxHp * 20;
-      this.damage(e, dmg, { source: nuke ? 'nuke' : 'bomb', tags: nuke ? [] : ['explosive'], dirX: dx / n, dirZ: dz / n, knockback: bombTuning.knockback, noStatus: nuke, fixed: nuke && tough }, h);
+      const dmg = !nuke ? sp.dmg * dmgMul : tough ? e.maxHp * nukeTuning.bossHpFrac : e.maxHp * 20;
+      // Implosion's first wave drags enemies toward the centre instead of blasting them away.
+      const dir = pull ? -Math.min(1, d / Math.max(1, sp.radius)) : 1;
+      this.damage(e, dmg, { source: nuke ? 'nuke' : 'bomb', tags: nuke ? [] : ['explosive'], dirX: (dx / n) * dir, dirZ: (dz / n) * dir, knockback: pull ? bombTuning.pullKnock : bombTuning.knockback, noStatus: nuke, fixed: nuke && tough }, h);
     }
-    if (k >= 1) h.bombT = -1;
+    if (k < 1) return;
+    h.bombT = -1;
+    if (nuke) return;
+    if (pull) h.bombNext = bombTuning.implodeDelay;
+    // Cluster Bomb: bomblets scatter through the wave's area and pop one after another.
+    for (let i = 0; i < (sp.bomblets ?? 0); i++) {
+      const a = this.rng.next() * Math.PI * 2;
+      const d = sp.radius * (0.25 + this.rng.next() * 0.6);
+      h.bomblets.push({ x: h.bombX + Math.cos(a) * d, z: h.bombZ + Math.sin(a) * d, t: 0.1 + i * 0.06 + this.rng.next() * 0.1 });
+    }
   }
 
   // ------------------------------------------------------------------ online: lobby
@@ -2106,7 +2189,7 @@ export class Game implements HeroWorld {
     this.role = 'host';
     const host = new NetHost(3);
     this.host = host;
-    this.lobby = [{ peerId: '', name, unlocked: unlockedWeapons() }];
+    this.lobby = [{ peerId: '', name, unlocked: unlockedWeapons(), loadout: validLoadout(settings.loadout) }];
     this.screens.setLobby({ code: '', players: [], isHost: true, status: 'Creating game...' });
     host.onMessage = (from, msg) => this.onHostMessage(from, msg as Record<string, unknown>);
     host.onLeave = (id) => this.onClientLeft(id);
@@ -2122,16 +2205,19 @@ export class Game implements HeroWorld {
 
   private refreshLobby(): void {
     if (!this.host) return;
-    const players = this.lobby.map((p, i) => ({ name: p.name, color: HERO_COLORS[i] }));
+    const players = this.lobby.map((p, i) => ({ name: p.name, color: HERO_COLORS[i], kit: kitText(p.loadout) }));
     this.screens.setLobby({ code: this.host.code, players, isHost: true, status: players.length > 1 ? 'Ready when you are!' : 'Share the code with your friends' });
     this.host.broadcast({ t: 'lobby', players, code: this.host.code });
   }
 
   private hostStart(): void {
     if (this.role !== 'host' || !this.host) return;
-    const heroes = this.lobby.map((p, i) =>
-      i === 0 ? this.hero : this.makeHero(i, p.name, p.unlocked.filter((id) => WEAPONS[id]), p.peerId),
-    );
+    const heroes = this.lobby.map((p, i) => {
+      if (i === 0) return this.hero;
+      const h = this.makeHero(i, p.name, p.unlocked.filter((id) => WEAPONS[id]), p.peerId);
+      h.loadoutPick = p.loadout;
+      return h;
+    });
     this.hero.name = this.lobby[0].name;
     this.setHeroes(heroes);
     this.local = 0;
@@ -2160,8 +2246,18 @@ export class Game implements HeroWorld {
       this.screens.setLobby({ code: '', players: [], isHost: false, status: (err as Error).message });
       return;
     }
-    client.send({ t: 'hello', name, unlocked: unlockedWeapons() });
+    client.send({ t: 'hello', name, unlocked: unlockedWeapons(), loadout: validLoadout(settings.loadout) });
     this.screens.setLobby({ code: code.toUpperCase(), players: [], isHost: false, status: 'Connected! Waiting for the host to start...' });
+  }
+
+  /** Online lobby: share a new loadout pick (the host's own is read at start). */
+  private onLoadoutChanged(): void {
+    const loadout = validLoadout(settings.loadout);
+    if (this.role === 'client') this.client?.send({ t: 'loadout', loadout });
+    else if (this.role === 'host' && this.lobby[0]) {
+      this.lobby[0].loadout = loadout;
+      this.refreshLobby();
+    }
   }
 
   private saveName(name: string): void {
@@ -2184,8 +2280,17 @@ export class Game implements HeroWorld {
         peerId: from,
         name: String(m.name ?? 'Player').slice(0, 12),
         unlocked: Array.isArray(m.unlocked) ? (m.unlocked as string[]) : unlockedWeapons(),
+        loadout: validLoadout(m.loadout as Partial<Loadout>),
       });
       this.refreshLobby();
+      return;
+    }
+    if (m.t === 'loadout') {
+      const entry = this.lobby.find((p) => p.peerId === from);
+      if (entry && this.mode === 'title') {
+        entry.loadout = validLoadout(m.loadout as Partial<Loadout>);
+        this.refreshLobby();
+      }
       return;
     }
     const h = this.heroByPeer(from);
@@ -2292,13 +2397,13 @@ export class Game implements HeroWorld {
           hf: r2(p.hurtFlash),
           rv: r2(h.reviveT / REVIVE_TIME),
           area: r2(h.stats.areaMul),
-          w: h.weapons.map((w) => [w.def.id, w.level, Math.round(w.ready * 20) / 20, ...w.net()]),
+          w: h.weapons.map((w) => [w.def.id, w.level, Math.round(w.ready * 20) / 20, w.buildKey, ...w.net()]),
         };
       }),
       you: {
         gold: forHero.gold,
         gears: forHero.rerollsLeft,
-        special: [forHero.special.id, forHero.special.level],
+        special: [forHero.special.id, forHero.special.level, forHero.specialBuild ? buildKey(forHero.specialBuild) : ''],
         bomb: r2(forHero.bombCharge),
         mods: forHero.synergy.slots.map((s, i) => ({ id: s.def.id, ro: forHero.synergy.readout(i), lv: s.level })),
         passives: forHero.passives,
@@ -2528,11 +2633,13 @@ export class Game implements HeroWorld {
     const h = this.hero;
     h.gold = Number(you.gold);
     h.rerollsLeft = Number(you.gears ?? 0);
-    const sp = you.special as [string, number] | undefined;
-    if (sp && (sp[0] !== h.special.id || sp[1] !== h.special.level)) {
-      h.special = { id: sp[0], level: sp[1] };
+    const sp = you.special as [string, number, string] | undefined;
+    if (sp && sp[0] !== h.special.id) h.setSpecial(sp[0]);
+    if (sp && sp[1] !== h.special.level) {
+      h.special.level = sp[1];
       h.loadoutDirty = true;
     }
+    if (sp?.[2]) h.setSpecialBuild(sp[2]);
     h.bombCharge = Number(you.bomb);
     this.netMods = (you.mods as { id: string; ro: string; lv?: number }[]) ?? [];
     const passives = (you.passives as Record<string, number>) ?? {};
@@ -2593,7 +2700,7 @@ export class Game implements HeroWorld {
   private syncWeapons(h: Hero, list: (string | number)[][]): void {
     let changed = h.weapons.length !== list.length;
     for (let i = 0; i < list.length; i++) {
-      const [id, level, ready, ...state] = list[i] as [string, number, number, ...number[]];
+      const [id, level, ready, key, ...state] = list[i] as [string, number, number, string, ...number[]];
       let w = h.weapons[i];
       if (!w || w.def.id !== id) {
         w?.dispose();
@@ -2601,7 +2708,12 @@ export class Game implements HeroWorld {
         h.weapons[i] = w;
         changed = true;
       }
-      if (w.level !== level) {
+      if (w.build) {
+        if (w.buildKey !== key) {
+          w.setBuildKey(key);
+          changed = true;
+        }
+      } else if (w.level !== level) {
         w.level = level;
         changed = true;
       }
@@ -2674,22 +2786,22 @@ export class Game implements HeroWorld {
       this.reticle.style.transform = `translate(${input.mouse.x}px, ${input.mouse.y}px)`;
       this.reticle.style.display = input.mouse.inside ? '' : 'none';
     }
-    // Crosshair meter: the Buster's charge, or the right-click weapon reloading.
+    // Crosshair meter: the Charge Shot's charge, or the right-click weapon reloading.
     const sec = local.weapons.find((w) => w.def.slot === 'secondary');
     let meter: number;
     let state: string;
-    if (sec) {
+    if (sec && !(sec instanceof ChargeShot)) {
       // Ping when a long reload finishes, so you know it's ready without looking.
       if (sec.ready >= 1 && this.lastReady < 1 && !p.dead && this.isCombatMode) {
         this.readyFlashT = 0.4;
-        if (sec.def.levels[sec.level - 1].p.cd >= 2) sfx.weapon('ready');
+        if (sec.p.cd >= 2) sfx.weapon('ready');
       }
       this.lastReady = sec.ready;
       this.readyFlashT = Math.max(0, this.readyFlashT - frameDt);
       meter = this.readyFlashT > 0 ? 1 : sec.ready;
       state = this.readyFlashT > 0 ? 'ready' : sec.ready < 1 ? 'reload' : '';
     } else {
-      meter = (local.weapons[0] as Buster | undefined)?.charge ?? 0;
+      meter = sec instanceof ChargeShot ? sec.charge : 0;
       state = meter >= 2 ? 'over' : meter >= 1 ? 'full' : meter > 0 ? 'on' : '';
     }
     if (meter !== this.shownCharge || state !== this.reticle.dataset.charge) {
