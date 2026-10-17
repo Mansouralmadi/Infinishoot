@@ -189,6 +189,12 @@ export class Hero implements SynergyHost {
     this.world.goldFx(this, n);
   }
 
+  /** Tags for a damage source: the owned weapon's (with its evolution's), else the def's. */
+  tagsOf(source: string): readonly Tag[] | undefined {
+    for (const w of this.weapons) if (w.def.id === source) return w.tags;
+    return WEAPONS[source]?.tags;
+  }
+
   get alive(): boolean {
     return !this.player.dead;
   }

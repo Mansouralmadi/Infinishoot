@@ -92,12 +92,43 @@ export const SPECIALS: Record<string, SpecialDef> = {
     color: '#ffcd75',
     rarity: 'rare',
     desc: 'Calls a storm: lightning strikes enemies around you for a few seconds.',
-    levels: [
-      { text: 'Lightning rains on nearby enemies and chains to 2 more.', p: { dur: 3, rate: 8, dmg: 40, radius: 14, chains: 2, charge: 1 } },
-      { text: 'More strikes, longer storm.', p: { dur: 3.5, rate: 9, dmg: 48, radius: 14, chains: 2, charge: 1.05 } },
-      { text: 'Wider, faster storm.', p: { dur: 4, rate: 10, dmg: 58, radius: 16, chains: 2, charge: 1.1 } },
-      { text: 'Bolts chain to 3.', p: { dur: 4.5, rate: 11, dmg: 70, radius: 16, chains: 3, charge: 1.2 } },
-      { text: 'Supercell!', p: { dur: 5, rate: 12, dmg: 85, radius: 18, chains: 3, charge: 1.3 } },
+    levels: [{ text: 'Lightning rains on nearby enemies and chains to 2 more.', p: { dur: 3, rate: 8, dmg: 40, radius: 14, chains: 2, charge: 1, fire: 0 } }],
+    tracks: [
+      {
+        id: 'voltage',
+        name: 'Voltage',
+        ranks: [
+          { text: '+12 bolt damage.', p: { dmg: 12 } },
+          { text: '+14 bolt damage.', p: { dmg: 14 } },
+          { text: '+16 bolt damage.', p: { dmg: 16 } },
+          { text: '+20 bolt damage.', p: { dmg: 20 } },
+        ],
+      },
+      {
+        id: 'downpour',
+        name: 'Downpour',
+        ranks: [
+          { text: 'More strikes, longer storm.', p: { rate: 1, dur: 0.5 } },
+          { text: 'More strikes, longer storm.', p: { rate: 1, dur: 0.5 } },
+          { text: 'Many more strikes, longer storm.', p: { rate: 1.5, dur: 0.5 } },
+          { text: 'Many more strikes, longer storm.', p: { rate: 1.5, dur: 0.8 } },
+        ],
+      },
+      {
+        id: 'front',
+        name: 'Storm Front',
+        ranks: [
+          { text: 'Wider storm, recharges faster.', p: { radius: 1, charge: 0.1 } },
+          { text: 'Bolts chain to 1 more, recharges faster.', p: { chains: 1, charge: 0.1 } },
+          { text: 'Wider storm, recharges faster.', p: { radius: 1.5, charge: 0.12 } },
+          { text: 'Wider storm, recharges faster.', p: { radius: 1.5, charge: 0.15 } },
+        ],
+      },
+    ],
+    evoAt: 8,
+    evos: [
+      { id: 'supercell', name: "Supercell", color: '#73eff7', text: 'Bolts chain to 3 more enemies and strike far more often (Chain).', tags: ['chain'], p: { chains: 3, rate: 4 } },
+      { id: 'firestorm', name: "Firestorm", color: '#ff7a2f', text: 'Burning bolts set enemies on fire as they Shock them: every strike sparks an Overload (Fire).', tags: ['fire'], p: { fire: 1 } },
     ],
   },
   blizzard: {
@@ -108,12 +139,43 @@ export const SPECIALS: Record<string, SpecialDef> = {
     color: '#73eff7',
     rarity: 'rare',
     desc: 'An icy wave freezes everything around you; frozen enemies take extra damage.',
-    levels: [
-      { text: 'Freezes enemies around you.', p: { radius: 14, freeze: 2.0, shatter: 0.4, dmg: 40, charge: 1 } },
-      { text: 'Bigger wave.', p: { radius: 16, freeze: 2.2, shatter: 0.5, dmg: 55, charge: 1.05 } },
-      { text: 'Longer freeze.', p: { radius: 18, freeze: 2.4, shatter: 0.6, dmg: 70, charge: 1.1 } },
-      { text: 'Frozen enemies take +75%.', p: { radius: 20, freeze: 2.6, shatter: 0.75, dmg: 90, charge: 1.2 } },
-      { text: 'Ice age!', p: { radius: 24, freeze: 3.0, shatter: 0.9, dmg: 120, charge: 1.3 } },
+    levels: [{ text: 'Freezes enemies around you.', p: { radius: 14, freeze: 2.0, shatter: 0.4, dmg: 40, charge: 1, icicles: 0, burst: 0 } }],
+    tracks: [
+      {
+        id: 'frostbite',
+        name: 'Frostbite',
+        ranks: [
+          { text: '+18 damage.', p: { dmg: 18 } },
+          { text: '+22 damage.', p: { dmg: 22 } },
+          { text: '+26 damage.', p: { dmg: 26 } },
+          { text: '+30 damage.', p: { dmg: 30 } },
+        ],
+      },
+      {
+        id: 'deep',
+        name: 'Deep Freeze',
+        ranks: [
+          { text: 'Longer freeze, frozen enemies take more.', p: { freeze: 0.25, shatter: 0.1 } },
+          { text: 'Longer freeze, frozen enemies take more.', p: { freeze: 0.25, shatter: 0.15 } },
+          { text: 'Longer freeze, frozen enemies take more.', p: { freeze: 0.25, shatter: 0.15 } },
+          { text: 'Much longer freeze, frozen enemies take more.', p: { freeze: 0.35, shatter: 0.2 } },
+        ],
+      },
+      {
+        id: 'whiteout',
+        name: 'Whiteout',
+        ranks: [
+          { text: 'Bigger wave, recharges faster.', p: { radius: 2, charge: 0.08 } },
+          { text: 'Bigger wave, recharges faster.', p: { radius: 2, charge: 0.08 } },
+          { text: 'Bigger wave, recharges faster.', p: { radius: 2.5, charge: 0.1 } },
+          { text: 'Huge wave, recharges faster.', p: { radius: 3, charge: 0.12 } },
+        ],
+      },
+    ],
+    evoAt: 8,
+    evos: [
+      { id: 'iceage', name: "Ice Age", color: '#9fe8ff', text: 'While the freeze lasts, icicles rain on frozen enemies (Frost).', p: { icicles: 10 } },
+      { id: 'glacier', name: "Glacier Burst", color: '#ffffff', text: 'When the freeze ends, every enemy still frozen bursts in an icy blast (Explosive).', tags: ['explosive'], p: { burst: 1.5 } },
     ],
   },
   meteor: {
@@ -124,12 +186,43 @@ export const SPECIALS: Record<string, SpecialDef> = {
     color: '#ff7a2f',
     rarity: 'legendary',
     desc: 'Meteors rain down around you, exploding and setting enemies ablaze.',
-    levels: [
-      { text: '8 meteors crash around you.', p: { count: 8, dur: 2, dmg: 120, blast: 2.4, area: 12, charge: 1 } },
-      { text: '10 meteors.', p: { count: 10, dur: 2, dmg: 135, blast: 2.5, area: 13, charge: 1.05 } },
-      { text: 'Bigger impacts.', p: { count: 12, dur: 2.2, dmg: 150, blast: 2.8, area: 14, charge: 1.1 } },
-      { text: '15 meteors.', p: { count: 15, dur: 2.4, dmg: 170, blast: 3.0, area: 15, charge: 1.2 } },
-      { text: 'Extinction event!', p: { count: 18, dur: 2.5, dmg: 200, blast: 3.2, area: 16, charge: 1.3 } },
+    levels: [{ text: '8 meteors crash around you.', p: { count: 8, dur: 2, dmg: 120, blast: 2.4, area: 12, charge: 1, crater: 0, ice: 0 } }],
+    tracks: [
+      {
+        id: 'impact',
+        name: 'Impact',
+        ranks: [
+          { text: '+25 meteor damage.', p: { dmg: 25 } },
+          { text: '+30 meteor damage.', p: { dmg: 30 } },
+          { text: '+35 meteor damage.', p: { dmg: 35 } },
+          { text: '+40 meteor damage.', p: { dmg: 40 } },
+        ],
+      },
+      {
+        id: 'barrage',
+        name: 'Barrage',
+        ranks: [
+          { text: '+2 meteors.', p: { count: 2, dur: 0.1 } },
+          { text: '+3 meteors.', p: { count: 3, dur: 0.1 } },
+          { text: '+3 meteors.', p: { count: 3, dur: 0.1 } },
+          { text: '+4 meteors.', p: { count: 4, dur: 0.1 } },
+        ],
+      },
+      {
+        id: 'sky',
+        name: 'Wide Sky',
+        ranks: [
+          { text: 'Bigger impacts, recharges faster.', p: { blast: 0.2, area: 1, charge: 0.08 } },
+          { text: 'Bigger impacts, recharges faster.', p: { blast: 0.2, area: 1, charge: 0.08 } },
+          { text: 'Bigger impacts, recharges faster.', p: { blast: 0.3, area: 1, charge: 0.1 } },
+          { text: 'Huge impacts, recharges faster.', p: { blast: 0.3, area: 1.5, charge: 0.12 } },
+        ],
+      },
+    ],
+    evoAt: 8,
+    evos: [
+      { id: 'extinction', name: "Extinction", color: '#ff5e3a', text: 'Meteors leave burning craters that scorch anything standing in them (Fire).', tags: ['fire'], p: { crater: 3 } },
+      { id: 'comet', name: "Ice Comets", color: '#9fe8ff', text: 'Icy comets freeze everything they hit for a moment (Frost).', tags: ['frost'], p: { ice: 1.5 } },
     ],
   },
 };

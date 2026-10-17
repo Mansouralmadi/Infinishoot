@@ -13,7 +13,9 @@ const CHARGE_COLORS = ['#7df9ff', '#3dffb0', '#ff7a2f'];
 
 /**
  * The default right click: hold to build a charge shot that fires on release
- * and grows with hold time; a full charge explodes on impact.
+ * and grows with hold time; a full charge explodes on impact. Evolutions:
+ * Star Cannon's full charges are blazing stars with a fiery blast; Lance Shot
+ * fires a long, fast golden lance that pierces everything and Shocks.
  */
 export class ChargeShot extends Weapon {
   private mz = { x: 0, z: 0 };
@@ -48,7 +50,7 @@ export class ChargeShot extends Weapon {
 
   private updateCharge(dt: number, ctx: WeaponCtx): void {
     const max = ctx.flags.overcharge ? 2 : 1;
-    const rate = (ctx.stats.chargeSpeed * (1 + ctx.flags.chargeSpeed)) / chargeTuning.time;
+    const rate = (ctx.stats.chargeSpeed * (1 + ctx.flags.chargeSpeed)) / Math.max(0.4, this.p.time ?? chargeTuning.time);
     const before = this.charge;
     // The overcharge level builds at half speed.
     this.charge = Math.min(max, this.charge + dt * rate * (this.charge >= 1 ? 0.5 : 1));
@@ -84,10 +86,13 @@ export class ChargeShot extends Weapon {
     const k = Math.min(1, this.charge);
     const over = level === 2 ? 2 : 1;
     const dmg = p.dmg * (1.5 + 8.5 * Math.pow(k, 1.4)) * over * ctx.stats.chargeDmg;
-    const size = (1.3 + 1.8 * k + (level === 2 ? 1.1 : 0)) * Math.sqrt(ctx.stats.areaMul);
-    const blast = level === 2 ? chargeTuning.overBlast : level === 1 ? chargeTuning.fullBlast : 0;
+    const size = (1.3 + 1.8 * k + (level === 2 ? 1.1 : 0)) * Math.sqrt(ctx.stats.areaMul) * (p.size ?? 1);
+    const full = p.blast ?? chargeTuning.fullBlast;
+    const lance = p.lance > 0;
+    const star = this.evoId === 'star' && level >= 1;
+    const blast = lance ? 0 : level === 2 ? full + chargeTuning.overBlast - chargeTuning.fullBlast : level === 1 ? full : 0;
     const shots = level >= 1 ? 1 + ctx.flags.chargeSplit : 1;
-    const color = CHARGE_COLORS[level];
+    const color = lance ? '#ffd23f' : star ? '#ff5e3a' : CHARGE_COLORS[level];
     pl.muzzle(this.mz);
     const base = Math.atan2(pl.aim.z, pl.aim.x);
     for (let i = 0; i < shots; i++) {
@@ -104,11 +109,11 @@ export class ChargeShot extends Weapon {
         knockback: 6 + 10 * k,
         team: Team.Player,
         color,
-        width: 0.34 * size,
-        length: 0.9 * size,
-        pierce: Math.round(1 + 6 * k) + (level === 2 ? 10 : 0),
+        width: (lance ? 0.2 : 0.34) * size,
+        length: (lance ? 2.8 : 0.9) * size,
+        pierce: Math.round(1 + 6 * k) + (level === 2 ? 10 : 0) + (p.pierce ?? 0),
         owner: ctx.owner,
-        kind: 1,
+        kind: lance ? 9 : star ? 8 : 1,
         blast,
       });
     }

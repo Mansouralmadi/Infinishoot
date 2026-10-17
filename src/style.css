@@ -3306,12 +3306,6 @@ h1.ko {
   text-shadow: none;
 }
 
-.lo-card .tree {
-  font: 8px var(--label);
-  color: var(--lime);
-  text-shadow: none;
-}
-
 .screen button.lo-card.on {
   --bg: var(--teal);
   --hi: var(--cyan);

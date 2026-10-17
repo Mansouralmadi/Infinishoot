@@ -493,7 +493,6 @@ export class Screens {
               <div class="icon">${iconHtml(icon, d.color, d.icon)}</div>
               <div class="name">${d.name}</div>
               <div class="desc">${d.desc.replace(/^(LEFT|RIGHT) CLICK: /, '')}</div>
-              ${d.tracks ? '<div class="tree">UPGRADE TREE + 2 EVOLUTIONS</div>' : ''}
             </button>`;
           })
           .join('');

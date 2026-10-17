@@ -23,6 +23,7 @@ export function installBot(game: Game, input: Input): void {
     poll(): void;
   };
 
+  let rightT = 0;
   /** Shop policy: buy affordable Mods left to right while slots remain, then continue. */
   const shop = () => {
     // Buying re-renders the offers, so look the buttons up again after each buy. Skips cursed Mods (Pacifist Core stalls a Buster-only bot).
@@ -96,7 +97,9 @@ export function installBot(game: Game, input: Input): void {
       inp.mouse.ndcX = v.x;
       inp.mouse.ndcY = v.y;
     }
-    inp.mouseButtons = best ? 1 : 0;
+    // Right click: hold ~1.4 s (a full charge, or fire whenever a cooldown weapon is ready), then let go briefly.
+    rightT = (rightT + 1 / 60) % 1.6;
+    inp.mouseButtons = best ? 1 | (rightT < 1.4 ? 4 : 0) : 0;
     if (bd < 1.3 && p.dashReady01 >= 1) inp.pressed.add('Space');
     if (g.hero.bombCharge >= 1 && Math.hypot(ax, az) > 1) inp.pressed.add('KeyQ');
     // The bot picks the first card straight away (it skips the human pick lock).

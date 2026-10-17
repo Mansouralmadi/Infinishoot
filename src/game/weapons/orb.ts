@@ -22,9 +22,10 @@ interface Orb {
 }
 
 /**
- * Primary arm weapon: slow plasma orbs that zap enemies around them as they
- * drift. Evolved (Storm Sphere) they turn violet with a spinning storm ring,
- * shock what they zap and burst when they fade.
+ * Left-click loadout weapon: slow plasma orbs that zap the nearest enemies as
+ * they drift. Evolutions: Storm Sphere orbs turn violet with a spinning storm
+ * ring, Shock what they zap and burst when they fade; Cryo Sphere orbs are
+ * big, slow and icy and freeze what they zap for a moment.
  */
 export class PlasmaOrb extends Weapon {
   private shotCd = 0;
@@ -42,7 +43,7 @@ export class PlasmaOrb extends Weapon {
     const additive = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false } as const;
     this.coreMat = createRetroMaterial({ color: '#ffffff', unlit: 1 });
     this.glowMat = new THREE.MeshBasicMaterial({ color: def.color, opacity: 0.5, ...additive });
-    this.ringMat = new THREE.MeshBasicMaterial({ color: def.evo!.color, opacity: 0.9, side: THREE.DoubleSide, ...additive });
+    this.ringMat = new THREE.MeshBasicMaterial({ color: def.evos![0].color, opacity: 0.9, side: THREE.DoubleSide, ...additive });
     const core = new THREE.IcosahedronGeometry(0.22, 0);
     const glow = new THREE.IcosahedronGeometry(0.5, 1);
     const ring = new THREE.TorusGeometry(0.75, 0.06, 4, 12).rotateX(Math.PI / 2);
@@ -74,7 +75,7 @@ export class PlasmaOrb extends Weapon {
   update(dt: number, ctx: WeaponCtx): void {
     this.muzzleT = Math.max(0, this.muzzleT - dt);
     const p = this.p;
-    const evo = this.evolved;
+    const evo = this.evoId === 'storm';
     const r = p.radius * Math.sqrt(ctx.stats.areaMul);
     for (let i = this.orbs.length - 1; i >= 0; i--) {
       const o = this.orbs[i];
@@ -91,14 +92,17 @@ export class PlasmaOrb extends Weapon {
         if (near.length > p.zaps * (o.mega ? 2 : 1)) near.length = p.zaps * (o.mega ? 2 : 1);
         for (const e of near) {
           ctx.damage(e, p.dmg * (o.mega ? 4 : 1), { source: 'orb', tags: evo ? STORM_TAGS : undefined, knockback: 0, canCrit: true, loud: n < 3 });
+          // Cryo Sphere: a short freeze on whatever it zaps (not bosses), opening the Frost combos.
+          if (p.chill > 0 && e.hp > 0 && !e.def.boss) e.frozen = Math.max(e.frozen, p.chill);
           if (n++ < 4) ctx.fx.star(e.x, 0.9, e.z, 0.7, this.color, 0.08);
         }
         if (n) ctx.sound('zap');
+        if (p.chill > 0) ctx.particles.burst(o.x, BULLET_Y, o.z, { count: 2, color: '#ffffff', color2: '#9fe8ff', speed: [0.5, 2], size: [0.1, 0.2], life: [0.3, 0.6], gravity: 3 });
         const rr = (o.mega ? r * 1.5 : r) ** 2;
         ctx.hitBarrels(p.dmg, (bx, bz) => (bx - o.x) ** 2 + (bz - o.z) ** 2 < rr);
       }
       if (o.life <= 0) {
-        if (evo) ctx.blast(o.x, o.z, r, p.dmg * 3, this.color, 'orb');
+        if (p.burst > 0) ctx.blast(o.x, o.z, r, p.dmg * p.burst, this.color, 'orb');
         this.orbs.splice(i, 1);
       }
     }
@@ -123,17 +127,20 @@ export class PlasmaOrb extends Weapon {
 
   render(alpha: number, ctx: WeaponCtx): void {
     const evo = this.evolved;
+    const cryo = this.evoId === 'cryo';
     this.glowMat.color.set(this.color);
+    this.ringMat.color.set(this.color);
     this.meshes.forEach((g, i) => {
       const o = this.orbs[i];
       g.visible = !!o;
       if (!o) return;
       // Orbs move linearly; draw them where they'll be this frame.
       g.position.set(o.x + o.vx * (alpha - 1) * SIM_DT, BULLET_Y, o.z + o.vz * (alpha - 1) * SIM_DT);
-      const s = (evo ? 1.5 : 1) * (o.mega ? 1.8 : 1) * (1 + Math.sin(ctx.time * 30 + i) * 0.08);
+      const s = (evo ? (cryo ? 1.8 : 1.5) : 1) * (o.mega ? 1.8 : 1) * (1 + Math.sin(ctx.time * 30 + i) * 0.08);
       g.scale.setScalar(s);
       g.children[2].visible = g.children[3].visible = evo;
-      g.rotation.set(ctx.time * 3 + i, ctx.time * 5, 0);
+      // Storm rings spin fast; Cryo rings turn slowly like a snowflake.
+      g.rotation.set(cryo ? 0 : ctx.time * 3 + i, ctx.time * (cryo ? 1 : 5), 0);
     });
   }
 

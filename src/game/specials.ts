@@ -18,8 +18,13 @@ export interface SpecialApi {
 }
 
 const STORM_TAGS: Tag[] = ['shock', 'chain'];
+const FIRESTORM_TAGS: Tag[] = ['shock', 'chain', 'fire'];
 const ICE_TAGS: Tag[] = ['frost', 'area'];
+const GLACIER_TAGS: Tag[] = ['frost', 'explosive'];
 const METEOR_TAGS: Tag[] = ['explosive', 'fire'];
+const COMET_TAGS: Tag[] = ['explosive', 'frost'];
+const CRATER_TICK = 0.25;
+const MAX_GLACIER_BURSTS = 30;
 /** Storm/meteor avoid the last few enemies they hit, so strikes spread out. */
 const RECENT = 5;
 const METEOR_TELE = 0.55; // seconds from the ground mark to impact
@@ -39,6 +44,9 @@ interface Running {
   n: number;
   recent: number[];
   rocks: { x: number; z: number; t: number }[];
+  /** Blizzard: enemies its wave froze (Glacier Burst); Meteor: burning craters (Extinction). */
+  frozen: Enemy[];
+  craters: { x: number; z: number; t: number; tick: number }[];
 }
 
 const running = new Map<Hero, Running[]>();
@@ -50,24 +58,25 @@ export function isSpecialRunning(h: Hero): boolean {
 const near: Enemy[] = [];
 const fresh: Enemy[] = [];
 
-/** Start hero h's special (not the bomb). p = def.levels[level - 1].p. */
+/** Start hero h's special (not the bomb). p = hero.specialP (its level or upgrade-track params). */
 export function startSpecial(h: Hero, def: SpecialDef, p: Record<string, number>, api: SpecialApi): void {
   const v = api.vfx;
   const { x, z } = h.player;
+  let frozen: Enemy[] = [];
   switch (def.id) {
     case 'storm':
       v.flash(0.2);
       v.sound('w:zap', x, z);
       v.sound('explode', x, z);
-      v.ring(x, z, 1, p.radius * 2, '#41a6f6', 0.5);
+      v.ring(x, z, 1, p.radius * 2, p.fire ? '#ff7a2f' : '#41a6f6', 0.5);
       v.ring(x, z, 1, p.radius * 1.6, '#ffcd75', 0.4);
       break;
     case 'blizzard':
-      blizzard(h, p, api);
+      frozen = blizzard(h, p, api);
       break;
     case 'meteor':
       v.sound('w:lob', x, z);
-      v.ring(x, z, 1, p.area * 2, '#ef7d57', 0.5);
+      v.ring(x, z, 1, p.area * 2, p.ice ? '#9fe8ff' : '#ef7d57', 0.5);
       break;
     default:
       return; // the Bomb lives in Game
@@ -75,7 +84,7 @@ export function startSpecial(h: Hero, def: SpecialDef, p: Record<string, number>
   let list = running.get(h);
   if (!list) running.set(h, (list = []));
   // acc = 1: the first strike / meteor comes on the next step.
-  list.push({ id: def.id, p, t: 0, acc: def.id === 'blizzard' ? 0 : 1, sndT: 0, n: 0, recent: [], rocks: [] });
+  list.push({ id: def.id, p, t: 0, acc: def.id === 'blizzard' ? 0 : 1, sndT: 0, n: 0, recent: [], rocks: [], frozen, craters: [] });
 }
 
 /** Advance every active special (call once per simulation step, host/solo only). */
@@ -131,13 +140,14 @@ function storm(h: Hero, s: Running, dt: number, api: SpecialApi): boolean {
 function strike(h: Hero, s: Running, e: Enemy, api: SpecialApi): void {
   const v = api.vfx;
   const { x, z } = e;
-  // A jagged bolt from the sky: stars stacked up a wobbling column.
+  // A jagged bolt from the sky: stars stacked up a wobbling column (orange for Firestorm).
+  const fire = s.p.fire > 0;
   let ox = 0;
   let oz = 0;
   for (let k = 1; k <= 5; k++) {
     ox += (Math.random() - 0.5) * 0.9;
     oz += (Math.random() - 0.5) * 0.9;
-    v.star(x + ox, k * 1.9, z + oz, k % 2 ? 1.1 : 0.8, k % 2 ? '#ffffff' : '#fff35c', 0.1);
+    v.star(x + ox, k * 1.9, z + oz, k % 2 ? 1.1 : 0.8, k % 2 ? '#ffffff' : fire ? '#ff7a2f' : '#fff35c', 0.1);
   }
   v.star(x, 0.6, z, 2, '#ffffff', 0.14);
   v.ring(x, z, 0.6, 4, '#ffcd75', 0.22);
@@ -148,13 +158,14 @@ function strike(h: Hero, s: Running, e: Enemy, api: SpecialApi): void {
     s.sndT = 0.15;
   }
   s.n++;
-  api.damage(e, s.p.dmg, { source: 'storm', tags: STORM_TAGS, canCrit: true, loud: true }, h);
+  api.damage(e, s.p.dmg, { source: 'storm', tags: fire ? FIRESTORM_TAGS : STORM_TAGS, canCrit: true, loud: true }, h);
   api.zap(e, s.p.chains, s.p.dmg * 0.6, h);
 }
 
 // ------------------------------------------------------------------ Blizzard
 
-function blizzard(h: Hero, p: Record<string, number>, api: SpecialApi): void {
+function blizzard(h: Hero, p: Record<string, number>, api: SpecialApi): Enemy[] {
+  const frozen: Enemy[] = [];
   const v = api.vfx;
   const { x, z } = h.player;
   const R = p.radius;
@@ -178,7 +189,9 @@ function blizzard(h: Hero, p: Record<string, number>, api: SpecialApi): void {
     e.shatter = Math.max(e.shatter, p.shatter);
     const k = d || 1;
     api.damage(e, p.dmg, { source: 'blizzard', tags: ICE_TAGS, dirX: dx / k, dirZ: dz / k, knockback: 3, canCrit: true, loud: n++ < 4 }, h);
+    if (e.hp > 0) frozen.push(e);
   }
+  return frozen;
 }
 
 /** After the wave: snow drifts down around the hero while the freeze lasts. */
@@ -199,7 +212,38 @@ function snow(h: Hero, s: Running, dt: number, api: SpecialApi): boolean {
       drag: 1,
     });
   }
-  return s.t < s.p.freeze;
+  // Ice Age: icicles rain on enemies that are still frozen.
+  if (s.p.icicles > 0) {
+    s.sndT -= dt;
+    s.n += dt * s.p.icicles;
+    while (s.n >= 1) {
+      s.n -= 1;
+      const live = s.frozen.filter((e) => e.alive && e.hp > 0 && e.frozen > 0);
+      if (!live.length) break;
+      const e = api.rng.pick(live);
+      api.vfx.star(e.x, 2.4, e.z, 0.9, '#ffffff', 0.1);
+      api.vfx.burst(e.x, 1.6, e.z, { count: 4, color: '#ffffff', color2: '#9fe8ff', speed: [2, 5], size: [0.1, 0.2], life: [0.15, 0.3], up: 2, gravity: 14 });
+      if (s.sndT <= 0) {
+        api.vfx.sound('w:freeze', e.x, e.z);
+        s.sndT = 0.25;
+      }
+      api.damage(e, s.p.dmg * 0.35, { source: 'blizzard', tags: ICE_TAGS, canCrit: true, loud: true }, h);
+    }
+  }
+  if (s.t < s.p.freeze) return true;
+  // Glacier Burst: whatever is still frozen when it ends shatters in an icy blast.
+  if (s.p.burst > 0) {
+    let n = 0;
+    for (const e of s.frozen) {
+      if (!e.alive || e.hp <= 0 || n++ >= MAX_GLACIER_BURSTS) continue;
+      api.blast(e.x, e.z, 2.2, s.p.dmg * s.p.burst, '#9fe8ff', 'blizzard', GLACIER_TAGS, false, h);
+    }
+    if (n) {
+      api.vfx.sound('explode', h.player.x, h.player.z);
+      api.vfx.shake(h.player.x, h.player.z, 0.4);
+    }
+  }
+  return false;
 }
 
 // ------------------------------------------------------------------ Meteor Shower
@@ -226,12 +270,36 @@ function meteors(h: Hero, s: Running, dt: number, api: SpecialApi): boolean {
       v.burst(m.x + y * 0.4, y, m.z - y * 0.25, { count: 2, color: '#ff7a2f', color2: '#ffcd75', speed: [0, 0.8], size: [0.25, 0.45], life: [0.12, 0.25], drag: 4 });
       continue;
     }
-    api.blast(m.x, m.z, p.blast, p.dmg, '#ff7a2f', 'meteor', METEOR_TAGS, false, h);
+    const ice = p.ice > 0;
+    api.blast(m.x, m.z, p.blast, p.dmg, ice ? '#9fe8ff' : '#ff7a2f', 'meteor', ice ? COMET_TAGS : METEOR_TAGS, false, h);
     v.shake(m.x, m.z, 0.18);
-    v.burst(m.x, 0.4, m.z, { count: 8, color: '#ff7a2f', color2: '#333c57', speed: [4, 9], size: [0.2, 0.4], life: [0.35, 0.6], up: 7, gravity: 16 });
+    v.burst(m.x, 0.4, m.z, { count: 8, color: ice ? '#ffffff' : '#ff7a2f', color2: ice ? '#9fe8ff' : '#333c57', speed: [4, 9], size: [0.2, 0.4], life: [0.35, 0.6], up: 7, gravity: 16 });
+    // Ice Comets freeze what they hit; Extinction leaves a burning crater.
+    if (ice) {
+      for (const e of api.enemies) {
+        if (!e.alive || e.hp <= 0 || (e.x - m.x) ** 2 + (e.z - m.z) ** 2 > (p.blast + e.radius) ** 2) continue;
+        e.frozen = Math.max(e.frozen, p.ice * (e.def.boss ? 0.15 : 1));
+        e.shatter = Math.max(e.shatter, 0.3);
+      }
+    }
+    if (p.crater > 0) s.craters.push({ x: m.x, z: m.z, t: p.crater, tick: 0 });
     s.rocks.splice(i, 1);
   }
-  return s.n < p.count || s.rocks.length > 0;
+  for (let i = s.craters.length - 1; i >= 0; i--) {
+    const c = s.craters[i];
+    c.t -= dt;
+    c.tick -= dt;
+    if (c.tick <= 0) {
+      c.tick += CRATER_TICK;
+      v.burst(c.x + (Math.random() - 0.5) * p.blast, 0.3, c.z + (Math.random() - 0.5) * p.blast, { count: 2, color: '#ff7a2f', color2: '#ffcd75', speed: [0.3, 1.2], size: [0.2, 0.4], life: [0.3, 0.6], up: 2.5 });
+      for (const e of api.enemies) {
+        if (!e.alive || e.hp <= 0 || (e.x - c.x) ** 2 + (e.z - c.z) ** 2 > (p.blast + e.radius) ** 2) continue;
+        api.damage(e, p.dmg * 0.12, { source: 'meteor', tags: METEOR_TAGS }, h);
+      }
+    }
+    if (c.t <= 0) s.craters.splice(i, 1);
+  }
+  return s.n < p.count || s.rocks.length > 0 || s.craters.length > 0;
 }
 
 /** Mark a landing spot: every other meteor aims at an enemy in range, the rest land anywhere in the area. */
@@ -254,5 +322,5 @@ function drop(h: Hero, s: Running, api: SpecialApi): void {
   s.n++;
   s.rocks.push({ x: mx, z: mz, t: 0 });
   // A ring closing onto the blast radius marks where it lands.
-  api.vfx.ring(mx, mz, s.p.blast * 3, 0.67, '#ff7a2f', METEOR_TELE);
+  api.vfx.ring(mx, mz, s.p.blast * 3, 0.67, s.p.ice ? '#9fe8ff' : '#ff7a2f', METEOR_TELE);
 }

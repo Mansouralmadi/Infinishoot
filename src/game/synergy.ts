@@ -62,8 +62,7 @@ export class Synergy implements ModApi {
   }
   /** A weapon's tags, plus its evolution's (Dragon's Breath adds Fire...). */
   private tagsOf(w: Weapon): readonly Tag[] {
-    const evo = w.build && w.def.evos?.[w.build.evo];
-    return evo?.tags ? [...w.def.tags, ...evo.tags] : w.def.tags;
+    return w.tags;
   }
   tagCount(tag: Tag): number {
     let n = 0;

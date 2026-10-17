@@ -125,10 +125,14 @@ const BULLET_KINDS: { source: string; tags?: Tag[] }[] = [
   { source: 'scatter' },
   { source: 'scatter', tags: ['projectile', 'fire'] },
   { source: 'shield', tags: ['projectile'] },
-  { source: 'scatter', tags: ['projectile', 'explosive'] }, // Flak Cannon
+  { source: 'scatter', tags: ['projectile', 'explosive'] }, // 5 Flak Cannon
+  { source: 'buster', tags: ['projectile', 'fire'] }, // 6 Flare Buster
+  { source: 'buster', tags: ['projectile', 'shock'] }, // 7 Volt Buster
+  { source: 'charge', tags: ['projectile', 'fire'] }, // 8 Star Cannon
+  { source: 'charge', tags: ['projectile', 'shock'] }, // 9 Lance Shot
 ];
-/** Bullet kinds that burst on their first hit: the full-charge shot and Flak Cannon pellets. */
-const IMPACT_BLAST = [1, 5];
+/** Bullet kinds that burst on their first hit: full-charge shots, Flak Cannon pellets and Star Cannon stars. */
+const IMPACT_BLAST = [1, 5, 8];
 const SNAP_EVERY = 3; // host snapshot every N sim steps (20 Hz)
 const INPUT_EVERY = 2; // client input every N sim steps (30 Hz)
 const INTEREST = 50; // only send entities this close to each client's hero (wide enough for a zoomed-out camera)
@@ -451,7 +455,8 @@ export class Game implements HeroWorld {
       inRadius: (x, z, r, out) => this.enemiesInRadius(x, z, r, out),
       shake: (x, z, amount) => this.vfx.shake(x, z, amount),
       hitBarrels: (dmg, inside) => this.barrels.hitWhere(dmg, hero.index, inside),
-      blast: (x, z, r, base, color, source, tags) => this.blast(x, z, r, base, color, source, tags ?? WEAPONS[source]?.tags ?? ['explosive'], false, hero),
+      blast: (x, z, r, base, color, source, tags) => this.blast(x, z, r, base, color, source, tags ?? hero.tagsOf(source) ?? ['explosive'], false, hero),
+      zap: (from, hops, dmg) => this.zap(from, hops, dmg, hero),
       sound: (name) => this.vfx.sound('w:' + name, hero.player.x, hero.player.z),
     };
   }
@@ -1494,7 +1499,7 @@ export class Game implements HeroWorld {
   /** All damage to enemies, credited to the hero who dealt it. */
   private damage(e: Enemy, base: number, o: DamageOpts, by: Hero): number {
     if (!e.active || e.hp <= 0) return 0;
-    const tags: readonly Tag[] = o.tags ?? WEAPONS[o.source]?.tags ?? [];
+    const tags: readonly Tag[] = o.tags ?? by.tagsOf(o.source) ?? [];
     const crit = !o.fixed && !!o.canCrit && this.rng.chance(by.stats.critChance);
     const ev = { e, source: o.source, tags, dist: Math.hypot(e.x - by.player.x, e.z - by.player.z), crit };
     // Stats first, then Mods left to right, then statuses and crit.
@@ -1698,7 +1703,7 @@ export class Game implements HeroWorld {
     if (this.kills === 300 || this.kills % 1000 === 0) this.checkAchievements();
   }
 
-  blast(x: number, z: number, r: number, base: number, color: string, source: string, tags: Tag[] = ['explosive'], noStatus = false, by: Hero = this.hero): void {
+  blast(x: number, z: number, r: number, base: number, color: string, source: string, tags: readonly Tag[] = ['explosive'], noStatus = false, by: Hero = this.hero): void {
     const explosive = tags.includes('explosive');
     if (explosive) r *= 1 + by.synergy.flags.explosiveArea * by.synergy.tagCount('explosive');
     this.vfx.sound('explode', x, z);
@@ -2038,7 +2043,8 @@ export class Game implements HeroWorld {
       return;
     }
     this.vfx.shake(b.x[i], b.z[i], 0.25);
-    this.blast(b.x[i], b.z[i], b.blast[i], b.damage[i] * 0.6, this.bullets.colorOf(i), 'charge', ['projectile', 'explosive'], false, by);
+    const tags: Tag[] = b.kind[i] === 8 ? ['projectile', 'explosive', 'fire'] : ['projectile', 'explosive'];
+    this.blast(b.x[i], b.z[i], b.blast[i], b.damage[i] * 0.6, this.bullets.colorOf(i), 'charge', tags, false, by);
   }
 
   private makeSpecialApi(): SpecialApi {

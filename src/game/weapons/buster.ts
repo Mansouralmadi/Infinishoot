@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { BULLET_Y, Team } from '../bullets';
 import { Weapon, type WeaponCtx } from './base';
 
-/** The default left click: rapid aimed shots while fire is held. */
+/**
+ * The default left click: rapid aimed shots while fire is held. Evolutions:
+ * Flare Buster fires big orange bolts that ignite; Volt Buster fires
+ * crackling cyan bolts that Shock and pierce.
+ */
 export class Buster extends Weapon {
   private shotCd = 0;
   private mz = { x: 0, z: 0 };
@@ -40,6 +44,9 @@ export class Buster extends Weapon {
     // Hair Trigger: every Nth shot is a mega shot.
     const mega = this.megaShot(ctx);
     const size = p.size * Math.sqrt(ctx.stats.areaMul) * (mega ? 2.2 : 1);
+    const evo = this.evoId;
+    const color = mega ? '#ff7a2f' : evo === 'flare' ? '#ff7a2f' : evo === 'volt' ? '#7df9ff' : '#fff36b';
+    const kind = evo === 'flare' ? 6 : evo === 'volt' ? 7 : 0;
     for (let i = 0; i < p.shots; i++) {
       const fan = p.shots > 1 ? (i / (p.shots - 1) - 0.5) * arc : 0;
       const a = base + fan + (Math.random() - 0.5) * 0.05;
@@ -54,19 +61,20 @@ export class Buster extends Weapon {
         damage: p.dmg * (mega ? 4 : 1),
         knockback: mega ? 12 : 4,
         team: Team.Player,
-        color: mega ? '#ff7a2f' : '#fff36b',
-        width: 0.32 * size,
-        length: 0.8 * size,
+        color,
+        width: (evo === 'volt' ? 0.24 : 0.32) * size,
+        length: (evo === 'volt' ? 1.3 : 0.8) * size,
         pierce: p.pierce + (mega ? 5 : 0),
         owner: ctx.owner,
+        kind,
       });
     }
     this.muzzleT = 0.05;
     pl.recoil = 1;
     ctx.sound('shoot');
     ctx.particles.burst(this.mz.x, BULLET_Y, this.mz.z, {
-      count: 3,
-      color: '#fff36b',
+      count: evo ? 5 : 3,
+      color: evo ? color : '#fff36b',
       color2: '#ffffff',
       speed: [3, 7],
       size: [0.08, 0.16],

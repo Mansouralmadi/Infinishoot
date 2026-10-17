@@ -13,8 +13,10 @@ const SLOT = [0, -1, 1, -2, 2];
 const PRISM = ['#fff35c', '#5cf2ff', '#a7f070'];
 
 /**
- * Primary arm weapon: a held beam that damages everything along it.
- * Evolved (Prism Lance) it fans into three rainbow beams.
+ * Left-click loadout weapon: a held beam that damages everything along it;
+ * Splitter ranks fan it into side beams. Evolutions: Prism Lance fans into
+ * five rainbow beams; Scorch Ray fuses into one thick blazing beam that
+ * ignites (its Fire tag comes from the evolution).
  */
 export class Laser extends Weapon {
   private on = 0;
@@ -64,7 +66,7 @@ export class Laser extends Weapon {
     this.muzzleT = Math.max(0, this.muzzleT - dt);
     const pl = ctx.player;
     this.megaT = Math.max(0, this.megaT - dt);
-    this.count = Math.min(MAX_BEAMS, this.p.beams);
+    this.count = this.p.focus > 0 ? 1 : Math.min(MAX_BEAMS, this.p.beams);
     this.on = ctx.firing && !pl.dead && !pl.dashing && !ctx.flags.busterDisabled ? 1 : 0;
     if (!this.on) {
       this.tickT = 0;
@@ -90,6 +92,11 @@ export class Laser extends Weapon {
       const a = base + SLOT[b] * FAN;
       const dmg = p.dps * TICK * (b === 0 ? 1 : 0.6) * (mega ? 4 : 1);
       this.burn(ctx, Math.cos(a), Math.sin(a), width, dmg);
+    }
+    // Scorch Ray: embers drift off the beam.
+    if (this.evoId === 'scorch') {
+      const d = 1 + ctx.rng.next() * (p.range - 1);
+      ctx.particles.burst(this.mz.x + pl.aim.x * d, BULLET_Y, this.mz.z + pl.aim.z * d, { count: 3, color: '#ff7a2f', color2: '#ffcd75', speed: [1, 3], size: [0.15, 0.3], life: [0.2, 0.4], up: 2.5 });
     }
   }
 
@@ -119,7 +126,8 @@ export class Laser extends Weapon {
     const pl = ctx.player;
     this.group.visible = this.on > 0 && !pl.dead;
     if (!this.group.visible) return;
-    const evo = this.evolved;
+    const evo = this.evoId === 'prism';
+    const scorch = this.evoId === 'scorch';
     const p = this.p;
     pl.muzzle(this.mz);
     // Interpolated hero position is what's drawn; offset the muzzle to match.
@@ -140,7 +148,8 @@ export class Laser extends Weapon {
       }
       bm.core.scale.set(width * 0.35, 1, len);
       bm.glow.scale.set(width * (evo ? 1.6 : 1.2), 2, len);
-      bm.glowMat.color.set(this.megaT > 0 ? '#ff7a2f' : evo ? PRISM[(i + Math.floor(ctx.time * 8)) % 3] : this.def.color);
+      bm.glowMat.color.set(this.megaT > 0 ? '#ff7a2f' : evo ? PRISM[(i + Math.floor(ctx.time * 8)) % 3] : scorch ? (Math.sin(ctx.time * 30) > 0 ? '#ff7a2f' : '#ef7d57') : this.def.color);
+      bm.mat.color.set(scorch ? '#ffcd75' : '#ffffff');
     });
   }
 

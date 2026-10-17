@@ -12,8 +12,9 @@ const CONTACT = 0.4;
  * Secondary arm weapon: press to deploy an energy shield that stays up on its
  * own for `dur` seconds, facing your aim. It eats enemy bullets (each costs
  * durability) and slams enemies away; at 0 durability it breaks early. Either
- * way it then recharges for `cd`. Evolved (Mirror Aegis) it becomes a golden
- * dome all around you that reflects bullets back at enemies.
+ * way it then recharges for `cd`. Evolutions: Mirror Aegis becomes a golden
+ * dome all around you that reflects bullets back at enemies; Pyre Aegis is a
+ * blazing wall that sets what it touches on fire (Fire tag from the evolution).
  */
 export class Shield extends Weapon {
   private up = 0;
@@ -39,7 +40,7 @@ export class Shield extends Weapon {
     super(def);
     const additive = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide } as const;
     this.arcMat = new THREE.MeshBasicMaterial({ color: def.color, opacity: 0.7, ...additive });
-    this.domeMat = new THREE.MeshBasicMaterial({ color: def.evo!.color, opacity: 0.6, wireframe: true, ...additive });
+    this.domeMat = new THREE.MeshBasicMaterial({ color: def.evos![0].color, opacity: 0.6, wireframe: true, ...additive });
     this.arcMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.arcMat);
     this.wall = new THREE.Mesh(new THREE.BufferGeometry(), this.arcMat);
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), this.domeMat);
@@ -90,7 +91,7 @@ export class Shield extends Weapon {
 
     const r = this.radius(ctx);
     // Bullets: blocked, or reflected by the Mirror Aegis (or with Overcharge).
-    const reflect = this.evolved || ctx.flags.overcharge;
+    const reflect = p.reflect > 0 || ctx.flags.overcharge;
     const dmg = p.dmg * ctx.stats.chargeDmg;
     const b = ctx.bullets;
     for (let i = 0; i < b.count && this.hp > 0; i++) {
@@ -148,6 +149,15 @@ export class Shield extends Weapon {
         ctx.sound('disc');
         ctx.shake(pl.x, pl.z, 0.12);
       }
+      // Pyre Aegis: flames lick along the arc.
+      if (this.evoId === 'pyre') {
+        const a0 = Math.atan2(pl.aim.z, pl.aim.x);
+        const arc = (this.arc * Math.PI) / 180;
+        for (let k = 0; k < 3; k++) {
+          const a = a0 + (ctx.rng.next() - 0.5) * arc;
+          ctx.particles.burst(pl.x + Math.cos(a) * r, 0.5, pl.z + Math.sin(a) * r, { count: 2, color: '#ff7a2f', color2: '#ffcd75', speed: [0.5, 2], size: [0.18, 0.35], life: [0.25, 0.45], up: 3 });
+        }
+      }
       ctx.hitBarrels(dmg, (bx, bz) => (bx - pl.x) ** 2 + (bz - pl.z) ** 2 < (r + 0.6) ** 2 && this.inArc(ctx, bx - pl.x, bz - pl.z));
     }
 
@@ -174,7 +184,7 @@ export class Shield extends Weapon {
     const pl = ctx.player;
     this.group.visible = this.up > 0 && !pl.dead;
     if (!this.group.visible) return;
-    const evo = this.evolved;
+    const evo = this.evoId === 'mirror';
     if (this.builtArc !== this.arc) {
       this.builtArc = this.arc;
       const arc = (this.arc * Math.PI) / 180;

@@ -20,9 +20,11 @@ interface Trace {
 }
 
 /**
- * Legendary primary: a slow, hyper-velocity rail that pierces everything in
- * a long line. Evolved (Ion Rail) it turns magenta and the line detonates
- * in a rippling chain of blasts a moment later.
+ * Left-click loadout weapon: a slow, hyper-velocity rail that pierces
+ * everything in a long line. Evolutions: Ion Rail's line detonates in a
+ * rippling chain of blasts a moment later; Storm Rail turns gold, Shocks all
+ * it pierces (Shock tag from the evolution) and the first enemies hit arc
+ * lightning onward.
  */
 export class Rail extends Weapon {
   private shotCd = 0;
@@ -100,10 +102,20 @@ export class Rail extends Weapon {
     const ox = this.mz.x;
     const oz = this.mz.z;
     const dmg = p.dmg * (mega ? 4 : 1);
-    for (const e of ctx.inRadius(ox + dx * len * 0.5, oz + dz * len * 0.5, len * 0.5 + 1.5, this.hits)) {
+    let arcs = p.arcs ?? 0;
+    // Nearest first, so Storm Rail's arcs start at the front of the line.
+    const hit = ctx.inRadius(ox + dx * len * 0.5, oz + dz * len * 0.5, len * 0.5 + 1.5, this.hits).filter((e) => {
       const t = (e.x - ox) * dx + (e.z - oz) * dz;
-      if (t < -e.radius || t > len + e.radius || Math.abs((e.x - ox) * dz - (e.z - oz) * dx) > e.radius + half) continue;
+      return t >= -e.radius && t <= len + e.radius && Math.abs((e.x - ox) * dz - (e.z - oz) * dx) <= e.radius + half;
+    });
+    hit.sort((a, b) => (a.x - ox) * dx + (a.z - oz) * dz - ((b.x - ox) * dx + (b.z - oz) * dz));
+    for (const e of hit) {
+      const t = (e.x - ox) * dx + (e.z - oz) * dz;
       ctx.damage(e, dmg, { source: 'rail', dirX: dx, dirZ: dz, knockback: 6, hx: ox + dx * t, hz: oz + dz * t, canCrit: true, loud: true });
+      if (arcs > 0 && e.hp > 0) {
+        arcs--;
+        ctx.zap(e, 2, dmg * 0.35);
+      }
     }
     ctx.hitBarrels(dmg, (bx, bz) => {
       const t = (bx - ox) * dx + (bz - oz) * dz;

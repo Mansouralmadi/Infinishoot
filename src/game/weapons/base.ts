@@ -66,6 +66,8 @@ export interface WeaponCtx {
   inRadius(x: number, z: number, r: number, out: Enemy[]): Enemy[];
   /** Damage every barrel whose centre passes `inside` (beams, zaps, fields; bullets and blasts handle their own). */
   hitBarrels(dmg: number, inside: (x: number, z: number) => boolean): void;
+  /** Chain lightning from an enemy: `hops` jumps, with its own visuals (Storm Rail). */
+  zap(from: Enemy, hops: number, dmg: number): void;
   /** Area blast that damages enemies (never the player). */
   blast(x: number, z: number, r: number, base: number, color: string, source: string, tags?: Tag[]): void;
   sound(
@@ -110,6 +112,17 @@ export abstract class Weapon {
   /** Evolved: the chosen evolution (track weapons) or the def's last level. */
   get evolved(): boolean {
     return this.build ? this.build.evo >= 0 : !!this.def.evo && this.maxed;
+  }
+
+  private tagCache: { evo: number; tags: readonly Tag[] } | null = null;
+  /** The def's tags plus the chosen evolution's (Mods and statuses key off them). */
+  get tags(): readonly Tag[] {
+    const evo = this.build?.evo ?? -1;
+    if (this.tagCache?.evo !== evo) {
+      const extra = this.def.evos?.[evo]?.tags ?? [];
+      this.tagCache = { evo, tags: extra.length ? [...this.def.tags, ...extra.filter((t) => !this.def.tags.includes(t))] : this.def.tags };
+    }
+    return this.tagCache.tags;
   }
 
   /** Track weapons: the chosen evolution's id ('' before evolving). */

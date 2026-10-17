@@ -4,7 +4,7 @@ import type { WeaponDef } from '../../data/weapons';
 import type { Enemy } from '../enemies';
 import { Weapon, type WeaponCtx } from './base';
 
-const MAX = 6;
+const MAX = 9;
 const FLASH = 0.35; // seconds the beam shows after impact (unless it lingers)
 const TICK = 0.25;
 const SUN_TAGS: Tag[] = ['area', 'fire'];
@@ -20,9 +20,10 @@ interface Strike {
 }
 
 /**
- * Legendary secondary: marks a spot ahead of you, then a satellite beam
- * slams down from the sky. Evolved (Sun Lance) the beam turns into a
- * blazing orange column that lingers, burning everything under it.
+ * Right-click loadout weapon: marks a spot where you aim, then a satellite
+ * beam slams down from the sky. Evolutions: Sun Lance turns it into a blazing
+ * orange column that lingers, burning everything under it; Storm Barrage calls
+ * three crackling gold beams around the target that Shock (tag from the evolution).
  */
 export class OrbitalStrike extends Weapon {
   private strikes: Strike[] = [];
@@ -104,13 +105,29 @@ export class OrbitalStrike extends Weapon {
     if (!ctx.charging || pl.dead || this.cd > 0 || ctx.flags.busterDisabled) return;
     this.startCooldown((p.cd * ctx.stats.cooldownMul) / this.rightClickSpeed(ctx));
     const r = p.radius * Math.sqrt(ctx.stats.areaMul) * (over ? 1.3 : 1);
-    // Mega Buster: extra beams side by side.
-    const n = 1 + ctx.flags.chargeSplit;
     const d = pl.landDist(2.5, p.range);
+    const tx = pl.x + pl.aim.x * d;
+    const tz = pl.z + pl.aim.z * d;
+    // Storm Barrage: beams in a ring around the target. Mega Buster: extra beams side by side.
+    const ring = p.count ?? 1;
+    const n = ring + ctx.flags.chargeSplit;
     for (let k = 0; k < n; k++) {
-      const side = (k - (n - 1) / 2) * r * 1.8;
+      let x: number;
+      let z: number;
+      if (k < ring && ring > 1) {
+        const a = (k / ring) * Math.PI * 2 + Math.atan2(pl.aim.z, pl.aim.x);
+        x = tx + Math.cos(a) * r * 1.2;
+        z = tz + Math.sin(a) * r * 1.2;
+      } else {
+        // The plain beam plus Mega Buster's extras sit side by side across the aim, centred on the target.
+        const j = ring > 1 ? k - ring + 1 : k;
+        const m = ring > 1 ? n - ring + 1 : n;
+        const side = (j - (m - 1) / 2) * r * 1.8;
+        x = tx - pl.aim.z * side;
+        z = tz + pl.aim.x * side;
+      }
       if (this.strikes.length >= MAX) this.strikes.shift();
-      this.strikes.push({ x: pl.x + pl.aim.x * d - pl.aim.z * side, z: pl.z + pl.aim.z * d + pl.aim.x * side, t: 0, delay: p.delay + k * 0.08, r, tickT: 0 });
+      this.strikes.push({ x, z, t: 0, delay: p.delay + k * 0.08, r, tickT: 0 });
     }
     this.armFx(ctx, this.color, 0.8);
     ctx.sound('uplink');
@@ -118,7 +135,8 @@ export class OrbitalStrike extends Weapon {
 
   render(_alpha: number, ctx: WeaponCtx): void {
     const p = this.p;
-    const evo = this.evolved;
+    const evo = this.evoId === 'sun';
+    const barrage = this.evoId === 'barrage';
     this.ringMat.color.set(this.color);
     this.beamMat.color.set(this.color);
     this.groups.forEach((g, i) => {
@@ -136,7 +154,7 @@ export class OrbitalStrike extends Weapon {
       marks.visible = aiming;
       const after = s.t - s.delay;
       const fade = aiming ? 1 : p.linger > 0 ? Math.min(1, (p.linger - after) / 0.3) : 1 - after / FLASH;
-      const w = aiming ? 0.06 * (0.5 + Math.random()) : s.r * (evo ? 0.9 : 0.75) * Math.max(0, fade) * (1 + Math.sin(ctx.time * 40) * 0.06);
+      const w = aiming ? 0.06 * (0.5 + Math.random()) : s.r * (evo ? 0.9 : barrage ? 0.5 : 0.75) * Math.max(0, fade) * (1 + Math.sin(ctx.time * (barrage ? 90 : 40)) * (barrage ? 0.25 : 0.06));
       beam.scale.set(w, 1, w);
       core.scale.set(w * 0.35, 1, w * 0.35);
       beam.rotation.y = ctx.time * 3;

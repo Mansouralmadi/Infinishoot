@@ -20,9 +20,10 @@ interface Vortex {
 }
 
 /**
- * Secondary arm weapon: throws a vortex that drags enemies to its centre and
- * grinds them. Evolved (Event Horizon) it becomes a black hole with a violet
- * accretion disc that implodes in a big blast when it closes.
+ * Right-click loadout weapon: throws a vortex that drags enemies to its
+ * centre and grinds them. Evolutions: Event Horizon becomes a black hole with
+ * a violet accretion disc that implodes in a big blast when it closes; Cryo
+ * Well is an icy whirl shedding snow that freezes everything inside when it closes.
  */
 export class GravityWell extends Weapon {
   private wells: Vortex[] = [];
@@ -39,7 +40,7 @@ export class GravityWell extends Weapon {
     const additive = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide } as const;
     this.swirlMat = new THREE.MeshBasicMaterial({ color: def.color, opacity: 0.35, ...additive });
     this.rimMat = new THREE.MeshBasicMaterial({ color: def.color, opacity: 0.9, ...additive });
-    this.diskMat = new THREE.MeshBasicMaterial({ color: def.evo!.color, opacity: 0.85, ...additive });
+    this.diskMat = new THREE.MeshBasicMaterial({ color: def.evos![0].color, opacity: 0.85, ...additive });
     this.holeMat = createRetroMaterial({ color: '#05010a', unlit: 1 });
     // A spiral: a ring with gaps reads as a swirl when it spins.
     const swirl = new THREE.RingGeometry(0.2, 1, 24, 1, 0, Math.PI * 1.5).rotateX(-Math.PI / 2);
@@ -112,11 +113,25 @@ export class GravityWell extends Weapon {
         let n = 0;
         for (const e of ctx.inRadius(w.x, w.z, r, this.hits)) ctx.damage(e, p.dps * TICK * dmgMul, { source: 'well', loud: n++ < 3 });
         ctx.hitBarrels(p.dps * TICK * dmgMul, (bx, bz) => (bx - w.x) ** 2 + (bz - w.z) ** 2 < r * r);
+        if (p.freeze > 0) {
+          const a = ctx.rng.next() * Math.PI * 2;
+          ctx.particles.burst(w.x + Math.cos(a) * r * 0.6, 2.5, w.z + Math.sin(a) * r * 0.6, { count: 3, color: '#ffffff', color2: '#9fe8ff', speed: [0.5, 2], size: [0.1, 0.22], life: [0.5, 0.9], gravity: 4 });
+        }
       }
       if (w.t >= THROW + life) {
         if (p.implode > 0) {
           ctx.blast(w.x, w.z, r * 0.8, p.implode * dmgMul, this.color, 'well', ['area', 'explosive']);
           ctx.sound('explode');
+        }
+        // Cryo Well: everything still inside freezes solid (bosses only briefly).
+        if (p.freeze > 0) {
+          for (const e of ctx.inRadius(w.x, w.z, r, this.hits)) {
+            e.frozen = Math.max(e.frozen, p.freeze * (e.def.boss ? 0.15 : 1));
+            e.shatter = Math.max(e.shatter, 0.3);
+          }
+          ctx.fx.ring(w.x, w.z, r * 0.3, r * 1.2, '#ffffff', 0.35);
+          ctx.particles.burst(w.x, 0.6, w.z, { count: 24, color: '#ffffff', color2: '#9fe8ff', speed: [r, r * 3], size: [0.14, 0.3], life: [0.3, 0.5], drag: 5 });
+          ctx.sound('freeze');
         }
         this.wells.splice(i, 1);
       }
@@ -140,7 +155,7 @@ export class GravityWell extends Weapon {
   }
 
   render(_alpha: number, ctx: WeaponCtx): void {
-    const evo = this.evolved;
+    const evo = this.evoId === 'horizon';
     const r = this.radius(ctx);
     this.swirlMat.color.set(this.color);
     this.rimMat.color.set(this.color);
