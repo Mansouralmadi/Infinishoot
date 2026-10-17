@@ -104,6 +104,8 @@ export function createDebugPanel(renderer: RetroRenderer, game: Game, onResize: 
   dir.add(directorTuning, 'spawnPerSecond', 1, 60, 1);
   dir.add(directorTuning, 'hpPerStage', 0, 3, 0.05);
   dir.add(directorTuning, 'hpPerStage2', 0, 1, 0.01);
+  dir.add(directorTuning, 'bossPerStage', 0, 3, 0.05);
+  dir.add(directorTuning, 'bossPerStage2', 0, 1, 0.01);
   dir.add(directorTuning, 'dmgPerStage', 0, 2, 0.05);
   dir.add(directorTuning, 'dmgPerStage2', 0, 0.5, 0.01);
   dir.add(directorTuning, 'hpPerMinute', 0, 1, 0.01);

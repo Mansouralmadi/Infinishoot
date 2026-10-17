@@ -16,10 +16,10 @@ export const directorTuning = {
   aliveCap: 450,
   spawnPerSecond: 14, // max spawn rate when below target
   // Stage scaling is 1 + per * (stage - 1) + per2 * (stage - 1)^2, so each stage hits harder than the last.
-  hpPerStage: 0.9, // enemy HP multiplier growth per stage
-  hpPerStage2: 0.25,
+  hpPerStage: 1.1, // enemy HP multiplier growth per stage
+  hpPerStage2: 0.3,
   hpPerMinute: 0.1, // and within a stage
-  dmgPerStage: 0.3,
+  dmgPerStage: 0.4,
   dmgPerStage2: 0.03,
   speedPerStage: 0.04,
   eliteEvery: 48, // seconds
@@ -28,7 +28,10 @@ export const directorTuning = {
   veteranFrom: 3, // first stage where veterans (tougher, recoloured enemies) mix in
   veteranPerStage: 0.15, // share of spawns that are veterans, per stage from veteranFrom (capped)
   veteranMax: 0.6,
-  bossLoopHp: 1.8, // boss HP x this per loop after the first
+  // Bosses get their own curve (st2 x2.3, st3 x4.2, st4 x6.7): tuned so god-bot kills take ~30 s, Omega ~60 s.
+  bossPerStage: 1.0,
+  bossPerStage2: 0.3,
+  bossLoopHp: 1.5, // boss HP x this per loop after the first
   reaperLevel: 50, // team level that summons Reapers (a filter for runaway builds)
   reaperDelay: 10, // seconds into a stage before the first one
   reaperEvery: 60, // seconds between Reapers after that
@@ -94,7 +97,7 @@ export class Director {
   /** Bosses scale per stage only (not by minute), so they stay beatable. */
   get bossHpMul(): number {
     const loop = Math.ceil(this.stage / 4);
-    return bossTuning.hp * this.curve(directorTuning.hpPerStage, directorTuning.hpPerStage2) * Math.pow(directorTuning.bossLoopHp, loop - 1) * (1 + 0.6 * (this.players - 1));
+    return bossTuning.hp * this.curve(directorTuning.bossPerStage, directorTuning.bossPerStage2) * Math.pow(directorTuning.bossLoopHp, loop - 1) * (1 + 0.6 * (this.players - 1));
   }
 
   get dmgMul(): number {

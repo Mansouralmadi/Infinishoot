@@ -1,23 +1,32 @@
 /**
- * Achievements: lifetime goals that unlock new weapons for the level-up pool.
- * This is the only progression that carries between runs.
+ * Achievements: lifetime goals that unlock auto weapons for the level-up pool
+ * and loadout items (clicks and specials) for the LOADOUT screen. This is the
+ * only progression that carries between runs.
  */
 export interface AchievementDef {
   id: string;
   name: string;
   desc: string;
-  /** Weapon id unlocked, if any. */
+  /** Auto weapon added to the level-up pool, if any. */
   unlockWeapon?: string;
+  /** Loadout item (left/right-click weapon id or special id) made pickable, if any. */
+  unlockLoadout?: string;
+  /** Can be earned from lifetime stats alone (old saves get it on load). */
+  lifetime?: (l: { kills: number; elites: number; bosses: number; bestStage: number; runs: number }) => boolean;
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
-  { id: 'first_steps', name: 'First Steps', desc: 'Defeat 300 enemies in total' },
-  { id: 'boss_slayer', name: 'Boss Slayer', desc: 'Defeat a boss', unlockWeapon: 'missiles' },
-  { id: 'elite_hunter', name: 'Elite Hunter', desc: 'Defeat 5 elites in total', unlockWeapon: 'nova' },
-  { id: 'exterminator', name: 'Exterminator', desc: 'Defeat 3,000 enemies in total', unlockWeapon: 'mines' },
+  { id: 'first_steps', name: 'First Steps', desc: 'Defeat 300 enemies in total', unlockLoadout: 'shield', lifetime: (l) => l.kills >= 300 },
+  { id: 'boss_slayer', name: 'Boss Slayer', desc: 'Defeat a boss', unlockWeapon: 'missiles', lifetime: (l) => l.bosses >= 1 },
+  { id: 'stage_2', name: 'Onward', desc: 'Reach stage 2', unlockLoadout: 'blizzard', lifetime: (l) => l.bestStage >= 2 },
+  { id: 'elite_hunter', name: 'Elite Hunter', desc: 'Defeat 5 elites in total', unlockWeapon: 'nova', lifetime: (l) => l.elites >= 5 },
+  { id: 'evolved', name: 'Evolution', desc: 'Evolve a loadout weapon or special', unlockLoadout: 'well', lifetime: (l) => l.bestStage >= 3 },
+  { id: 'arsenal', name: 'Full Arsenal', desc: 'Hold 6 weapons at once', unlockLoadout: 'orb' },
+  { id: 'exterminator', name: 'Exterminator', desc: 'Defeat 3,000 enemies in total', unlockWeapon: 'mines', lifetime: (l) => l.kills >= 3000 },
   { id: 'speedster', name: 'Speedster', desc: 'Dash 60 times in one run', unlockWeapon: 'fire' },
-  { id: 'arsenal', name: 'Full Arsenal', desc: 'Hold 6 weapons at once' },
-  { id: 'maxed', name: 'Maxed Out', desc: 'Get a weapon to level 5' },
-  { id: 'stage_3', name: 'Deep Diver', desc: 'Reach stage 3' },
-  { id: 'victory', name: 'The End?', desc: 'Defeat the final boss on stage 4' },
+  { id: 'stage_3', name: 'Deep Diver', desc: 'Reach stage 3', unlockLoadout: 'meteor', lifetime: (l) => l.bestStage >= 3 },
+  { id: 'maxed', name: 'Maxed Out', desc: 'Max out a weapon', unlockLoadout: 'laser' },
+  { id: 'boss_rush', name: 'Boss Rush', desc: 'Defeat 5 bosses in total', unlockLoadout: 'orbital', lifetime: (l) => l.bosses >= 5 },
+  { id: 'elite_slayer', name: 'Elite Slayer', desc: 'Defeat 25 elites in total', unlockLoadout: 'rail', lifetime: (l) => l.elites >= 25 },
+  { id: 'victory', name: 'The End?', desc: 'Defeat the final boss on stage 4', lifetime: (l) => l.bestStage > 4 },
 ];

@@ -19,6 +19,8 @@ export interface SpecialDef extends Upgradable {
   color: string;
   rarity: Rarity;
   desc: string;
+  /** Pickable from the first run; otherwise unlocked by an achievement. */
+  starter: boolean;
   levels: { text: string; p: Record<string, number> }[];
 }
 
@@ -45,6 +47,7 @@ export const SPECIALS: Record<string, SpecialDef> = {
     color: '#ef7d57',
     rarity: 'common',
     desc: 'A shockwave that blasts everything around you and clears enemy bullets.',
+    starter: true,
     levels: [{ text: 'Shockwave around you.', p: { dmg: 80, radius: 10, charge: 1, bomblets: 0, implode: 0 } }],
     tracks: [
       {
@@ -92,6 +95,7 @@ export const SPECIALS: Record<string, SpecialDef> = {
     color: '#ffcd75',
     rarity: 'rare',
     desc: 'Calls a storm: lightning strikes enemies around you for a few seconds.',
+    starter: true,
     levels: [{ text: 'Lightning rains on nearby enemies and chains to 2 more.', p: { dur: 3, rate: 8, dmg: 40, radius: 14, chains: 2, charge: 1, fire: 0 } }],
     tracks: [
       {
@@ -139,6 +143,7 @@ export const SPECIALS: Record<string, SpecialDef> = {
     color: '#73eff7',
     rarity: 'rare',
     desc: 'An icy wave freezes everything around you; frozen enemies take extra damage.',
+    starter: false,
     levels: [{ text: 'Freezes enemies around you.', p: { radius: 14, freeze: 2.0, shatter: 0.4, dmg: 40, charge: 1, icicles: 0, burst: 0 } }],
     tracks: [
       {
@@ -186,6 +191,7 @@ export const SPECIALS: Record<string, SpecialDef> = {
     color: '#ff7a2f',
     rarity: 'legendary',
     desc: 'Meteors rain down around you, exploding and setting enemies ablaze.',
+    starter: false,
     levels: [{ text: '8 meteors crash around you.', p: { count: 8, dur: 2, dmg: 120, blast: 2.4, area: 12, charge: 1, crater: 0, ice: 0 } }],
     tracks: [
       {

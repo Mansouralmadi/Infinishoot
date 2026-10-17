@@ -38,7 +38,7 @@ import { Particles } from './particles';
 import { PickupType, Pickups, type Collector } from './pickups';
 import { playerTuning } from './player';
 import { Portal } from './portal';
-import { grantAchievement, persist, save, unlockedWeapons } from './save';
+import { grantAchievement, persist, save, unlockedLoadout, unlockedWeapons } from './save';
 import { settings, saveSettings } from './settings';
 import { Vfx, type VfxEvent } from './vfx';
 import { ChargeShot, createWeapon, type DamageOpts, type WeaponCtx } from './weapons';
@@ -68,7 +68,7 @@ export const bombTuning = {
 };
 
 export const dropTuning = {
-  xpMul: 0.55, // XP gem value per enemy XP point (lower = slower levelling)
+  xpMul: 0.45, // XP gem value per enemy XP point (lower = slower levelling)
   goldChance: 0.009, // thinned with the horde like the utility drops, so income stays steady
   heartChance: 0.004,
   magnetChance: 0.0015,
@@ -606,7 +606,7 @@ export class Game implements HeroWorld {
     this.newAchievements = [];
     this.director.players = this.heroes.length;
     // Everyone keeps the loadout they picked; this machine's comes from its settings.
-    if (this.role !== 'client') this.hero.loadoutPick = validLoadout(settings.loadout);
+    if (this.role !== 'client') this.hero.loadoutPick = validLoadout(settings.loadout, unlockedLoadout());
     for (const h of this.heroes) {
       h.left = false;
       h.startRun();
@@ -970,6 +970,7 @@ export class Game implements HeroWorld {
         if (!o) return;
         const color = h.applyOffer(o);
         h.consumePick();
+        if (h === this.hero && (o.kind === 'evo' || o.kind === 'track')) this.checkAchievements();
         this.vfx.sound('powerUp', h.player.x, h.player.z);
         if (o.rarity === 'legendary') this.legendaryFx(h, o.name);
         this.afterPick(h, color);
@@ -1068,12 +1069,16 @@ export class Game implements HeroWorld {
     const want: [string, boolean][] = [
       ['first_steps', kills >= 300],
       ['boss_slayer', this.bossesRun > 0 || this.stage > 1],
+      ['stage_2', this.stage >= 2],
       ['elite_hunter', L.elites + this.elitesRun >= 5],
+      ['evolved', h.weapons.some((w) => w.def.slot && w.evolved) || !!h.specialEvo],
       ['exterminator', kills >= 3000],
       ['speedster', h.dashes >= 60],
       ['arsenal', h.weapons.length >= 6],
       ['maxed', h.weapons.some((w) => w.maxed)],
       ['stage_3', this.stage >= 3],
+      ['boss_rush', L.bosses + this.bossesRun >= 5],
+      ['elite_slayer', L.elites + this.elitesRun >= 25],
       ['victory', this.victories > 0 || this.stage > LOOP_STAGES],
     ];
     for (const [id, ok] of want) {
@@ -1081,7 +1086,8 @@ export class Game implements HeroWorld {
       const def = grantAchievement(id);
       if (!def) continue;
       this.newAchievements.push(id);
-      const unlock = def.unlockWeapon ? ` - ${WEAPONS[def.unlockWeapon].name} unlocked!` : '';
+      const item = def.unlockWeapon ? WEAPONS[def.unlockWeapon]?.name : def.unlockLoadout ? (WEAPONS[def.unlockLoadout] ?? SPECIALS[def.unlockLoadout])?.name : '';
+      const unlock = item ? ` - ${item} unlocked${def.unlockLoadout ? ' for your loadout' : ''}!` : '';
       this.hud.toast(`★ ${def.name}${unlock}`, 4);
       sfx.powerUp();
     }
@@ -2195,7 +2201,7 @@ export class Game implements HeroWorld {
     this.role = 'host';
     const host = new NetHost(3);
     this.host = host;
-    this.lobby = [{ peerId: '', name, unlocked: unlockedWeapons(), loadout: validLoadout(settings.loadout) }];
+    this.lobby = [{ peerId: '', name, unlocked: unlockedWeapons(), loadout: validLoadout(settings.loadout, unlockedLoadout()) }];
     this.screens.setLobby({ code: '', players: [], isHost: true, status: 'Creating game...' });
     host.onMessage = (from, msg) => this.onHostMessage(from, msg as Record<string, unknown>);
     host.onLeave = (id) => this.onClientLeft(id);
@@ -2252,13 +2258,13 @@ export class Game implements HeroWorld {
       this.screens.setLobby({ code: '', players: [], isHost: false, status: (err as Error).message });
       return;
     }
-    client.send({ t: 'hello', name, unlocked: unlockedWeapons(), loadout: validLoadout(settings.loadout) });
+    client.send({ t: 'hello', name, unlocked: unlockedWeapons(), loadout: validLoadout(settings.loadout, unlockedLoadout()) });
     this.screens.setLobby({ code: code.toUpperCase(), players: [], isHost: false, status: 'Connected! Waiting for the host to start...' });
   }
 
   /** Online lobby: share a new loadout pick (the host's own is read at start). */
   private onLoadoutChanged(): void {
-    const loadout = validLoadout(settings.loadout);
+    const loadout = validLoadout(settings.loadout, unlockedLoadout());
     if (this.role === 'client') this.client?.send({ t: 'loadout', loadout });
     else if (this.role === 'host' && this.lobby[0]) {
       this.lobby[0].loadout = loadout;

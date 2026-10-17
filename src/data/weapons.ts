@@ -334,7 +334,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     icon: '═',
     color: '#5cf2ff',
     desc: 'LEFT CLICK: a held beam that burns through lines of enemies.',
-    starter: true,
+    starter: false, // unlocked by an achievement (src/data/meta.ts)
     levels: [{ text: 'Hold to fire a piercing beam.', p: { dps: 150, range: 9, width: 0.35, beams: 1, focus: 0 } }],
     tracks: [
       {
@@ -383,7 +383,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     icon: '◉',
     color: '#7dff9a',
     desc: 'LEFT CLICK: slow orbs that zap the nearest enemies as they drift.',
-    starter: true,
+    starter: false, // unlocked by an achievement (src/data/meta.ts)
     levels: [{ text: 'Fires orbs that zap the 3 nearest enemies.', p: { dmg: 18, rate: 1.6, speed: 7, radius: 2.2, tick: 0.25, zaps: 3, life: 2.0, burst: 0, chill: 0 } }],
     tracks: [
       {
@@ -481,7 +481,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     icon: '◌',
     color: '#7a8cff',
     desc: 'RIGHT CLICK: throw a vortex that drags enemies in.',
-    starter: true,
+    starter: false, // unlocked by an achievement (src/data/meta.ts)
     levels: [{ text: 'Throws a vortex that pulls and grinds.', p: { cd: 3.5, radius: 4, pull: 6, dps: 55, life: 2.5, implode: 0, freeze: 0 } }],
     tracks: [
       {
@@ -530,7 +530,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     icon: '◗',
     color: '#5ce1ff',
     desc: 'RIGHT CLICK: deploy a shield toward your aim that blocks bullets and slams enemies away until it breaks or times out.',
-    starter: true,
+    starter: false, // unlocked by an achievement (src/data/meta.ts)
     levels: [{ text: 'Press to deploy a shield that follows your aim.', p: { dmg: 30, arc: 100, radius: 1.6, knock: 22, dur: 3, cd: 5, hp: 60, reflect: 0 } }],
     tracks: [
       {
@@ -579,7 +579,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     icon: '⟶',
     color: '#a0c4ff',
     desc: 'LEFT CLICK: a hyper-velocity rail that pierces everything in a long line.',
-    starter: true,
+    starter: false, // unlocked by an achievement (src/data/meta.ts)
     levels: [{ text: 'Fires a rail through every enemy in line.', p: { dmg: 90, rate: 1.6, range: 18, width: 0.5, ion: 0, arcs: 0 } }],
     tracks: [
       {
@@ -628,7 +628,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     icon: '⇓',
     color: '#73eff7',
     desc: 'RIGHT CLICK: call a satellite beam down from the sky.',
-    starter: true,
+    starter: false, // unlocked by an achievement (src/data/meta.ts)
     levels: [{ text: 'Calls a sky beam where you aim.', p: { cd: 2.6, dmg: 220, radius: 2.4, range: 9, delay: 0.7, linger: 0, dps: 0, count: 1 } }],
     tracks: [
       {

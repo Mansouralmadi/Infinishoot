@@ -377,7 +377,7 @@ export class Hero implements SynergyHost {
         const r = b.ranks[k];
         if (r >= t.ranks.length) return;
         const rarity = RANK_RARITY[Math.min(r, RANK_RARITY.length - 1)];
-        cands.push({ kind: 'track', id: evoIconId(def.iconBase, b.evo), pick: `${ref}|t|${k}`, name: t.name, icon: def.icon, color, tag: `RANK ${r + 1}`, text: t.ranks[r].text, rarity, level: r, maxLevel: t.ranks.length, label, w: 3 * upgrade(rarity) });
+        cands.push({ kind: 'track', id: evoIconId(def.iconBase, b.evo), pick: `${ref}|t|${k}`, name: t.name, icon: def.icon, color, tag: `RANK ${r + 1}`, text: t.ranks[r].text, rarity, level: r, maxLevel: t.ranks.length, label, w: 4 * upgrade(rarity) });
       });
     };
     for (const w of this.weapons) {

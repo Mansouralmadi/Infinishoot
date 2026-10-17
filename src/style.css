@@ -3324,6 +3324,18 @@ h1.ko {
   --ring: var(--white);
 }
 
+.screen button.lo-card.locked {
+  --bg: var(--ink);
+  --hi: var(--night);
+  --lo: var(--ink);
+  color: var(--slate);
+}
+
+.lo-card.locked .desc {
+  color: var(--slate);
+  font: 9px var(--label);
+}
+
 .lobby-player .kit {
   font: 9px var(--label);
   color: var(--mist);

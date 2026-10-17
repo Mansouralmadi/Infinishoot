@@ -280,7 +280,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     behavior: 'omega',
     model: 'omega',
     boss: true,
-    hp: 8000, // ~3.3x King, before bossTuning.hp and stage scaling
+    hp: 5000, // ~2x King, before bossTuning.hp and stage scaling
     speed: 2.8,
     radius: 2.4,
     bodyColor: '#3b5dc9',

@@ -3,10 +3,10 @@ import { ACHIEVEMENTS } from '../data/meta';
 import { tagChips, type Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
 import { SPECIALS } from '../data/specials';
-import { loadoutOptions, type LoadoutSlot } from '../data/loadout';
+import { loadoutOptions, validLoadout, type LoadoutSlot } from '../data/loadout';
 import { modDesc, modMaxLevel, type ModDef } from '../game/modTypes';
 import type { ScoreEntry } from '../game/highscores';
-import { exportFile, importFile, resetSave, save } from '../game/save';
+import { exportFile, importFile, loadoutUnlockBy, resetSave, save, unlockedLoadout } from '../game/save';
 import { settings, saveSettings } from '../game/settings';
 import { sfx } from '../audio/sfx';
 import { RARITY, type Rarity } from '../data/rarity';
@@ -338,6 +338,9 @@ export class Screens {
           return this.showLoadout('online');
         case 'lo-pick':
           return this.pickLoadout(btn.dataset.slot as LoadoutSlot, btn.dataset.id!);
+        case 'lo-locked':
+          sfx.deny();
+          return;
         case 'lo-start':
           if (this.loadoutFor === 'solo') return actions.start();
           this.actions.loadoutChanged();
@@ -467,7 +470,7 @@ export class Screens {
   }
 
   private pickLoadout(slot: LoadoutSlot, id: string): void {
-    if (!loadoutOptions(slot).includes(id)) return;
+    if (!loadoutOptions(slot).includes(id) || !unlockedLoadout().includes(id)) return;
     settings.loadout = { ...settings.loadout, [slot]: id };
     saveSettings();
     sfx.menuSelect();
@@ -477,6 +480,13 @@ export class Screens {
   }
 
   private renderLoadout(): void {
+    const open = unlockedLoadout();
+    // A saved pick that's locked (a reset save) falls back to the default.
+    const valid = validLoadout(settings.loadout, open);
+    if (JSON.stringify(valid) !== JSON.stringify(settings.loadout)) {
+      settings.loadout = valid;
+      saveSettings();
+    }
     const rows: [LoadoutSlot, string][] = [
       ['primary', 'LEFT CLICK'],
       ['secondary', 'RIGHT CLICK'],
@@ -489,6 +499,14 @@ export class Screens {
             const d = slot === 'special' ? SPECIALS[id] : WEAPONS[id];
             const on = settings.loadout[slot] === id;
             const icon = slot === 'special' ? 'sp_' + id : id;
+            if (!open.includes(id)) {
+              const a = loadoutUnlockBy(id);
+              return `<button class="lo-card locked" data-nav data-act="lo-locked">
+              <div class="icon">${iconHtml(icon, '#566c86', d.icon)}</div>
+              <div class="name">${d.name}</div>
+              <div class="desc">LOCKED${a ? `: ${a.desc}` : ''}</div>
+            </button>`;
+            }
             return `<button class="lo-card r-${d.rarity} ${on ? 'on' : ''}" data-nav data-act="lo-pick" data-slot="${slot}" data-id="${id}" style="--c:${d.color}">
               <div class="icon">${iconHtml(icon, d.color, d.icon)}</div>
               <div class="name">${d.name}</div>
@@ -816,7 +834,8 @@ export class Screens {
   private renderUnlocks(): void {
     this.els.unlocks.querySelector('.ach-list')!.innerHTML = ACHIEVEMENTS.map((a) => {
       const done = save.achievements.includes(a.id);
-      const reward = a.unlockWeapon ? `Unlocks ${WEAPONS[a.unlockWeapon].name}` : '';
+      const item = a.unlockLoadout ? (WEAPONS[a.unlockLoadout] ?? SPECIALS[a.unlockLoadout]) : null;
+      const reward = a.unlockWeapon ? `Unlocks ${WEAPONS[a.unlockWeapon].name}` : item ? `Loadout: ${item.name}` : '';
       return `<div class="ach ${done ? 'done' : ''}"><span class="check">${done ? '★' : '☆'}</span><span class="name">${a.name}</span><span class="desc">${a.desc}</span><span class="reward">${reward}</span></div>`;
     }).join('');
   }

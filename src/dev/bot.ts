@@ -7,9 +7,12 @@ import { Team } from '../game/bullets';
  * Dev-only autoplay bot for balance and performance testing. Installed on
  * `window` in dev builds:
  *   botRun(seconds, god?)  -> simulate that many seconds headlessly, returns a report
+ *                             (per-stage level and loadout ranks, boss kill times,
+ *                             first evolution; it resets when a new run starts)
  *   botStep()              -> one simulation step with bot input
  * The bot kites in a circle, dodges enemy bullets, shoots the boss (or the
- * nearest enemy), dashes when cornered and always picks the first card.
+ * nearest enemy), holds right click in bursts, dashes when cornered and
+ * always picks the first card.
  */
 export function installBot(game: Game, input: Input): void {
   const v = new THREE.Vector3();
@@ -24,6 +27,38 @@ export function installBot(game: Game, input: Input): void {
   };
 
   let rightT = 0;
+  /** Balance tracking across botRun calls, for the current run. */
+  const track = { runTime: 0, stage: 1, bossT: -1, bossName: '', bosses: [] as string[], stages: [] as string[], firstEvo: '' };
+  const ranksOf = () => {
+    const h = game.hero;
+    let n = 0;
+    let evos = 0;
+    for (const b of [...h.weapons.map((w) => w.build), h.specialBuild]) {
+      if (!b) continue;
+      n += b.ranks.reduce((a, r) => a + r, 0);
+      if (b.evo >= 0) evos++;
+    }
+    return { n, evos };
+  };
+  const trackStep = () => {
+    const g = game;
+    if (g.runTime < track.runTime) Object.assign(track, { stage: 1, bossT: -1, bosses: [], stages: [], firstEvo: '' });
+    track.runTime = g.runTime;
+    const boss = g.enemies.list.find((e) => e.active && e.def.boss);
+    if (boss && track.bossT < 0) {
+      track.bossT = g.runTime;
+      track.bossName = boss.def.name;
+    } else if (!boss && track.bossT >= 0) {
+      track.bosses.push(`st${track.stage} ${track.bossName} ${Math.round(g.runTime - track.bossT)}s`);
+      track.bossT = -1;
+    }
+    const r = ranksOf();
+    if (r.evos && !track.firstEvo) track.firstEvo = `st${g.stage} lv${g.level}`;
+    if (g.stage !== track.stage) {
+      track.stages.push(`st${track.stage}: lv${g.level} ranks ${r.n} evos ${r.evos}`);
+      track.stage = g.stage;
+    }
+  };
   /** Shop policy: buy affordable Mods left to right while slots remain, then continue. */
   const shop = () => {
     // Buying re-renders the offers, so look the buttons up again after each buy. Skips cursed Mods (Pacifist Core stalls a Buster-only bot).
@@ -113,6 +148,8 @@ export function installBot(game: Game, input: Input): void {
   const run = (seconds: number, god = false) => {
     cheats.god = god;
     const g = game;
+    // A hidden tab pauses the game; the bot keeps going.
+    if (g.paused) g.resume();
     const n = Math.round(seconds * 60);
     let total = 0;
     let worst = 0;
@@ -122,6 +159,7 @@ export function installBot(game: Game, input: Input): void {
     for (let i = 0; i < n && g.mode !== 'dead' && g.mode !== 'title'; i++) {
       const t = performance.now();
       step();
+      trackStep();
       ran++;
       const d = performance.now() - t;
       total += d;
@@ -145,6 +183,10 @@ export function installBot(game: Game, input: Input): void {
       passives: JSON.stringify(g.hero.passives),
       avgMs: (total / Math.max(1, ran)).toFixed(2),
       worstMs: worst.toFixed(1),
+      ranks: ranksOf().n,
+      stages: [...track.stages],
+      bosses: [...track.bosses],
+      firstEvo: track.firstEvo,
     };
   };
 

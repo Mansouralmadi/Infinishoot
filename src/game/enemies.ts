@@ -13,7 +13,7 @@ export type BossAction = 'ring' | 'summon' | 'slam' | 'charge' | 'spiral' | 'wav
 export const BOSS_ACTIONS: BossAction[] = ['ring', 'summon', 'slam', 'charge', 'spiral', 'waves', 'volley', 'rain'];
 
 export const bossTuning = {
-  hp: 2.4, // boss HP multiplier on top of stage scaling (bosses melted in 7-25 s at 1.8)
+  hp: 8, // boss HP multiplier on top of the boss stage curve (loadout builds melted 2.4x bosses in 7-19 s)
   speed: 1.2, // move speed multiplier
   pace: 0.65, // multiplier on pauses between attacks and recovery times
   firstAttack: 1.5, // seconds before the first attack

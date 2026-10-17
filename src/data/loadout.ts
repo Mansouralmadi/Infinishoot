@@ -20,12 +20,12 @@ export function loadoutOptions(slot: LoadoutSlot): string[] {
     .map((d) => d.id);
 }
 
-/** A loadout with every slot holding a real item (unknown ids fall back to the default). */
-export function validLoadout(l?: Partial<Loadout> | null): Loadout {
+/** A loadout with every slot holding a real item (unknown or still-locked ids fall back to the default). */
+export function validLoadout(l?: Partial<Loadout> | null, unlocked?: string[]): Loadout {
   const out = { ...DEFAULT_LOADOUT };
   for (const slot of Object.keys(out) as LoadoutSlot[]) {
     const id = l?.[slot];
-    if (typeof id === 'string' && loadoutOptions(slot).includes(id)) out[slot] = id;
+    if (typeof id === 'string' && loadoutOptions(slot).includes(id) && (!unlocked || unlocked.includes(id))) out[slot] = id;
   }
   return out;
 }
