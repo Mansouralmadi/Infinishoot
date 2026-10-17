@@ -71,6 +71,11 @@ export interface ModFlags {
   sellFull: boolean; // Mods sell for their full price
 }
 
+/** A Mod's description at a level. */
+export function modDesc(def: ModDef, lv = 1): string {
+  return typeof def.desc === 'string' ? def.desc : def.desc(lv);
+}
+
 /** How many times a Mod can be owned stacked (1 = can't be upgraded). */
 export function modMaxLevel(def: ModDef): number {
   if (def.maxLevel !== undefined) return def.maxLevel;
@@ -112,7 +117,8 @@ export interface ModDef {
   color: string;
   rarity: ModRarity;
   price: number;
-  desc: string;
+  /** What it does; upgradable Mods give the text for a level (use modDesc). */
+  desc: string | ((lv: number) => string);
   cursed?: boolean;
   /** Tags this Mod cares about (shown as synergy hints in the shop). */
   synergy?: Tag[];

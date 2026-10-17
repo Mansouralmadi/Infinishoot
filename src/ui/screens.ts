@@ -2,7 +2,7 @@ import type { Input } from '../core/input';
 import { ACHIEVEMENTS } from '../data/meta';
 import { tagChips, type Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
-import type { ModDef } from '../game/modTypes';
+import { modDesc, modMaxLevel, type ModDef } from '../game/modTypes';
 import type { ScoreEntry } from '../game/highscores';
 import { exportFile, importFile, resetSave, save } from '../game/save';
 import { settings, saveSettings } from '../game/settings';
@@ -130,8 +130,17 @@ function badge(i: LoadoutItem): string {
   return `<span class="badge r-${i.rarity ?? 'common'}" style="--c:${i.color}" tabindex="0">${iconHtml(i.id, i.color, i.icon)}<i>${i.evo ? 'E' : i.max ? 'M' : i.level}</i>${tip(i.name, i.rarity ?? 'common', i.desc ?? '', level)}</span>`;
 }
 
-function modChip(m: ModDef): string {
-  return `<span class="mod-chip ${m.cursed ? 'cursed' : ''} r-${m.rarity}" style="--c:${m.color}" tabindex="0">${iconHtml(m.id, m.color, m.icon)}${m.name}${tip(m.name, m.rarity, m.desc, m.cursed ? ' · CURSED' : ' · MOD')}</span>`;
+function modChip({ def: m, level }: { def: ModDef; level: number }): string {
+  const extra = m.cursed ? ' · CURSED' : modMaxLevel(m) > 1 ? ` · MOD LV ${level}` : ' · MOD';
+  return `<span class="mod-chip ${m.cursed ? 'cursed' : ''} r-${m.rarity}" style="--c:${m.color}" tabindex="0">${iconHtml(m.id, m.color, m.icon)}${m.name}${tip(m.name, m.rarity, modDesc(m, level), extra)}</span>`;
+}
+
+/** Next level's text with the words that change highlighted. */
+function nextLevelHtml(def: ModDef, level: number): string {
+  const now = modDesc(def, level).split(' ');
+  const next = modDesc(def, level + 1).split(' ');
+  if (now.length !== next.length) return next.join(' ');
+  return next.map((w, i) => (w === now[i] ? w : `<b>${w}</b>`)).join(' ');
 }
 
 type Named = Exclude<ScreenName, 'none'>;
@@ -581,7 +590,7 @@ export class Screens {
   }
 
   /** The pause screen shows the current build. */
-  setPauseBuild(loadout: LoadoutItem[], mods: ModDef[] = []): void {
+  setPauseBuild(loadout: LoadoutItem[], mods: { def: ModDef; level: number }[] = []): void {
     this.els.pause.querySelector('.build')!.innerHTML =
       loadout.map(badge).join('') + (mods.length ? `<div class="mod-strip">${mods.map(modChip).join('')}</div>` : '');
   }
@@ -606,7 +615,8 @@ export class Screens {
           <div class="rarity">${m.cursed ? 'CURSED' : m.rarity.toUpperCase()}</div>
           <div class="icon" style="--c:${m.color}">${iconHtml(m.id, m.color, m.icon)}</div>
           <div class="name">${m.name}</div>
-          <div class="desc">${m.desc}</div>
+          <div class="desc">${modDesc(m)}</div>
+          ${modMaxLevel(m) > 1 ? `<div class="mod-ups">UPGRADES IN SHOP TO LV ${modMaxLevel(m)}</div>` : ''}
           ${m.synergy ? `<div class="chips">${tagChips(m.synergy)}</div>` : ''}
           ${o.hint ? `<div class="hint">${o.hint}</div>` : ''}
           <div class="price"><span class="gold-dot"></span> ${o.price}</div>
@@ -622,12 +632,13 @@ export class Screens {
     el.querySelector('.owned-mods')!.innerHTML =
       v.owned
         .map(
-          (o, i) => `<div class="owned-mod ${o.def.cursed ? 'cursed' : ''}" title="${o.def.desc}">
+          (o, i) => `<div class="owned-mod ${o.def.cursed ? 'cursed' : ''}" title="${modDesc(o.def, o.level)}">
           <div class="slot-no">${i + 1}</div>
           <div class="icon" style="--c:${o.def.color}">${iconHtml(o.def.id, o.def.color, o.def.icon)}</div>
           <div class="name">${o.def.name}${o.maxLevel > 1 ? ` <span class="mod-lv">LV ${o.level}/${o.maxLevel}</span>` : ''}</div>
-          <div class="desc">${o.def.desc}</div>
+          <div class="desc">${modDesc(o.def, o.level)}</div>
           ${o.readout ? `<div class="readout">${o.readout}</div>` : ''}
+          ${o.upCost >= 0 ? `<div class="mod-next"><i>NEXT LV ${o.level + 1}:</i> ${nextLevelHtml(o.def, o.level)}</div>` : ''}
           ${o.upCost >= 0 ? `<button data-nav data-act="mod-up" data-index="${i}" class="mod-up ${o.upCost > v.gold ? 'cant' : ''}">UPGRADE <span class="gold-dot"></span> ${o.upCost}</button>` : o.maxLevel > 1 ? '<div class="mod-max">MAX LEVEL</div>' : ''}
           <div class="ctrl">
             <button data-nav data-act="mod-left" data-index="${i}" ${i === 0 ? 'disabled' : ''}>&#9664;</button>

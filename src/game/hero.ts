@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { Rng } from '../core/rng';
 import { MOD_RARITY_WEIGHT, MODS } from '../data/mods';
 import { PASSIVES } from '../data/passives';
-import { SPECIALS, type SpecialDef } from '../data/specials';
+import { SPECIALS, cooldownText, specialCooldown, type SpecialDef } from '../data/specials';
 import { RARITY, rarityWeight, type Rarity } from '../data/rarity';
 import type { Tag } from '../data/tags';
 import { WEAPONS } from '../data/weapons';
@@ -208,6 +208,11 @@ export class Hero implements SynergyHost {
     return SPECIALS[this.special.id] ?? SPECIALS.bomb;
   }
 
+  /** Seconds for the special's meter to refill (level and Battery Pack). */
+  get specialCooldown(): number {
+    return specialCooldown(this.specialDef, Math.min(this.special.level, this.specialDef.levels.length), this.stats.specialCooldownMul);
+  }
+
   /** Params for the special's current level. */
   get specialP(): Record<string, number> {
     return this.specialDef.levels[Math.min(this.special.level, this.specialDef.levels.length) - 1].p;
@@ -237,7 +242,7 @@ export class Hero implements SynergyHost {
         max: spLv >= sp.levels.length,
         name: sp.name,
         rarity: sp.rarity,
-        desc: `SPECIAL (Q/E): ${sp.desc} Now: ${sp.levels[spLv - 1].text}`,
+        desc: `SPECIAL (Q/E): ${sp.desc} Now: ${sp.levels[spLv - 1].text} Cooldown ${cooldownText(this.specialCooldown)}.`,
         kind: 'weapon' as const,
       },
       ...this.weapons.filter((w) => !(w.def.id === 'buster' && this.busterRetired)).map((w) => ({
@@ -312,9 +317,9 @@ export class Hero implements SynergyHost {
       if (d.id === cur.id) {
         const lv = this.special.level;
         if (lv >= d.levels.length) continue;
-        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: `LV ${lv + 1}`, text: d.levels[lv].text, rarity: d.rarity, level: lv, maxLevel: d.levels.length, w: 1.6 * upgrade(d.rarity) });
+        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: `LV ${lv + 1}`, text: `${d.levels[lv].text} Cooldown ${cooldownText(specialCooldown(d, lv + 1, this.stats.specialCooldownMul))}.`, rarity: d.rarity, level: lv, maxLevel: d.levels.length, w: 1.6 * upgrade(d.rarity) });
       } else {
-        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: d.desc, rarity: d.rarity, replaces: `${cur.name} LV ${this.special.level}`, w: (this.special.level >= 2 ? 0.25 : 1.0) * fresh(d.rarity) });
+        cands.push({ kind: 'special', id: 'sp_' + d.id, name: d.name, icon: d.icon, color: d.color, tag: 'NEW!', text: `${d.desc} Cooldown ${cooldownText(specialCooldown(d, 1, this.stats.specialCooldownMul))}.`, rarity: d.rarity, replaces: `${cur.name} LV ${this.special.level}`, w: (this.special.level >= 2 ? 0.25 : 1.0) * fresh(d.rarity) });
       }
     }
     const owned = Object.keys(this.passives).length;

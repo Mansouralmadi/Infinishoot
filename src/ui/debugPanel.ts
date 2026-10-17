@@ -5,7 +5,8 @@ import { postSettings, type RetroRenderer } from '../render/renderer';
 import { applyRetroStrength, retro } from '../render/retroSettings';
 import { cameraTuning } from '../game/cameraRig';
 import { playerTuning } from '../game/player';
-import { bombTuning, cheats, scoreTuning, type Game } from '../game/game';
+import { cheats, scoreTuning, type Game } from '../game/game';
+import { specialTuning } from '../data/specials';
 import { directorTuning } from '../game/director';
 import { bossTuning, eliteTuning } from '../game/enemies';
 import { juiceTuning } from '../game/juice';
@@ -108,7 +109,7 @@ export function createDebugPanel(renderer: RetroRenderer, game: Game, onResize: 
   dir.add(directorTuning, 'hpPerMinute', 0, 1, 0.01);
   dir.add(directorTuning, 'ringEvery', 10, 120, 5);
   dir.add(scoreTuning, 'comboWindow', 0.5, 6, 0.1);
-  dir.add(bombTuning, 'chargePerXp', 0, 0.05, 0.001).name('Bomb charge/XP');
+  dir.add(specialTuning, 'cooldown', 3, 30, 0.5).name('Special cooldown (s)');
 
   const boss = gui.addFolder('Boss').close();
   boss.add(bossTuning, 'hp', 0.2, 5, 0.1);

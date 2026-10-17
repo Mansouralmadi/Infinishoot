@@ -55,7 +55,6 @@ export const scoreTuning = {
 };
 
 export const bombTuning = {
-  chargePerXp: 0.004, // special meter gained per XP point of enemies killed (x the special's `charge`)
   duration: 0.35,
   knockback: 18,
 };
@@ -226,7 +225,7 @@ export class Game implements HeroWorld {
   private snapInterval = 50;
   private netTimeLeft = 0;
   private netBoss: { name: string; hp01: number } | null = null;
-  private netMods: { id: string; ro: string }[] = [];
+  private netMods: { id: string; ro: string; lv?: number }[] = [];
   private netCombo01 = 0;
   private fadeT = 0;
 
@@ -654,7 +653,11 @@ export class Game implements HeroWorld {
   pause(): void {
     if (!this.isCombatMode || this.paused) return;
     this.paused = true;
-    this.screens.setPauseBuild(this.hero.loadout(), this.hero.synergy.slots.map((sl) => sl.def));
+    const mods =
+      this.role === 'client'
+        ? this.netMods.filter((m) => MOD_BY_ID[m.id]).map((m) => ({ def: MOD_BY_ID[m.id], level: m.lv ?? 1 }))
+        : this.hero.synergy.slots.map((sl) => ({ def: sl.def, level: sl.level }));
+    this.screens.setPauseBuild(this.hero.loadout(), mods);
     this.screens.show('pause');
   }
 
@@ -1133,6 +1136,11 @@ export class Game implements HeroWorld {
     }
     for (const h of this.heroes) this.updateBomb(h, dt);
     updateSpecials(this.heroes, dt, this.specialApi);
+    // Q/E specials recharge over time; the meter waits while the special (or bomb wave) still runs.
+    for (const h of this.heroes) {
+      if (h.player.dead || h.left || h.bombT >= 0 || isSpecialRunning(h)) continue;
+      h.bombCharge = Math.min(1, h.bombCharge + dt / h.specialCooldown);
+    }
 
     // Enemies chase the nearest living hero.
     this.targets.length = 0;
@@ -1603,8 +1611,6 @@ export class Game implements HeroWorld {
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     this.score += def.score * this.multiplier * (e.elite ? 5 : 1);
     const xp = def.xp * (e.elite ? 10 : 1);
-    // The meter waits while the special (or bomb wave) is still running, so it can't chain forever.
-    if (by && by.bombT < 0 && !isSpecialRunning(by)) by.bombCharge = Math.min(1, by.bombCharge + bombTuning.chargePerXp * xp * (by.specialP.charge ?? 1) * by.stats.specialCharge);
 
     // Drops
     this.pickups.spawn(PickupType.Gem, e.x, e.z, xp * dropTuning.xpMul);
@@ -2294,7 +2300,7 @@ export class Game implements HeroWorld {
         gears: forHero.rerollsLeft,
         special: [forHero.special.id, forHero.special.level],
         bomb: r2(forHero.bombCharge),
-        mods: forHero.synergy.slots.map((s, i) => ({ id: s.def.id, ro: forHero.synergy.readout(i) })),
+        mods: forHero.synergy.slots.map((s, i) => ({ id: s.def.id, ro: forHero.synergy.readout(i), lv: s.level })),
         passives: forHero.passives,
         stats: { moveSpeedMul: forHero.stats.moveSpeedMul, dashCooldownMul: forHero.stats.dashCooldownMul, dashCharges: forHero.stats.dashCharges, maxHp: forHero.stats.maxHp, magnet: forHero.stats.magnet, areaMul: forHero.stats.areaMul },
       },
@@ -2528,7 +2534,7 @@ export class Game implements HeroWorld {
       h.loadoutDirty = true;
     }
     h.bombCharge = Number(you.bomb);
-    this.netMods = (you.mods as { id: string; ro: string }[]) ?? [];
+    this.netMods = (you.mods as { id: string; ro: string; lv?: number }[]) ?? [];
     const passives = (you.passives as Record<string, number>) ?? {};
     if (JSON.stringify(passives) !== JSON.stringify(h.passives)) {
       h.passives = passives;

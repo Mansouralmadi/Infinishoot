@@ -280,8 +280,8 @@ export const PASSIVES: Record<string, PassiveDef> = {
     name: 'Battery Pack',
     icon: '▮',
     color: '#ffcd75',
-    desc: 'Your Q/E special charges 20% faster',
-    maxLevel: 5,
-    add: { specialCharge: 0.2 },
+    desc: 'Q/E special cooldown -12% (any special)',
+    maxLevel: 3,
+    add: { specialCooldownMul: -0.12 },
   },
 };

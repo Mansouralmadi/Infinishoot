@@ -1,4 +1,5 @@
 import type { DamageEvent, ModApi, ModDef, ModState } from '../game/modTypes';
+import type { Enemy } from '../game/enemies';
 import { isRightClick } from './weapons';
 
 /**
@@ -25,7 +26,11 @@ function limiter(gap: number): (ev: DamageEvent, api: ModApi, st: ModState) => b
   };
 }
 const thunderGate = limiter(0.05);
+
+/** Short number for level descriptions: 1.5, 2, 0.12. */
+const f = (x: number): string => String(+x.toFixed(2));
 const cascadeGate = limiter(0.05);
+let wildfireLast: Enemy | null = null;
 
 export const MODS: ModDef[] = [
   // ---------------------------------------------------------------- tag synergies
@@ -37,7 +42,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 2,
-    desc: 'Explosive hits x(1 + 0.2 per Explosive weapon). Blasts +12% size per Explosive weapon.',
+    desc: (n) => `Explosive hits x(1 + ${f(0.2 * n)} per Explosive weapon). Blasts +${12 * n}% size per Explosive weapon.`,
     synergy: ['explosive'],
     flags: { explosiveArea: 0.12 },
     dmg: (ev, api) => (ev.tags.includes('explosive') ? { mult: 1 + 0.2 * api.tagCount('explosive') } : undefined),
@@ -50,7 +55,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 3,
-    desc: 'Orbit hits x2.',
+    desc: (n) => `Orbit hits x${1 + n}.`,
     synergy: ['orbit'],
     dmg: (ev) => (ev.tags.includes('orbit') ? { mult: 2 } : undefined),
   },
@@ -62,7 +67,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 5,
     maxLevel: 3,
-    desc: 'Shocked enemies take x1.5 damage instead of x1.2. Shock lasts 1s longer.',
+    desc: (n) => `Shocked enemies take x${f(1.2 + 0.3 * n)} damage instead of x1.2. Shock lasts ${n}s longer.`,
     synergy: ['shock'],
     flags: { shockMult: 0.3, shockTime: 1 },
   },
@@ -88,7 +93,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 4,
     maxLevel: 3,
-    desc: 'Burning enemies take x1.4 damage.',
+    desc: (n) => `Burning enemies take x${f(1 + 0.4 * n)} damage.`,
     synergy: ['fire'],
     dmg: (ev) => (ev.e.burnT > 0 ? { mult: 1.4 } : undefined),
   },
@@ -100,7 +105,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 2,
-    desc: 'Hits on Frozen enemies x2.',
+    desc: (n) => `Hits on Frozen enemies x${1 + n}.`,
     synergy: ['frost'],
     dmg: (ev) => (ev.e.frozen > 0 ? { mult: 2 } : undefined),
   },
@@ -112,7 +117,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 7,
     maxLevel: 3,
-    desc: 'Chain weapons jump +2 more times. Chain hits x1.3.',
+    desc: (n) => `Chain weapons jump +${2 * n} more times. Chain hits x${f(1 + 0.3 * n)}.`,
     synergy: ['chain', 'shock'],
     flags: { chainBonus: 2 },
     dmg: (ev) => (ev.tags.includes('chain') ? { mult: 1.3 } : undefined),
@@ -141,7 +146,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 3,
-    desc: 'Frozen enemies shatter into shards for x3 damage when killed.',
+    desc: (n) => `Frozen enemies shatter into shards for x${1 + 2 * n} damage when killed.`,
     synergy: ['frost'],
     flags: { shatterMult: 2 },
   },
@@ -153,7 +158,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 2,
-    desc: 'Overload blasts deal x3 damage and are bigger.',
+    desc: (n) => `Overload blasts deal x${1 + 2 * n} damage and are bigger.`,
     synergy: ['fire', 'shock'],
     flags: { overloadMult: 2 },
   },
@@ -165,7 +170,7 @@ export const MODS: ModDef[] = [
     rarity: 'rare',
     price: 9,
     maxLevel: 2,
-    desc: 'Weapons with your most common tag deal x1.75.',
+    desc: (n) => `Weapons with your most common tag deal x${f(1 + 0.75 * n)}.`,
     dmg: (ev, api) => {
       const t = api.topTag();
       return t && ev.tags.includes(t) ? { mult: 1.75 } : undefined;
@@ -180,7 +185,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 4,
     maxLevel: 3,
-    desc: 'Every hit x(1 + 0.06 for each different tag you own).',
+    desc: (n) => `Every hit x(1 + ${f(0.06 * n)} for each different tag you own).`,
     dmg: (_ev, api) => ({ mult: 1 + 0.06 * api.distinctTags() }),
     readout: (api, _st, lv) => `x${(1 + 0.06 * api.distinctTags() * lv).toFixed(2)}`,
   },
@@ -192,11 +197,13 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 3,
-    desc: 'Burning enemies burst into flames when they die, setting the enemies around them on fire (Fire).',
+    desc: (n) => `Burning enemies burst into flames when they die, setting the enemies around them on fire (Fire)${n > 1 ? `. Burst damage x${n}` : ''}.`,
     synergy: ['fire'],
     onKill: (e, source, api, st) => {
-      if ((e.burnT <= 0 && source !== 'burn') || st.t > 0) return;
-      // Fire builds kill fast: at most ~7 bursts a second.
+      if (e.burnT <= 0 && source !== 'burn') return;
+      // Fire builds kill fast: at most ~7 kills burst a second, but every level bursts on that kill.
+      if (st.t > 0 && e !== wildfireLast) return;
+      wildfireLast = e;
       st.t = 0.15;
       api.blast(e.x, e.z, 2.2, 12 + 2 * api.level, '#ff7a2f', 'wildfire', ['fire']);
     },
@@ -227,7 +234,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 5,
     maxLevel: 3,
-    desc: 'Trail hits x1.6.',
+    desc: (n) => `Trail hits x${f(1 + 0.6 * n)}.`,
     synergy: ['trail'],
     dmg: (ev) => (ev.tags.includes('trail') ? { mult: 1.6 } : undefined),
   },
@@ -239,7 +246,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 3,
-    desc: 'Area hits x1.4.',
+    desc: (n) => `Area hits x${f(1 + 0.4 * n)}.`,
     synergy: ['area'],
     dmg: (ev) => (ev.tags.includes('area') ? { mult: 1.4 } : undefined),
   },
@@ -253,7 +260,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 5,
     maxLevel: 3,
-    desc: 'Every 8th left-click shot is a MEGA shot: x4 damage, huge, pierces 5.',
+    desc: (n) => `Every ${8 - 2 * (n - 1)}th left-click shot is a MEGA shot: x4 damage, huge, pierces 5.`,
     synergy: ['projectile'],
     flags: { busterMegaEvery: 8 },
   },
@@ -265,7 +272,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 5,
     maxLevel: 3,
-    desc: 'Dashing leaves a fiery explosion behind you.',
+    desc: (n) => `Dashing leaves a fiery explosion behind you${n > 1 ? ` (x${n} damage)` : ''}.`,
     synergy: ['explosive', 'fire'],
     onDash: (api) => api.blast(api.player.x, api.player.z, 2.8, 30 + 4 * api.level, '#ff7a2f', 'afterburner', ['explosive', 'fire']),
   },
@@ -297,7 +304,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 2,
-    desc: 'Each kill: +2% damage (max x1.5). Stacks drain when you stop killing.',
+    desc: (n) => `Each kill: +${2 * n * n}% damage (max x${1 + 0.5 * n}). Stacks drain when you stop killing.`,
     onKill: (_e, _s, _api, st) => {
       st.n = Math.min(25, st.n + 1);
       st.t = 1.2;
@@ -317,7 +324,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 5,
     maxLevel: 3,
-    desc: 'Projectile hits on enemies more than 8m away x2.',
+    desc: (n) => `Projectile hits on enemies more than 8m away x${1 + n}.`,
     synergy: ['projectile'],
     dmg: (ev) => (ev.tags.includes('projectile') && ev.dist > 8 ? { mult: 2 } : undefined),
   },
@@ -329,7 +336,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 5,
     maxLevel: 3,
-    desc: 'Hits on enemies within 3.5m x1.6.',
+    desc: (n) => `Hits on enemies within 3.5m x${f(1 + 0.6 * n)}.`,
     synergy: ['orbit', 'area'],
     dmg: (ev) => (ev.dist < 3.5 ? { mult: 1.6 } : undefined),
   },
@@ -341,7 +348,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 3,
-    desc: 'While standing still, and for 1s after you start moving, everything deals x1.8.',
+    desc: (n) => `While standing still, and for 1s after you start moving, everything deals x${f(1 + 0.8 * n)}.`,
     // st.t = when you last stood still (api.time, so the grace is the same at every level).
     tick: (_dt, api, st) => {
       if (!api.moving) st.t = api.time;
@@ -357,7 +364,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 4,
     maxLevel: 2,
-    desc: 'While moving, weapons recharge 15% faster.',
+    desc: (n) => `While moving, weapons recharge ${Math.round((1 - 0.85 ** n) * 100)}% faster.`,
     synergy: ['trail'],
     live: (s, api) => {
       if (api.moving) s.cooldownMul *= 0.85;
@@ -371,7 +378,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 7,
     maxLevel: 2,
-    desc: 'Kills have a 15% chance to explode (Explosive), which can kill more.',
+    desc: (n) => `Kills have a 15% chance to explode (Explosive), which can kill more${n > 1 ? `. Rolled ${n} times per kill` : ''}.`,
     synergy: ['explosive'],
     onKill: (e, _s, api) => {
       if (api.chance(0.15)) api.blast(e.x, e.z, 2.4, 20 + 3 * api.level, '#ffb627', 'chain_reaction', ['explosive']);
@@ -385,7 +392,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 3,
-    desc: 'Critical hits arc lightning to 2 nearby enemies (Chain, Shock).',
+    desc: (n) => `Critical hits arc lightning to 2 nearby enemies${n > 1 ? `, ${n} arcs per crit` : ''} (Chain, Shock).`,
     synergy: ['chain', 'shock'],
     onCrit: (ev, api, st) => {
       if (cascadeGate(ev, api, st)) api.zap(ev.e, 2, 12 + 2 * api.level);
@@ -399,7 +406,7 @@ export const MODS: ModDef[] = [
     rarity: 'rare',
     price: 8,
     maxLevel: 2,
-    desc: 'Big kills carry on: half the damage past a kill arcs to the nearest enemy (Chain, Shock).',
+    desc: (n) => `Big kills carry on: ${50 * n}% of the damage past a kill arcs to the nearest enemy (Chain, Shock).`,
     synergy: ['chain', 'shock'],
     onKill: (e, source, api, st) => {
       if (source === 'nuke') return;
@@ -454,7 +461,7 @@ export const MODS: ModDef[] = [
     rarity: 'rare',
     price: 8,
     maxLevel: 3,
-    desc: 'x0.05 more damage for each level gained after buying this.',
+    desc: (n) => `x${f(0.05 * n)} more damage for each level gained after buying this.`,
     // Once per level however many copies run (st.t = last level counted).
     onLevelUp: (api, st) => {
       if (st.t === api.level) return;
@@ -472,7 +479,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 2,
-    desc: 'x0.02 more damage per gold you are holding (max x2 at 50 gold).',
+    desc: (n) => `x${f(0.02 * n)} more damage per gold you are holding (max x${1 + n} at 50 gold).`,
     dmg: (_ev, api) => ({ mult: 1 + 0.02 * Math.min(50, api.gold) }),
     readout: (api, _st, lv) => `x${(1 + 0.02 * Math.min(50, api.gold) * lv).toFixed(2)}`,
   },
@@ -497,7 +504,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 4,
     maxLevel: 3,
-    desc: 'Interest cap +5 gold.',
+    desc: (n) => `Interest cap +${5 * n} gold.`,
     flags: { interestCap: 5 },
   },
   {
@@ -508,7 +515,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 4,
     maxLevel: 2,
-    desc: 'Shop prices -25%. First reroll in each shop is free.',
+    desc: (n) => `Shop prices -${Math.min(50, 25 * n)}%. First ${n > 1 ? `${n} rerolls` : 'reroll'} in each shop ${n > 1 ? 'are' : 'is'} free.`,
     flags: { shopDiscount: 0.25, freeRerolls: 1 },
   },
 
@@ -520,7 +527,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 4,
     maxLevel: 3,
-    desc: 'Elites pay 3 gold. Bosses pay 10.',
+    desc: (n) => `Elites pay ${3 * n} gold. Bosses pay ${10 * n}.`,
     onKill: (e, _s, api) => {
       if (e.def.boss) api.addGold(10);
       else if (e.elite) api.addGold(3);
@@ -534,7 +541,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 3,
     maxLevel: 3,
-    desc: '+1 gold every time you level up.',
+    desc: (n) => `+${n} gold every time you level up.`,
     onLevelUp: (api) => api.addGold(1),
   },
   {
@@ -545,7 +552,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 5,
     maxLevel: 2,
-    desc: 'Kills have a 0.5% chance to pay 1 gold.',
+    desc: (n) => `Kills have a ${f(0.5 * n)}% chance to pay 1 gold.`,
     onKill: (_e, _s, api) => {
       if (api.chance(0.005)) api.addGold(1);
     },
@@ -569,7 +576,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 5,
     maxLevel: 3,
-    desc: 'Stage clear: +3 gold for each empty Mod slot.',
+    desc: (n) => `Stage clear: +${3 * n} gold for each empty Mod slot.`,
     onStageClear: (api) => api.addGold(3 * api.freeSlots),
     readout: (api, _st, lv) => `+${3 * api.freeSlots * lv}`,
   },
@@ -592,7 +599,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 2,
-    desc: '+1 armor for every 8 gold you hold (max +5).',
+    desc: (n) => `+${n} armor for every 8 gold you hold (max +${5 * n}).`,
     live: (s, api) => {
       s.armor += Math.min(5, Math.floor(api.gold / 8));
     },
@@ -608,7 +615,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 4,
     maxLevel: 3,
-    desc: 'Right click charges 50% faster (right-click weapons reload 50% faster).',
+    desc: (n) => `Right click charges ${50 * n}% faster (right-click weapons reload ${50 * n}% faster).`,
     synergy: ['projectile'],
     flags: { chargeSpeed: 0.5 },
   },
@@ -620,7 +627,7 @@ export const MODS: ModDef[] = [
     rarity: 'common',
     price: 5,
     maxLevel: 3,
-    desc: 'Right-click attacks deal x1.8.',
+    desc: (n) => `Right-click attacks deal x${f(1 + 0.8 * n)}.`,
     synergy: ['projectile'],
     dmg: (ev) => (isRightClick(ev.source) ? { mult: 1.8 } : undefined),
   },
@@ -632,7 +639,7 @@ export const MODS: ModDef[] = [
     rarity: 'uncommon',
     price: 6,
     maxLevel: 2,
-    desc: 'Right-click hits Shock and arc lightning to 3 nearby enemies.',
+    desc: (n) => `Right-click hits Shock and arc lightning to 3 nearby enemies${n > 1 ? `, ${n} arcs per hit` : ''}.`,
     synergy: ['projectile', 'shock', 'chain'],
     onHit: (ev, api, st) => {
       if (!isRightClick(ev.source) || !thunderGate(ev, api, st)) return;
@@ -648,7 +655,7 @@ export const MODS: ModDef[] = [
     rarity: 'rare',
     price: 9,
     maxLevel: 2,
-    desc: 'Full-charge shots fire 3 at once. Grenades, vortexes and Orbital Strikes come in 3s; the shield gets wider.',
+    desc: (n) => `Full-charge shots fire ${1 + 2 * n} at once. Grenades, vortexes and Orbital Strikes come in ${1 + 2 * n}s; the shield gets ${120 * n}° wider.`,
     synergy: ['projectile'],
     flags: { chargeSplit: 2 },
   },
@@ -700,7 +707,7 @@ export const MODS: ModDef[] = [
     rarity: 'legendary',
     price: 12,
     maxLevel: 3,
-    desc: 'Every 20th kill calls a storm: lightning chains through 10 enemies (+3 per Chain weapon) and a thunderclap Shocks everything near the kill.',
+    desc: (n) => `Every ${Math.round(20 / n)}th kill calls a storm: lightning chains through 10 enemies (+3 per Chain weapon) and a thunderclap Shocks everything near the kill.`,
     synergy: ['chain', 'shock'],
     onKill: (e, _s, api, st) => {
       if (++st.n < 20) return;

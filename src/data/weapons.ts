@@ -254,7 +254,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   grenade: {
     id: 'grenade',
-    rarity: 'legendary',
+    rarity: 'rare',
     slot: 'secondary',
     evo: { name: 'Cluster Mortar', color: '#ff3d5e' },
     tags: ['explosive'],

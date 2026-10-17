@@ -1,10 +1,11 @@
 import type { Rarity } from './rarity';
 
 /**
- * Specials: the screen-clearing ability on Q/E/middle click (pad RB/Y),
- * charged by XP from kills. You hold one at a time: a new special from a
- * level-up card replaces the current one (and its levels). Each has 5 levels
- * with full params per level; `charge` multiplies how fast the meter fills.
+ * Specials: the screen-clearing ability on Q/E/middle click (pad RB/Y), on a
+ * cooldown. You hold one at a time: a new special from a level-up card
+ * replaces the current one (and its levels). Each has 5 levels with full
+ * params per level; `charge` divides the cooldown (higher levels recharge
+ * faster), and Battery Pack (`stats.specialCooldownMul`) lowers it for any special.
  * Behaviour: the Bomb lives in Game (tryBomb/updateBomb); the others in
  * src/game/specials.ts.
  */
@@ -20,6 +21,20 @@ export interface SpecialDef {
   levels: { text: string; p: Record<string, number> }[];
 }
 
+export const specialTuning = {
+  cooldown: 15, // seconds for a level-1 special, before Battery Pack
+};
+
+/** Cooldown in seconds of a special at a level (1-based), times the hero's specialCooldownMul. */
+export function specialCooldown(def: SpecialDef, lv: number, mul = 1): number {
+  return (specialTuning.cooldown / (def.levels[lv - 1]?.p.charge ?? 1)) * mul;
+}
+
+/** Cooldown for card text: "12.5s". */
+export function cooldownText(s: number): string {
+  return `${+s.toFixed(1)}s`;
+}
+
 export const SPECIALS: Record<string, SpecialDef> = {
   bomb: {
     id: 'bomb',
@@ -32,7 +47,7 @@ export const SPECIALS: Record<string, SpecialDef> = {
     levels: [
       { text: 'Shockwave around you.', p: { dmg: 80, radius: 10, charge: 1 } },
       { text: 'Bigger, harder blast.', p: { dmg: 110, radius: 11, charge: 1.1 } },
-      { text: 'Charges faster.', p: { dmg: 140, radius: 12, charge: 1.25 } },
+      { text: 'Recharges faster.', p: { dmg: 140, radius: 12, charge: 1.25 } },
       { text: 'Wider shockwave.', p: { dmg: 180, radius: 13.5, charge: 1.35 } },
       { text: 'Mega bomb!', p: { dmg: 240, radius: 15, charge: 1.5 } },
     ],

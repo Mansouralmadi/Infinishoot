@@ -3214,6 +3214,30 @@ h1.ko {
   align-self: stretch;
 }
 
+/* What the next level changes (changed words highlighted), and the cap on shop offers. */
+.owned-mod .mod-next {
+  font-size: 13px;
+  line-height: 1.05;
+  color: var(--mist);
+  text-align: center;
+}
+
+.owned-mod .mod-next i {
+  font: 10px var(--label);
+  font-style: normal;
+  color: var(--cyan);
+}
+
+.owned-mod .mod-next b {
+  font-weight: normal;
+  color: var(--lime);
+}
+
+.mod-card .mod-ups {
+  font: 10px var(--label);
+  color: var(--blue);
+}
+
 .owned-mod .mod-max {
   font: 10px var(--label);
   color: var(--yellow);
